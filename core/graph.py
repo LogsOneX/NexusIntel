@@ -99,6 +99,8 @@ class EntityGraphBuilder:
         self._extract_collection(module_name, module_id, target_id, data.get("identity_links"), "identity_link")
         self._extract_collection(module_name, module_id, target_id, data.get("digital_asset_links"), "mobile_app_link")
         self._extract_collection(module_name, module_id, target_id, data.get("flow_hints"), "recommended_flow")
+        self._extract_collection(module_name, module_id, target_id, data.get("priority_tasks"), "priority_task")
+        self._extract_collection(module_name, module_id, target_id, data.get("hypotheses"), "hypothesis")
         self._extract_collection(module_name, module_id, target_id, data.get("live_hosts"), "live_host")
         self._extract_collection(module_name, module_id, target_id, data.get("interesting_paths"), "interesting_path")
         self._extract_collection(module_name, module_id, target_id, data.get("technology_hints"), "technology_hint")
@@ -216,6 +218,8 @@ class EntityGraphBuilder:
                 or item.get("hostname")
                 or item.get("package_name")
                 or item.get("flow_id")
+                or item.get("task")
+                or item.get("title")
                 or item.get("label")
                 or item.get("name")
                 or item.get("url")
@@ -365,6 +369,10 @@ def _node_type_for_item(item: dict, relationship: str) -> str:
         return "application"
     if item.get("flow_id"):
         return "flow"
+    if item.get("task") or item.get("priority"):
+        return "task"
+    if item.get("confidence") and item.get("title"):
+        return "hypothesis"
     if item.get("hostname"):
         return "hostname"
     if item.get("username"):

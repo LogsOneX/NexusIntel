@@ -4,6 +4,12 @@ Modul di bawah ini adalah plugin OSINT yang dimuat otomatis oleh `AnalyticsEngin
 
 ## identity
 
+### `intel_assistant`
+
+Local analyst brain untuk membuat operation profile, priority tasks, hypotheses, collection plan, flow hints, dan guardrails. Modul ini tidak memakai API eksternal; output-nya menjadi node `task`, `hypothesis`, dan `flow` di graph.
+
+Target: `any`
+
 ### `identity_expansion`
 
 Permutasi username, alias handle, pivot pencarian manual, dan rekomendasi flow. Modul ini offline-first: tidak memukul layanan pihak ketiga, tapi menghasilkan entity baru untuk graph dan flow chaining.

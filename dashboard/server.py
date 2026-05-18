@@ -582,9 +582,18 @@ DASHBOARD_HTML = r"""<!doctype html>
     }
     .workspace {
       display: grid;
-      grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 16px;
       align-items: start;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.42fr) minmax(0, 0.58fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .graph-panel {
+      min-height: 760px;
     }
     .panel {
       min-width: 0;
@@ -606,13 +615,13 @@ DASHBOARD_HTML = r"""<!doctype html>
       padding: 14px;
     }
     .graph-wrap {
-      min-height: 520px;
+      min-height: 680px;
       position: relative;
       background: #0e1218;
     }
     .graph-tools {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) minmax(140px, 190px) auto auto;
+      grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 180px) minmax(140px, 180px) minmax(160px, 1fr) minmax(140px, 180px) auto auto auto;
       gap: 8px;
       padding: 10px;
       border-bottom: 1px solid var(--line);
@@ -630,7 +639,7 @@ DASHBOARD_HTML = r"""<!doctype html>
     }
     canvas {
       width: 100%;
-      height: 520px;
+      height: 680px;
       display: block;
     }
     .legend {
@@ -809,6 +818,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       aside { position: relative; height: auto; }
       .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .workspace { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
       .tool-grid { grid-template-columns: 1fr; }
       .flow-cards { grid-template-columns: 1fr; }
     }
@@ -819,8 +829,8 @@ DASHBOARD_HTML = r"""<!doctype html>
       .graph-tools { grid-template-columns: 1fr; }
       .row { grid-template-columns: 1fr; }
       .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      canvas { height: 420px; }
-      .graph-wrap { min-height: 420px; }
+      canvas { height: 520px; }
+      .graph-wrap { min-height: 520px; }
     }
   </style>
 </head>
@@ -839,31 +849,13 @@ DASHBOARD_HTML = r"""<!doctype html>
           <label for="target">Target</label>
           <input id="target" name="target" placeholder="username, email, domain, URL, phone" autocomplete="off" required>
         </div>
-        <div class="row">
-          <div>
-            <label for="category">Category</label>
-            <select id="category" name="category">
-              <option value="">All</option>
-              <option value="identity">Identity</option>
-              <option value="infrastructure">Infrastructure</option>
-            </select>
-          </div>
-          <div>
-            <label for="mode">Mode</label>
-            <select id="mode" name="mode">
-              <option value="standard">Standard</option>
-              <option value="active">Active</option>
-              <option value="aggressive">Aggressive</option>
-            </select>
-          </div>
-        </div>
         <div>
-          <label for="include">Include</label>
-          <input id="include" name="include" placeholder="module_a,module_b">
-        </div>
-        <div>
-          <label for="exclude">Exclude</label>
-          <input id="exclude" name="exclude" placeholder="module_a,module_b">
+          <label for="mode">Operation Mode</label>
+          <select id="mode" name="mode">
+            <option value="standard">Standard</option>
+            <option value="active">Active</option>
+            <option value="aggressive">Aggressive</option>
+          </select>
         </div>
         <div class="row">
           <div>
@@ -898,10 +890,6 @@ DASHBOARD_HTML = r"""<!doctype html>
           <button id="saveCaseBtn" type="button" disabled>Save Graph to Case</button>
         </div>
       </div>
-      <div class="side-section">
-        <label>Modules</label>
-        <div class="module-list" id="moduleList"></div>
-      </div>
     </aside>
     <main>
       <section class="topbar">
@@ -929,7 +917,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       </nav>
       <div class="view-panel active" data-view="overview">
         <div class="workspace">
-          <section class="panel">
+          <section class="panel graph-panel">
             <header>
               <h3>Investigation Graph</h3>
               <div class="legend" id="legend"></div>
@@ -937,6 +925,17 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="graph-tools">
               <input id="graphSearch" placeholder="Search graph nodes">
               <select id="graphFilter"><option value="">All entity types</option></select>
+              <select id="addEntityType"><option value="signal">Signal</option></select>
+              <input id="addEntityLabel" placeholder="Add entity label">
+              <select id="addEntityRelation">
+                <option value="manual_link">manual_link</option>
+                <option value="suspected_link">suspected_link</option>
+                <option value="owns">owns</option>
+                <option value="uses">uses</option>
+                <option value="mentions">mentions</option>
+              </select>
+              <button id="addEntityBtn" type="button">Add</button>
+              <button id="removeEntityBtn" type="button">Remove</button>
               <button id="resetGraphBtn" type="button">Reset</button>
               <span class="graph-count" id="graphCount">0 nodes</span>
             </div>
@@ -944,6 +943,7 @@ DASHBOARD_HTML = r"""<!doctype html>
               <canvas id="graphCanvas" width="960" height="520"></canvas>
             </div>
           </section>
+          <div class="detail-grid">
           <section class="panel">
             <header>
               <h3>Entity Inspector</h3>
@@ -952,16 +952,17 @@ DASHBOARD_HTML = r"""<!doctype html>
               <div class="empty">No target loaded.</div>
             </div>
           </section>
-        </div>
-        <section class="panel">
-          <header>
-            <h3>Module Results</h3>
-            <div class="tabs" id="tabs"></div>
-          </header>
-          <div class="panel-body" id="resultsView">
-            <div class="empty">Run a hunt to populate module results.</div>
+          <section class="panel">
+            <header>
+              <h3>Intelligence Output</h3>
+              <div class="tabs" id="tabs"></div>
+            </header>
+            <div class="panel-body" id="resultsView">
+              <div class="empty">Run an operation to populate results.</div>
+            </div>
+          </section>
           </div>
-        </section>
+        </div>
       </div>
       <div class="view-panel single-column" data-view="flow">
         <section class="panel">
@@ -1022,14 +1023,20 @@ DASHBOARD_HTML = r"""<!doctype html>
   <script>
     const state = {
       latest: null, activeModule: 'all', activeView: 'overview', modules: [], flows: [], cases: [],
-      selectedCase: '', selectedNodeId: '', graphPositions: new Map()
+      types: [], selectedCase: '', selectedNodeId: '', graphPositions: new Map()
     };
     const colors = {
       target: '#56d6ff', username: '#56d6ff', email: '#56d6ff', domain: '#7be39d',
       url: '#7ca6d8', hostname: '#7be39d', ip: '#f1c36c', module: '#b78cff',
       service: '#ffb86c', profile: '#ffb86c', signal: '#f1c36c', risk: '#ff7a7a',
       dns_record: '#7ca6d8', phone: '#56d6ff', application: '#f6a960', flow: '#b78cff',
-      organization: '#9dd6a5', asn: '#c2a3ff', cidr: '#c2a3ff', tracker: '#e78ac3'
+      organization: '#9dd6a5', asn: '#c2a3ff', cidr: '#c2a3ff', tracker: '#e78ac3',
+      task: '#8fd3ff', hypothesis: '#f0d98c'
+    };
+    const brandMarks = {
+      github: 'GH', gitlab: 'GL', npm: 'np', pypi: 'Py', reddit: 'rd', youtube: 'YT',
+      twitter: 'X', instagram: 'IG', linkedin: 'in', medium: 'Md', docker: 'Dk',
+      google: 'G', microsoft: 'MS', cloudflare: 'CF', apple: 'AP', android: 'AN'
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1064,12 +1071,6 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     function renderModules(data) {
       state.modules = data.modules || [];
-      $('moduleList').innerHTML = state.modules.map((m) => `
-        <div class="module-pill">
-          <strong>${escapeHtml(m.display_name || m.name)}</strong>
-          <span>${escapeHtml(m.name)} / ${(m.target_types || []).join(', ')}</span>
-        </div>
-      `).join('');
     }
 
     function renderFlows(data) {
@@ -1126,6 +1127,10 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     function renderTypes(data) {
       const types = data.types || [];
+      state.types = types;
+      $('addEntityType').innerHTML = types.map((type) => `
+        <option value="${escapeHtml(type.name)}">${escapeHtml(type.label)}</option>
+      `).join('');
       $('typeList').innerHTML = `<table><tbody>${types.map((type) => `
         <tr>
           <td><span class="swatch" style="display:inline-block;background:${escapeHtml(type.color)}"></span> ${escapeHtml(type.label)}</td>
@@ -1266,20 +1271,49 @@ DASHBOARD_HTML = r"""<!doctype html>
       const centerId = center.id;
       const cx = width / 2;
       const cy = height / 2;
-      const ring = Math.max(135, Math.min(width, height) * 0.34);
-      const moduleRing = Math.max(185, Math.min(width, height) * 0.43);
+      const ring = Math.max(170, Math.min(width, height) * 0.32);
       const nonCenter = nodes.filter((n) => n.id !== centerId);
       nonCenter.forEach((node, i) => {
-        const moduleOffset = node.type === 'module' ? 0.5 : 0;
-        const angle = ((i / Math.max(1, nonCenter.length)) * Math.PI * 2) + moduleOffset;
-        const radius = node.type === 'module' ? moduleRing : ring + ((i % 3) * 42);
-        node.x = cx + Math.cos(angle) * radius;
-        node.y = cy + Math.sin(angle) * radius;
+        const typeOffset = node.type === 'module' ? 0.6 : node.type === 'risk' ? 1.1 : 0;
+        const angle = ((i / Math.max(1, nonCenter.length)) * Math.PI * 2) + typeOffset;
+        const radius = ring + ((i % 5) * 46);
+        node.x = Math.min(width - 50, Math.max(50, cx + Math.cos(angle) * radius));
+        node.y = Math.min(height - 50, Math.max(50, cy + Math.sin(angle) * radius));
         byId.set(node.id, node);
       });
       center.x = cx;
       center.y = cy;
       byId.set(center.id, center);
+
+      for (let step = 0; step < 80; step++) {
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i], b = nodes[j];
+            let dx = a.x - b.x, dy = a.y - b.y;
+            let distance = Math.max(24, Math.hypot(dx, dy));
+            const force = 820 / (distance * distance);
+            dx /= distance; dy /= distance;
+            if (a.id !== centerId) { a.x += dx * force; a.y += dy * force; }
+            if (b.id !== centerId) { b.x -= dx * force; b.y -= dy * force; }
+          }
+        }
+        edges.forEach((edge) => {
+          const source = byId.get(edge.source);
+          const target = byId.get(edge.target);
+          if (!source || !target) return;
+          const desired = source.type === 'module' || target.type === 'module' ? 190 : 125;
+          let dx = target.x - source.x, dy = target.y - source.y;
+          let distance = Math.max(1, Math.hypot(dx, dy));
+          const pull = (distance - desired) * 0.012;
+          dx /= distance; dy /= distance;
+          if (source.id !== centerId) { source.x += dx * pull; source.y += dy * pull; }
+          if (target.id !== centerId) { target.x -= dx * pull; target.y -= dy * pull; }
+        });
+        nodes.forEach((node) => {
+          node.x = Math.min(width - 44, Math.max(44, node.x));
+          node.y = Math.min(height - 44, Math.max(44, node.y));
+        });
+      }
 
       ctx.lineWidth = 1;
       edges.forEach((edge) => {
@@ -1300,16 +1334,36 @@ DASHBOARD_HTML = r"""<!doctype html>
         ctx.fillStyle = colors[node.type] || '#9aa7b8';
         ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = '#081018';
+        ctx.font = '700 9px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(brandForNode(node), node.x, node.y);
         ctx.strokeStyle = selected ? '#edf2f8' : '#0b0d10';
         ctx.lineWidth = selected ? 4 : 3;
         ctx.stroke();
         ctx.fillStyle = '#edf2f8';
         ctx.font = node.id === centerId ? '700 12px system-ui' : '11px system-ui';
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
         const label = String(node.label || '').slice(0, 24);
         ctx.fillText(label, node.x, node.y + radius + 14);
         state.graphPositions.set(node.id, { ...node, radius });
       });
+    }
+
+    function brandForNode(node) {
+      const label = `${node.label || ''} ${JSON.stringify(node.properties || {})}`.toLowerCase();
+      for (const [key, value] of Object.entries(brandMarks)) {
+        if (label.includes(key)) return value;
+      }
+      if (node.type === 'domain') return 'DM';
+      if (node.type === 'email') return '@';
+      if (node.type === 'url') return 'UR';
+      if (node.type === 'ip') return 'IP';
+      if (node.type === 'flow') return 'FL';
+      if (node.type === 'task') return 'TK';
+      return String(node.type || '?').slice(0, 2).toUpperCase();
     }
 
     function selectGraphNode(event) {
@@ -1331,6 +1385,81 @@ DASHBOARD_HTML = r"""<!doctype html>
       state.selectedNodeId = selected.id;
       renderInspector(selected);
       renderGraph(state.latest.graph);
+    }
+
+    function addManualEntity() {
+      if (!state.latest) return;
+      const label = $('addEntityLabel').value.trim();
+      const type = $('addEntityType').value || 'signal';
+      if (!label) return;
+      const style = state.types.find((item) => item.name === type) || {};
+      const id = `manual:${type}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+      const node = {
+        id, type, label,
+        properties: { manual: true, source_module: 'operator', label },
+        nodeType: style.label || type,
+        nodeLabel: label,
+        nodeProperties: { manual: true, source_module: 'operator', label },
+        nodeSize: 14,
+        nodeColor: style.color || colors[type] || '#9aa7b8',
+        nodeIcon: style.icon || 'Circle',
+        nodeShape: style.shape || 'circle',
+        nodeMetadata: { created_at: new Date().toISOString(), schema: style.name || type, source_module: 'operator' },
+        val: 2
+      };
+      state.latest.graph.nodes.push(node);
+      const source = state.selectedNodeId || ((state.latest.graph.nodes || [])[0] || {}).id;
+      if (source && source !== id) {
+        state.latest.graph.edges.push({
+          id: `manual-edge:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
+          source,
+          target: id,
+          relationship: $('addEntityRelation').value || 'manual_link',
+          label: ($('addEntityRelation').value || 'manual_link').toUpperCase(),
+          type: $('addEntityRelation').value || 'manual_link',
+          weight: 1,
+          confidence_level: 'operator',
+          date: new Date().toISOString(),
+          module: 'operator'
+        });
+      }
+      state.selectedNodeId = id;
+      $('addEntityLabel').value = '';
+      renderInspector(node);
+      refreshGraphState();
+    }
+
+    function removeSelectedEntity() {
+      if (!state.latest || !state.selectedNodeId) return;
+      const id = state.selectedNodeId;
+      state.latest.graph.nodes = (state.latest.graph.nodes || []).filter((node) => node.id !== id);
+      state.latest.graph.edges = (state.latest.graph.edges || []).filter((edge) => edge.source !== id && edge.target !== id);
+      state.selectedNodeId = '';
+      renderProfile(state.latest.target_profile);
+      refreshGraphState();
+    }
+
+    function refreshGraphState() {
+      if (!state.latest) return;
+      recalcGraphSummary(state.latest.graph);
+      metric('mNodes', state.latest.graph.summary.node_count);
+      metric('mEdges', state.latest.graph.summary.edge_count);
+      metric('mSignals', Math.max(Number($('mSignals').textContent.replaceAll(',', '')) || 0, state.latest.graph.summary.node_count));
+      renderGraph(state.latest.graph);
+      renderTimeline(state.latest);
+      $('rawOutput').textContent = JSON.stringify(state.latest, null, 2);
+    }
+
+    function recalcGraphSummary(graph) {
+      const nodeTypes = {};
+      (graph.nodes || []).forEach((node) => {
+        nodeTypes[node.type] = (nodeTypes[node.type] || 0) + 1;
+      });
+      graph.summary = {
+        node_count: (graph.nodes || []).length,
+        edge_count: (graph.edges || []).length,
+        node_types: nodeTypes
+      };
     }
 
     function renderAll(data) {
@@ -1383,6 +1512,8 @@ DASHBOARD_HTML = r"""<!doctype html>
         renderGraph(state.latest.graph);
       }
     });
+    $('addEntityBtn').addEventListener('click', addManualEntity);
+    $('removeEntityBtn').addEventListener('click', removeSelectedEntity);
 
     $('huntForm').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -1555,9 +1686,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       if (state.latest) renderGraph(state.latest.graph);
     });
 
-    api('/api/modules').then(renderModules).catch((error) => {
-      $('moduleList').innerHTML = `<div class="module-pill"><strong>Module load failed</strong><span>${escapeHtml(error.message)}</span></div>`;
-    });
+    api('/api/modules').then(renderModules).catch(() => {});
     api('/api/flows').then(renderFlows);
     api('/api/vault').then(renderVault);
     api('/api/types').then(renderTypes);

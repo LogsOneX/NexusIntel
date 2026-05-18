@@ -39,12 +39,14 @@ http://127.0.0.1:8080
 
 ## UI Sections
 
-- Sidebar untuk target, kategori, include/exclude module, timeout, concurrency, dan save format.
+- Sidebar untuk target, operation mode, timeout, concurrency, save format, dan case/sketch.
+- Dashboard memilih modul otomatis berdasarkan target dan mode; tidak ada include/exclude atau module picker di UI.
 - Mode selector untuk `standard`, `active`, dan `aggressive`.
 - Case/Sketch selector untuk menyimpan graph investigasi lokal.
 - Executive metrics untuk OK, skipped, errors, signals, nodes, dan edges.
-- Canvas investigation graph untuk target, modules, profiles, URLs, domains, DNS records, IPs, trackers, app-link nodes, flow hints, dan risk nodes.
+- Canvas investigation graph besar sebagai workspace utama untuk target, modules, profiles, URLs, domains, DNS records, IPs, trackers, app-link nodes, tasks, hypotheses, flow hints, dan risk nodes.
 - Graph tools untuk search, filter entity type, reset view, dan click-to-inspect node.
+- Entity operations untuk menambahkan entity manual, menghubungkan ke node terpilih, dan menghapus node terpilih dari graph kerja.
 - Entity inspector untuk target profile atau node graph yang dipilih.
 - Module result table dengan tab per modul.
 - Flow Studio untuk menjalankan flow chained seperti `Identity Surface`, `Domain Surface`, `Identity Deep Pivot`, dan `Phone Triage`.

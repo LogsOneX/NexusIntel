@@ -29,7 +29,8 @@ Desain ini mengambil pola investigasi modern:
 
 - CLI Rich dan dashboard web lokal yang lebih estetik dengan target profile, graph canvas, module results, raw JSON, dan report save.
 - Workflow `hunt` untuk menjalankan modul OSINT sesuai tipe target: username, email, domain, URL, atau phone, dengan mode `standard`, `active`, dan `aggressive`.
-- Modul standalone NexusRecon untuk identity expansion, username presence, account presence, account pivots, dan domain intelligence dalam versi pasif dan aman.
+- Modul standalone NexusRecon untuk local intel assistant, identity expansion, username presence, account presence, account pivots, active surface, dan domain intelligence.
+- Local Intel Assistant: operation plan, priority tasks, hypotheses, collection plan, recommended flows, dan guardrails langsung masuk graph.
 - Username enumeration lintas kategori: social, tech, creative, professional, identity, finance, marketplace, travel, fitness, gaming, blog, plus profile link extraction dan footprint score.
 - Email intelligence: validasi format, provider hint, MX lookup, Gravatar hash profile, disposable-domain hint.
 - Account/workspace pivots: DNS provider signals, SPF/DMARC hints, public developer profiles, search pivots, Digital Asset Links, dan Apple app-site association.
@@ -55,6 +56,7 @@ Desain ini mengambil pola investigasi modern:
 │   └── server.py            # Local web dashboard tanpa Docker
 ├── modules/
 │   ├── username_presence.py # Username enumeration pasif
+│   ├── intel_assistant.py   # Local analyst brain + operation plan
 │   ├── identity_expansion.py # Permutasi username, alias, dan pivot manual
 │   ├── account_presence.py  # Account presence hints + Nexus schema
 │   ├── account_pivots.py    # Public account enrichment + workspace pivots
