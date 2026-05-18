@@ -162,3 +162,11 @@ Terima kasih untuk developer dan komunitas:
 - megadose/holehe
 
 NexusIntel menghormati lisensi dan boundary project referensi. Tidak ada vendor code yang disalin ke runtime core.
+
+## License
+
+NexusIntel dirilis sebagai open source di bawah **Apache License 2.0**.
+
+Copyright 2026 LogsOneX and NexusIntel contributors.
+
+Lihat [LICENSE](LICENSE) untuk teks lisensi lengkap.

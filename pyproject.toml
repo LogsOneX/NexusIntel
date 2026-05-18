@@ -5,7 +5,7 @@ description = "Unified OSINT scanner combining analytics modules, username enume
 readme = "README.md"
 authors = [ { name = "LogsOneX" } ]
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 keywords = ["osint", "recon", "username", "domain", "email", "scanner"]
 dependencies = [
     "rich>=13.7.0",
@@ -15,6 +15,7 @@ dependencies = [
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent"
 ]
 
