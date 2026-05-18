@@ -1,8 +1,8 @@
 # NexusRecon / Data Aggregator
 
-NexusRecon adalah command center OSINT pasif untuk menggabungkan enumerasi username, inspeksi email, domain intelligence, HTTP header diagnostics, dan enrichment profil publik dalam satu CLI yang lebih rapi.
+NexusRecon adalah command center OSINT public-source untuk menggabungkan enumerasi username, inspeksi email, domain intelligence, active surface sweep, HTTP header diagnostics, dan enrichment profil publik dalam satu CLI/dashboard yang lebih rapi.
 
-Fokus project ini adalah **public-source reconnaissance**: memakai endpoint publik, DNS/RDAP, certificate transparency, profile page publik, dan API publik. Tidak ada bypass, credential stuffing, private API abuse, atau flow agresif terhadap layanan pihak ketiga.
+Fokus project ini adalah **public-source reconnaissance**: memakai endpoint publik, DNS/RDAP, certificate transparency, profile page publik, API publik, dan active crawling read-only untuk target yang kamu punya izin. Tidak ada bypass, credential stuffing, private API abuse, spam register/forgot-password, atau rate-limit evasion.
 
 ## Bedah Cara Kerja
 
@@ -10,6 +10,7 @@ Fokus project ini adalah **public-source reconnaissance**: memakai endpoint publ
 input target
   -> core.targets.classify_target()
   -> core.engine.AnalyticsEngine.load_modules()
+  -> mode dipilih: standard, active, atau aggressive
   -> modules/*.py dipilih berdasarkan metadata target_types/category
   -> async run(target) per modul
   -> hasil dinormalisasi: status, summary, signal_count, data, module
@@ -27,12 +28,13 @@ Desain ini mengambil pola investigasi modern:
 ## Fitur Utama
 
 - CLI Rich dan dashboard web lokal yang lebih estetik dengan target profile, graph canvas, module results, raw JSON, dan report save.
-- Workflow `hunt` untuk menjalankan modul OSINT sesuai tipe target: username, email, domain, URL, atau phone.
+- Workflow `hunt` untuk menjalankan modul OSINT sesuai tipe target: username, email, domain, URL, atau phone, dengan mode `standard`, `active`, dan `aggressive`.
 - Modul standalone NexusRecon untuk identity expansion, username presence, account presence, account pivots, dan domain intelligence dalam versi pasif dan aman.
 - Username enumeration lintas kategori: social, tech, creative, professional, identity, finance, marketplace, travel, fitness, gaming, blog, plus profile link extraction dan footprint score.
 - Email intelligence: validasi format, provider hint, MX lookup, Gravatar hash profile, disposable-domain hint.
 - Account/workspace pivots: DNS provider signals, SPF/DMARC hints, public developer profiles, search pivots, Digital Asset Links, dan Apple app-site association.
 - Domain intelligence: RDAP, DNS A/AAAA/MX/NS/TXT/CAA, certificate transparency, security headers, mail posture, website surface, IP/RDAP network hints, dan risk summary.
+- Active surface sweep: common-host DNS sweep, robots/sitemap/security.txt, common-path probing, technology hints, dan risk notes untuk authorized targets.
 - Investigation graph otomatis untuk menghubungkan target, modul, service, URL, DNS record, domain, hostname, aplikasi, flow hint, dan risk.
 - Flow Studio lokal dan CLI `flow` untuk chaining enrichers: output entity bisa menjadi input step berikutnya.
 - Vault lokal untuk API key, case/sketch persistence, dan entity type registry.
@@ -57,6 +59,7 @@ Desain ini mengambil pola investigasi modern:
 │   ├── account_presence.py  # Account presence hints + Nexus schema
 │   ├── account_pivots.py    # Public account enrichment + workspace pivots
 │   ├── domain_intelligence.py # Domain/RDAP/DNS/CRT/header intelligence
+│   ├── active_surface.py   # Active DNS/HTTP surface sweep
 │   ├── ip_asn_lookup.py     # IP/RDAP network ownership hints
 │   ├── website_surface.py   # Website metadata, links, emails, tracker hints
 │   ├── network_mapping.py   # Passive DNS + RDAP network hints
@@ -115,6 +118,8 @@ python3 main.py hunt johndoe --save --format html
 python3 main.py hunt alice@example.com --category identity --save --format md
 python3 main.py hunt example.com --category infrastructure --save --format json
 python3 main.py hunt example.com --category infrastructure --save --format graph
+python3 main.py hunt example.com --mode active --category infrastructure
+python3 main.py hunt example.com --aggressive --include active_surface,website_surface,domain_intelligence
 ```
 
 Username scanner standalone:
@@ -151,6 +156,7 @@ python3 main.py hunt johndoe --include username_presence,user_analytics,account_
 python3 main.py hunt "John Doe" --include identity_expansion
 python3 main.py flow run identity_surface johndoe --timeout 12 --concurrency 4
 python3 main.py flow run domain_surface example.com --save --format graph
+python3 main.py flow run active_domain_recon example.com --mode aggressive --timeout 30
 ```
 
 Kecualikan modul tertentu:

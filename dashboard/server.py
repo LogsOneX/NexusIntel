@@ -115,9 +115,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         category = str(payload.get("category") or "").strip() or None
         timeout = _bounded_int(payload.get("timeout"), default=18, minimum=1, maximum=90)
         concurrency = _bounded_int(payload.get("concurrency"), default=6, minimum=1, maximum=20)
+        mode = _mode(payload.get("mode"))
 
         try:
-            result = asyncio.run(run_hunt(target, include, exclude, category, timeout, concurrency))
+            result = asyncio.run(run_hunt(target, include, exclude, category, timeout, concurrency, mode))
             self._send_json(result)
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -128,11 +129,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         target = str(payload.get("target") or "").strip()
         timeout = _bounded_int(payload.get("timeout"), default=18, minimum=1, maximum=90)
         concurrency = _bounded_int(payload.get("concurrency"), default=6, minimum=1, maximum=20)
+        mode = _mode(payload.get("mode"))
         if not flow_id or not target:
             self._send_json({"error": "flow_id and target are required."}, status=HTTPStatus.BAD_REQUEST)
             return
         try:
-            self._send_json(run_flow_sync(flow_id, target, timeout=timeout, concurrency=concurrency))
+            self._send_json(run_flow_sync(flow_id, target, timeout=timeout, concurrency=concurrency, mode=mode))
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -247,9 +249,10 @@ async def run_hunt(
     category: str | None,
     timeout: int,
     concurrency: int,
+    mode: str,
 ) -> dict:
     profile = classify_target(target)
-    engine = AnalyticsEngine(module_timeout=timeout, max_concurrent=concurrency)
+    engine = AnalyticsEngine(module_timeout=timeout, max_concurrent=concurrency, mode=mode)
     engine.load_modules(include=include, exclude=exclude, category=category)
     catalog = engine.catalog()
     results = await engine.execute_all(target, profile=profile)
@@ -260,6 +263,7 @@ async def run_hunt(
         "results": results,
         "graph": graph,
         "dashboard": _dashboard_summary(results, graph),
+        "mode": mode,
     }
 
 
@@ -325,6 +329,11 @@ def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(minimum, min(maximum, parsed))
+
+
+def _mode(value: Any) -> str:
+    mode = str(value or "standard").strip().lower()
+    return mode if mode in {"standard", "active", "aggressive"} else "standard"
 
 
 DASHBOARD_HTML = r"""<!doctype html>
@@ -721,6 +730,43 @@ DASHBOARD_HTML = r"""<!doctype html>
       gap: 8px;
       margin-top: 10px;
     }
+    .flow-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .flow-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-2);
+      padding: 11px;
+      cursor: pointer;
+    }
+    .flow-card.active {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .flow-card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+    .timeline-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-2);
+      padding: 10px;
+    }
+    .timeline-item strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
     .tool-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -764,6 +810,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .workspace { grid-template-columns: 1fr; }
       .tool-grid { grid-template-columns: 1fr; }
+      .flow-cards { grid-template-columns: 1fr; }
     }
     @media (max-width: 680px) {
       main { padding: 12px; }
@@ -802,8 +849,12 @@ DASHBOARD_HTML = r"""<!doctype html>
             </select>
           </div>
           <div>
-            <label for="timeout">Timeout</label>
-            <input id="timeout" name="timeout" type="number" min="1" max="90" value="18">
+            <label for="mode">Mode</label>
+            <select id="mode" name="mode">
+              <option value="standard">Standard</option>
+              <option value="active">Active</option>
+              <option value="aggressive">Aggressive</option>
+            </select>
           </div>
         </div>
         <div>
@@ -816,18 +867,22 @@ DASHBOARD_HTML = r"""<!doctype html>
         </div>
         <div class="row">
           <div>
+            <label for="timeout">Timeout</label>
+            <input id="timeout" name="timeout" type="number" min="1" max="90" value="18">
+          </div>
+          <div>
             <label for="concurrency">Concurrency</label>
             <input id="concurrency" name="concurrency" type="number" min="1" max="20" value="6">
           </div>
-          <div>
-            <label for="saveFormat">Save</label>
-            <select id="saveFormat">
-              <option value="json">JSON</option>
-              <option value="md">Markdown</option>
-              <option value="html">HTML</option>
-              <option value="graph">Graph JSON</option>
-            </select>
-          </div>
+        </div>
+        <div>
+          <label for="saveFormat">Save</label>
+          <select id="saveFormat">
+            <option value="json">JSON</option>
+            <option value="md">Markdown</option>
+            <option value="html">HTML</option>
+            <option value="graph">Graph JSON</option>
+          </select>
         </div>
         <div class="actions">
           <button class="primary" id="runBtn" type="submit">Run Hunt</button>
@@ -867,6 +922,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       <nav class="viewbar" id="viewbar" aria-label="Workspace views">
         <button type="button" class="active" data-view-btn="overview">Overview</button>
         <button type="button" data-view-btn="flow">Flow</button>
+        <button type="button" data-view-btn="timeline">Timeline</button>
         <button type="button" data-view-btn="vault">Vault</button>
         <button type="button" data-view-btn="types">Types</button>
         <button type="button" data-view-btn="raw">Raw</button>
@@ -916,7 +972,16 @@ DASHBOARD_HTML = r"""<!doctype html>
               <button id="runFlowBtn" type="button">Run Flow</button>
             </div>
             <div class="small-muted" id="flowDescription">Load a flow to see the chain.</div>
+            <div class="flow-cards" id="flowCards"></div>
             <div class="scrollbox" id="flowLog"><div class="empty">No flow execution yet.</div></div>
+          </div>
+        </section>
+      </div>
+      <div class="view-panel single-column" data-view="timeline">
+        <section class="panel">
+          <header><h3>Timeline</h3></header>
+          <div class="panel-body">
+            <div class="timeline" id="timelineView"><div class="empty">No timeline yet.</div></div>
           </div>
         </section>
       </div>
@@ -1012,6 +1077,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       $('flowSelect').innerHTML = state.flows.map((flow) => `
         <option value="${escapeHtml(flow.id)}">${escapeHtml(flow.name)}</option>
       `).join('');
+      renderFlowCards();
       renderFlowDescription();
     }
 
@@ -1023,6 +1089,25 @@ DASHBOARD_HTML = r"""<!doctype html>
       }
       const steps = (flow.steps || []).map((step, index) => `${index + 1}. ${step.name}`).join(' -> ');
       $('flowDescription').textContent = `${flow.description} | ${steps}`;
+      renderFlowCards();
+    }
+
+    function renderFlowCards() {
+      if (!$('flowCards')) return;
+      $('flowCards').innerHTML = state.flows.map((flow) => {
+        const active = flow.id === $('flowSelect').value ? 'active' : '';
+        const steps = (flow.steps || []).length;
+        return `<div class="flow-card ${active}" data-flow-card="${escapeHtml(flow.id)}">
+          <strong>${escapeHtml(flow.name)}</strong>
+          <span class="small-muted">${escapeHtml(flow.id)} / ${steps} steps</span>
+        </div>`;
+      }).join('');
+      $('flowCards').querySelectorAll('[data-flow-card]').forEach((card) => {
+        card.addEventListener('click', () => {
+          $('flowSelect').value = card.dataset.flowCard;
+          renderFlowDescription();
+        });
+      });
     }
 
     function renderVault(data) {
@@ -1253,7 +1338,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       state.activeModule = 'all';
       state.selectedNodeId = '';
       $('headline').textContent = data.target_profile.normalized || data.target_profile.original || 'Investigation Workspace';
-      $('subline').textContent = `${data.target_profile.kind} / ${Object.keys(data.results || {}).length} modules`;
+      $('subline').textContent = `${data.target_profile.kind} / ${Object.keys(data.results || {}).length} modules / ${data.mode || 'standard'} mode`;
       metric('mOk', data.dashboard.ok);
       metric('mSkipped', data.dashboard.skipped);
       metric('mErrors', data.dashboard.errors);
@@ -1263,6 +1348,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       renderProfile(data.target_profile);
       renderResults(data.results);
       renderGraph(data.graph);
+      renderTimeline(data);
       $('rawOutput').textContent = JSON.stringify(data, null, 2);
       $('saveBtn').disabled = false;
       $('saveCaseBtn').disabled = !$('caseSelect').value;
@@ -1350,7 +1436,8 @@ DASHBOARD_HTML = r"""<!doctype html>
           target,
           flow_id: flowId,
           timeout: $('timeout').value,
-          concurrency: $('concurrency').value
+          concurrency: $('concurrency').value,
+          mode: $('mode').value
         };
         const data = await api('/api/flow/run', { method: 'POST', body: JSON.stringify(payload) });
         setView('overview');
@@ -1367,7 +1454,8 @@ DASHBOARD_HTML = r"""<!doctype html>
             nodes: data.graph.summary.node_count,
             edges: data.graph.summary.edge_count
           },
-          flow: data
+          flow: data,
+          mode: data.summary.mode || $('mode').value
         });
         renderFlowLog(data);
         setStatus('Ready');
@@ -1392,6 +1480,32 @@ DASHBOARD_HTML = r"""<!doctype html>
           <td>${escapeHtml(String(item.execution_time_ms || 0))}</td>
         </tr>
       `).join('')}</tbody></table>`;
+    }
+
+    function renderTimeline(data) {
+      const flowLog = (data.flow && data.flow.execution_log) || [];
+      const edgeEvents = ((data.graph || {}).edges || []).slice(0, 80).map((edge) => ({
+        title: edge.relationship || edge.type || 'edge',
+        detail: `${edge.source} -> ${edge.target}`,
+        time: edge.date || ''
+      }));
+      const flowEvents = flowLog.map((item) => ({
+        title: item.node_id || item.step_id,
+        detail: `${item.status} / ${(item.inputs || []).join(', ')} / ${item.execution_time_ms || 0}ms`,
+        time: item.timestamp || ''
+      }));
+      const events = [...flowEvents, ...edgeEvents].slice(0, 120);
+      if (!events.length) {
+        $('timelineView').innerHTML = '<div class="empty">No timeline yet.</div>';
+        return;
+      }
+      $('timelineView').innerHTML = events.map((item) => `
+        <div class="timeline-item">
+          <strong>${escapeHtml(item.title || 'event')}</strong>
+          <span class="small-muted">${escapeHtml(item.time || '')}</span>
+          <div>${escapeHtml(item.detail || '')}</div>
+        </div>
+      `).join('');
     }
 
     $('saveVaultBtn').addEventListener('click', async () => {

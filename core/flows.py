@@ -38,7 +38,19 @@ FLOW_TEMPLATES: Dict[str, dict] = {
         "steps": [
             {"id": "domain_foundation", "name": "Infrastructure Foundation", "modules": ["domain_intelligence", "network_mapping", "header_diagnostics"], "target_types": ["domain", "url", "email"], "outputs": ["ip", "hostname", "dns_record", "risk"]},
             {"id": "website_surface", "name": "Website Surface", "modules": ["website_surface"], "target_types": ["domain", "url"], "outputs": ["url", "email", "tracker"]},
+            {"id": "active_surface", "name": "Active Surface", "modules": ["active_surface"], "target_types": ["domain", "url", "email"], "outputs": ["hostname", "url", "risk"]},
             {"id": "ip_ownership", "name": "IP Ownership", "modules": ["ip_asn_lookup"], "target_types": ["ip", "domain", "url", "email"], "outputs": ["ip", "organization", "asn", "cidr"]},
+        ],
+    },
+    "active_domain_recon": {
+        "id": "active_domain_recon",
+        "name": "Active Domain Recon",
+        "description": "Authorized active DNS/HTTP surface sweep chained into website and ownership enrichment.",
+        "input_types": ["domain", "url", "email"],
+        "steps": [
+            {"id": "active_surface", "name": "Active Surface Sweep", "modules": ["active_surface"], "target_types": ["domain", "url", "email"], "outputs": ["hostname", "url", "risk"]},
+            {"id": "website_surface", "name": "Website Surface", "modules": ["website_surface", "header_diagnostics"], "target_types": ["domain", "url"], "outputs": ["url", "email", "tracker"]},
+            {"id": "ownership", "name": "Ownership", "modules": ["domain_intelligence", "ip_asn_lookup"], "target_types": ["domain", "url", "email"], "outputs": ["ip", "hostname", "organization", "asn"]},
         ],
     },
     "phone_triage": {
@@ -57,7 +69,7 @@ def list_flows() -> List[dict]:
     return [FLOW_TEMPLATES[key] for key in sorted(FLOW_TEMPLATES)]
 
 
-async def run_flow(flow_id: str, target: str, timeout: int = 18, concurrency: int = 6) -> dict:
+async def run_flow(flow_id: str, target: str, timeout: int = 18, concurrency: int = 6, mode: str = "standard") -> dict:
     if flow_id not in FLOW_TEMPLATES:
         raise ValueError(f"Unknown flow: {flow_id}")
 
@@ -78,7 +90,7 @@ async def run_flow(flow_id: str, target: str, timeout: int = 18, concurrency: in
         step_outputs = []
         for value in selected[:8]:
             profile = classify_target(value)
-            engine = AnalyticsEngine(module_timeout=timeout, max_concurrent=concurrency)
+            engine = AnalyticsEngine(module_timeout=timeout, max_concurrent=concurrency, mode=mode)
             engine.load_modules(include=step.get("modules"))
             started = time.perf_counter()
             results = await engine.execute_all(value, profile=profile)
@@ -106,6 +118,7 @@ async def run_flow(flow_id: str, target: str, timeout: int = 18, concurrency: in
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "execution_time_ms": elapsed_ms,
                     "cache_hit": False,
+                    "mode": mode,
                 }
             )
 
@@ -140,6 +153,7 @@ async def run_flow(flow_id: str, target: str, timeout: int = 18, concurrency: in
             "completed_steps": completed,
             "failed_steps": failed,
             "total_execution_time_ms": sum(item["execution_time_ms"] for item in execution_log),
+            "mode": mode,
         },
         "final_results": {
             "initial_values": [target],
@@ -178,5 +192,5 @@ def _targets_from_graph(graph: dict, output_types: Optional[List[str]]) -> List[
     return values[:30]
 
 
-def run_flow_sync(flow_id: str, target: str, timeout: int = 18, concurrency: int = 6) -> dict:
-    return asyncio.run(run_flow(flow_id, target, timeout=timeout, concurrency=concurrency))
+def run_flow_sync(flow_id: str, target: str, timeout: int = 18, concurrency: int = 6, mode: str = "standard") -> dict:
+    return asyncio.run(run_flow(flow_id, target, timeout=timeout, concurrency=concurrency, mode=mode))

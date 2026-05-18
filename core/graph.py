@@ -99,6 +99,9 @@ class EntityGraphBuilder:
         self._extract_collection(module_name, module_id, target_id, data.get("identity_links"), "identity_link")
         self._extract_collection(module_name, module_id, target_id, data.get("digital_asset_links"), "mobile_app_link")
         self._extract_collection(module_name, module_id, target_id, data.get("flow_hints"), "recommended_flow")
+        self._extract_collection(module_name, module_id, target_id, data.get("live_hosts"), "live_host")
+        self._extract_collection(module_name, module_id, target_id, data.get("interesting_paths"), "interesting_path")
+        self._extract_collection(module_name, module_id, target_id, data.get("technology_hints"), "technology_hint")
 
         if isinstance(data.get("github"), dict):
             github = data["github"]
@@ -210,6 +213,7 @@ class EntityGraphBuilder:
                 item.get("platform")
                 or item.get("service")
                 or item.get("username")
+                or item.get("hostname")
                 or item.get("package_name")
                 or item.get("flow_id")
                 or item.get("label")
@@ -226,6 +230,9 @@ class EntityGraphBuilder:
                 if item.get("domain"):
                     domain_id = self._add_node("domain", str(item["domain"]), {"source_module": module_name})
                     self._add_edge(node_id, domain_id, "uses_domain", module_name)
+                for address in item.get("addresses", [])[:12] if isinstance(item.get("addresses"), list) else []:
+                    ip_id = self._add_node("ip", str(address), {"source_module": module_name})
+                    self._add_edge(node_id, ip_id, "resolves_to", module_name)
                 for link in item.get("links", [])[:12] if isinstance(item.get("links"), list) else []:
                     if isinstance(link, dict) and link.get("url"):
                         link_id = self._add_node("url", str(link["url"]), {"source_module": module_name, **link})
@@ -358,6 +365,8 @@ def _node_type_for_item(item: dict, relationship: str) -> str:
         return "application"
     if item.get("flow_id"):
         return "flow"
+    if item.get("hostname"):
+        return "hostname"
     if item.get("username"):
         return "username"
     if item.get("service") or item.get("name"):

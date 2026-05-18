@@ -36,10 +36,15 @@ def _csv(value: Optional[str]) -> Optional[List[str]]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _add_mode_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--mode", choices=["standard", "active", "aggressive"], default="standard", help="OSINT run mode.")
+    parser.add_argument("--aggressive", action="store_true", help="Shortcut for --mode aggressive.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nexusrecon",
-        description="NexusRecon / Data Aggregator - passive advanced OSINT command center.",
+        description="NexusRecon / Data Aggregator - public-source OSINT command center with standard, active, and aggressive modes.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--no-banner", action="store_true", help="Do not render the Rich banner.")
@@ -53,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     hunt.add_argument("--category", help="Run only modules in a category, for example identity or infrastructure.")
     hunt.add_argument("--timeout", type=int, default=25, help="Per-module timeout in seconds.")
     hunt.add_argument("--concurrency", type=int, default=8, help="Concurrent modules.")
+    _add_mode_args(hunt)
     hunt.add_argument("--save", action="store_true", help="Save a final report.")
     hunt.add_argument("--format", choices=["json", "md", "html", "graph"], default="json", help="Report format.")
 
@@ -63,6 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate.add_argument("--category", help="Run only modules in a category.")
     aggregate.add_argument("--timeout", type=int, default=25, help="Per-module timeout in seconds.")
     aggregate.add_argument("--concurrency", type=int, default=8, help="Concurrent modules.")
+    _add_mode_args(aggregate)
     aggregate.add_argument("--save", action="store_true", help="Save module report file.")
     aggregate.add_argument("--format", choices=["json", "md", "html", "graph"], default="json", help="Report format.")
 
@@ -108,6 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     flow_run.add_argument("target", help="Username, email, domain, URL, or phone number.")
     flow_run.add_argument("--timeout", type=int, default=18, help="Per-module timeout in seconds.")
     flow_run.add_argument("--concurrency", type=int, default=6, help="Concurrent modules per flow step.")
+    _add_mode_args(flow_run)
     flow_run.add_argument("--save", action="store_true", help="Save flow results as a report.")
     flow_run.add_argument("--format", choices=["json", "md", "html", "graph"], default="json", help="Report format.")
 
@@ -121,7 +129,8 @@ async def run_module_workflow(args: argparse.Namespace, target: str, label: str)
     profile = classify_target(target)
     render_target_profile(profile)
 
-    engine = AnalyticsEngine(module_timeout=args.timeout, max_concurrent=args.concurrency)
+    mode = _mode(args)
+    engine = AnalyticsEngine(module_timeout=args.timeout, max_concurrent=args.concurrency, mode=mode)
     engine.load_modules(include=_csv(args.include), exclude=_csv(args.exclude), category=args.category)
 
     loaded = engine.catalog()
@@ -132,7 +141,7 @@ async def run_module_workflow(args: argparse.Namespace, target: str, label: str)
     console.print(
         Panel(
             f"[bold green]{len(loaded)} module(s)[/bold green] ready "
-            f"with timeout=[cyan]{args.timeout}s[/cyan], concurrency=[cyan]{args.concurrency}[/cyan]",
+            f"with timeout=[cyan]{args.timeout}s[/cyan], concurrency=[cyan]{args.concurrency}[/cyan], mode=[cyan]{mode}[/cyan]",
             title="[bold]Execution[/bold]",
             border_style="green",
             box=box.ROUNDED,
@@ -209,7 +218,7 @@ async def run_flow_command(args: argparse.Namespace) -> None:
         list_available_flows()
         return
 
-    payload = await run_flow(args.flow_id, args.target, timeout=args.timeout, concurrency=args.concurrency)
+    payload = await run_flow(args.flow_id, args.target, timeout=args.timeout, concurrency=args.concurrency, mode=_mode(args))
     profile = classify_target(args.target)
     render_target_profile(profile)
     render_run_dashboard(payload["results"], payload["graph"])
@@ -280,6 +289,10 @@ def _looks_like_bind(value: str) -> bool:
         host, port = value.rsplit(":", 1)
         return bool(host) and port.isdigit()
     return value.count(".") == 3
+
+
+def _mode(args: argparse.Namespace) -> str:
+    return "aggressive" if getattr(args, "aggressive", False) else getattr(args, "mode", "standard")
 
 
 if __name__ == "__main__":

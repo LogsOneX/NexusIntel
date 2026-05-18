@@ -1,3 +1,4 @@
+import asyncio
 import re
 from html.parser import HTMLParser
 from typing import Dict, List
@@ -10,7 +11,7 @@ from core.targets import classify_target
 
 metadata = {
     "name": "Website Surface Mapper",
-    "description": "Passive website-to-links, page metadata, emails, and tracker hints inspired by graph investigation enrichers.",
+    "description": "Website-to-links, page metadata, emails, tracker hints, and optional active internal crawling.",
     "category": "infrastructure",
     "target_types": ["domain", "url"],
     "tags": ["website", "links", "trackers", "surface"],
@@ -69,7 +70,7 @@ class SurfaceParser(HTMLParser):
         return " ".join(part for part in self.title_parts if part).strip()
 
 
-async def run(target: str) -> dict:
+async def run(target: str, mode: str = "standard") -> dict:
     profile = classify_target(target)
     url = profile.url or f"https://{profile.domain or profile.normalized}"
     domain = profile.domain or urlparse(url).netloc.lower()
@@ -77,8 +78,9 @@ async def run(target: str) -> dict:
         url = f"https://{url}"
 
     try:
-        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 NexusRecon/2.0"}) as client:
+        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True, headers={"User-Agent": f"Mozilla/5.0 NexusRecon/2.0 website-surface/{mode}"}) as client:
             response = await client.get(url)
+            extra_pages = await _crawl_internal(client, domain, str(response.url), response.text, mode)
     except Exception as exc:
         return {"status": "error", "message": f"Website surface lookup failed: {exc}"}
 
@@ -112,6 +114,9 @@ async def run(target: str) -> dict:
             trackers.append({"name": name, "marker": marker})
 
     emails = sorted(set(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", body)))[:30]
+    for page in extra_pages:
+        emails.extend(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", page.get("body", "")))
+    emails = sorted(set(emails))[:80]
     text_sample = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", body)).strip()[:500]
 
     data = {
@@ -125,12 +130,59 @@ async def run(target: str) -> dict:
         "external_links": external_links[:80],
         "emails": emails,
         "trackers": trackers,
+        "crawled_pages": [{key: value for key, value in page.items() if key != "body"} for page in extra_pages],
         "asset_count": len(parser.assets),
         "text_sample": text_sample,
     }
-    signals = len(internal_links[:80]) + len(external_links[:80]) + len(emails) + len(trackers)
+    signals = len(internal_links[:80]) + len(external_links[:80]) + len(emails) + len(trackers) + len(extra_pages)
     return {
         "status": "success",
         "summary": f"{signals} website surface signal(s), {len(trackers)} tracker hint(s).",
         "data": data,
     }
+
+
+async def _crawl_internal(client: httpx.AsyncClient, domain: str, base_url: str, body: str, mode: str) -> list[dict]:
+    if mode not in {"active", "aggressive"}:
+        return []
+    limit = 4 if mode == "active" else 12
+    parser = SurfaceParser(base_url)
+    parser.feed(body[:250000])
+    candidates = []
+    seen = {base_url.split("#", 1)[0]}
+    for link in parser.links:
+        parsed = urlparse(link)
+        if not parsed.scheme.startswith("http") or not parsed.netloc.lower().endswith(domain):
+            continue
+        clean = link.split("#", 1)[0]
+        if clean in seen:
+            continue
+        seen.add(clean)
+        candidates.append(clean)
+        if len(candidates) >= limit:
+            break
+    tasks = [_fetch_page(client, item) for item in candidates]
+    return [item for item in await asyncio.gather(*tasks) if item]
+
+
+async def _fetch_page(client: httpx.AsyncClient, url: str) -> dict | None:
+    try:
+        response = await client.get(url)
+    except Exception:
+        return None
+    content_type = response.headers.get("content-type", "")
+    body = response.text[:250000]
+    return {
+        "url": str(response.url),
+        "status_code": response.status_code,
+        "content_type": content_type,
+        "title": _simple_title(body),
+        "body": body,
+    }
+
+
+def _simple_title(body: str) -> str | None:
+    match = re.search(r"<title[^>]*>(.*?)</title>", body, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group(1)).strip()[:120]

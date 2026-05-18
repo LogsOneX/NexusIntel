@@ -9,6 +9,7 @@ NexusRecon sekarang dipisah menjadi empat lapisan utama.
 - parsing command dan opsi,
 - menampilkan banner/tabel Rich,
 - memilih workflow (`hunt`, `flow`, `aggregate`, `username`, `email`, `phone`, `domain`, `doctor`, `dashboard`),
+- meneruskan mode eksekusi `standard`, `active`, atau `aggressive`,
 - memanggil engine atau scanner standalone,
 - menyimpan report bila `--save` dipakai.
 
@@ -17,6 +18,8 @@ NexusRecon sekarang dipisah menjadi empat lapisan utama.
 `core/targets.py` melakukan klasifikasi target menjadi `username`, `email`, `domain`, `url`, `phone`, atau `unknown`.
 
 `core/engine.py` memuat modul dari `modules/`, membaca metadata, memfilter kategori, menjalankan modul secara asynchronous, dan memberi timeout per modul.
+
+Engine juga meneruskan `mode` ke modul yang mendukung parameter `mode`. Modul lama tetap kompatibel karena engine akan memanggil `run(target)` bila modul belum menerima mode.
 
 `core/graph.py` mengubah hasil modul menjadi investigation graph berisi `nodes`, `edges`, dan ringkasan tipe node.
 
@@ -86,6 +89,7 @@ Tidak ada kode vendor dari project referensi. Semua implementasi dibuat ulang un
 ## Prinsip Desain
 
 - Passive first: hanya sumber publik.
+- Active mode: read-only crawling/probing untuk target yang diizinkan, tanpa bypass, login abuse, register spam, atau forgotten-password probing.
 - Modular: tambah modul tanpa mengubah engine.
 - Fail soft: error satu modul tidak mematikan scan lain.
 - Explainable: setiap hasil menyimpan status, signal count, dan summary.

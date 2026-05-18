@@ -40,6 +40,7 @@ http://127.0.0.1:8080
 ## UI Sections
 
 - Sidebar untuk target, kategori, include/exclude module, timeout, concurrency, dan save format.
+- Mode selector untuk `standard`, `active`, dan `aggressive`.
 - Case/Sketch selector untuk menyimpan graph investigasi lokal.
 - Executive metrics untuk OK, skipped, errors, signals, nodes, dan edges.
 - Canvas investigation graph untuk target, modules, profiles, URLs, domains, DNS records, IPs, trackers, app-link nodes, flow hints, dan risk nodes.
@@ -47,6 +48,7 @@ http://127.0.0.1:8080
 - Entity inspector untuk target profile atau node graph yang dipilih.
 - Module result table dengan tab per modul.
 - Flow Studio untuk menjalankan flow chained seperti `Identity Surface`, `Domain Surface`, `Identity Deep Pivot`, dan `Phone Triage`.
+- Timeline view untuk menyusun edge/event hasil flow dan graph.
 - Vault untuk menyimpan API key lokal dengan file permission `0600`; UI hanya menampilkan masked value.
 - Entity Types registry untuk melihat schema, icon, warna, shape, dan field utama.
 - Raw JSON output untuk pipeline/debug.

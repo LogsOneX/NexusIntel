@@ -1,6 +1,6 @@
 # Module Catalog
 
-Modul di bawah ini adalah plugin OSINT pasif yang dimuat otomatis oleh `AnalyticsEngine`.
+Modul di bawah ini adalah plugin OSINT yang dimuat otomatis oleh `AnalyticsEngine`. Mode `standard` menjaga eksekusi ringan, sedangkan `active` dan `aggressive` mengaktifkan modul/crawling read-only yang lebih dalam.
 
 ## identity
 
@@ -77,9 +77,15 @@ Target: `ip`, `domain`, `url`, `email`
 
 ### `website_surface`
 
-Website-to-links enricher: title/meta, internal links, external links, email yang tampil di HTML, asset count, text sample, dan tracker hints seperti Google Analytics, GTM, Meta Pixel, Hotjar, Cloudflare Insights, Microsoft Clarity, Segment, dan Sentry.
+Website-to-links enricher: title/meta, internal links, external links, email yang tampil di HTML, asset count, text sample, tracker hints, dan optional internal crawl saat mode `active`/`aggressive`.
 
 Target: `domain`, `url`
+
+### `active_surface`
+
+Active read-only surface sweep untuk target yang diizinkan: common-host DNS sweep, robots/sitemap/security.txt, common-path probing, HTTP status, technology hints, dan risk notes. Mode `standard` akan skip modul ini.
+
+Target: `domain`, `url`, `email`
 
 ### `header_diagnostics`
 

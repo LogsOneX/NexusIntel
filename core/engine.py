@@ -64,10 +64,12 @@ class AnalyticsEngine:
         modules_dir: str = "modules",
         module_timeout: int = 25,
         max_concurrent: int = 8,
+        mode: str = "standard",
     ):
         self.modules_dir = Path(modules_dir)
         self.module_timeout = module_timeout
         self.max_concurrent = max_concurrent
+        self.mode = mode
         self.loaded_modules: Dict[str, LoadedModule] = {}
 
     def discover_modules(self) -> List[str]:
@@ -153,12 +155,12 @@ class AnalyticsEngine:
 
         async with semaphore:
             try:
-                result = await asyncio.wait_for(loaded.run(target), timeout=self.module_timeout)
+                result = await asyncio.wait_for(_call_module(loaded.run, target, self.mode), timeout=self.module_timeout)
                 if not isinstance(result, dict):
                     result = {"status": "success", "data": result}
                 result.setdefault("status", "success")
                 result["module"] = descriptor.as_dict()
-                result["signal_count"] = _count_signal(result.get("data"))
+                result["signal_count"] = _count_signal(result.get("data")) if result.get("status") == "success" else int(result.get("signal_count", 0) or 0)
                 return result
             except asyncio.TimeoutError:
                 return {
@@ -179,6 +181,13 @@ class AnalyticsEngine:
 def _supports_target(target_types: Iterable[str], actual: str) -> bool:
     expected = set(target_types or ["any"])
     return "any" in expected or actual in expected
+
+
+async def _call_module(run_fn: ModuleRun, target: str, mode: str) -> Dict[str, Any]:
+    parameters = inspect.signature(run_fn).parameters
+    if "mode" in parameters:
+        return await run_fn(target, mode=mode)
+    return await run_fn(target)
 
 
 def _count_signal(data: Any) -> int:
