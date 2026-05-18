@@ -601,6 +601,24 @@ DASHBOARD_HTML = r"""<!doctype html>
       position: relative;
       background: #0e1218;
     }
+    .graph-tools {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(140px, 190px) auto auto;
+      gap: 8px;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-2);
+      align-items: center;
+    }
+    .graph-tools input, .graph-tools select {
+      min-height: 34px;
+      padding: 7px 9px;
+    }
+    .graph-count {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
     canvas {
       width: 100%;
       height: 520px;
@@ -719,6 +737,23 @@ DASHBOARD_HTML = r"""<!doctype html>
       font-size: 12px;
       line-height: 1.45;
     }
+    .inspector-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .inspector-title strong {
+      font-size: 15px;
+    }
+    .node-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 99px;
+      background: var(--cyan);
+      display: inline-block;
+      flex: 0 0 auto;
+    }
     .scrollbox {
       max-height: 300px;
       overflow: auto;
@@ -734,6 +769,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       main { padding: 12px; }
       aside { padding: 12px; }
       .topbar, .actions, .save-row { grid-template-columns: 1fr; }
+      .graph-tools { grid-template-columns: 1fr; }
       .row { grid-template-columns: 1fr; }
       .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       canvas { height: 420px; }
@@ -842,13 +878,19 @@ DASHBOARD_HTML = r"""<!doctype html>
               <h3>Investigation Graph</h3>
               <div class="legend" id="legend"></div>
             </header>
+            <div class="graph-tools">
+              <input id="graphSearch" placeholder="Search graph nodes">
+              <select id="graphFilter"><option value="">All entity types</option></select>
+              <button id="resetGraphBtn" type="button">Reset</button>
+              <span class="graph-count" id="graphCount">0 nodes</span>
+            </div>
             <div class="graph-wrap">
               <canvas id="graphCanvas" width="960" height="520"></canvas>
             </div>
           </section>
           <section class="panel">
             <header>
-              <h3>Target Profile</h3>
+              <h3>Entity Inspector</h3>
             </header>
             <div class="panel-body" id="profileView">
               <div class="empty">No target loaded.</div>
@@ -913,12 +955,16 @@ DASHBOARD_HTML = r"""<!doctype html>
     </main>
   </div>
   <script>
-    const state = { latest: null, activeModule: 'all', activeView: 'overview', modules: [], flows: [], cases: [], selectedCase: '' };
+    const state = {
+      latest: null, activeModule: 'all', activeView: 'overview', modules: [], flows: [], cases: [],
+      selectedCase: '', selectedNodeId: '', graphPositions: new Map()
+    };
     const colors = {
       target: '#56d6ff', username: '#56d6ff', email: '#56d6ff', domain: '#7be39d',
       url: '#7ca6d8', hostname: '#7be39d', ip: '#f1c36c', module: '#b78cff',
       service: '#ffb86c', profile: '#ffb86c', signal: '#f1c36c', risk: '#ff7a7a',
-      dns_record: '#7ca6d8', phone: '#56d6ff'
+      dns_record: '#7ca6d8', phone: '#56d6ff', application: '#f6a960', flow: '#b78cff',
+      organization: '#9dd6a5', asn: '#c2a3ff', cidr: '#c2a3ff', tracker: '#e78ac3'
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1014,9 +1060,34 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     function renderProfile(profile) {
       const rows = Object.entries(profile || {}).filter(([, v]) => v !== null && v !== '' && v !== undefined);
-      $('profileView').innerHTML = `<table><tbody>${rows.map(([k, v]) => `
+      $('profileView').innerHTML = `
+        <div class="inspector-title"><span class="node-dot"></span><strong>Target Profile</strong></div>
+        <table><tbody>${rows.map(([k, v]) => `
         <tr><th>${escapeHtml(k)}</th><td>${escapeHtml(String(v))}</td></tr>
       `).join('')}</tbody></table>`;
+    }
+
+    function renderInspector(node) {
+      if (!node) {
+        renderProfile(state.latest ? state.latest.target_profile : {});
+        return;
+      }
+      const props = { id: node.id, type: node.type, label: node.label, ...(node.properties || {}) };
+      const rows = Object.entries(props).filter(([, v]) => v !== null && v !== '' && v !== undefined);
+      $('profileView').innerHTML = `
+        <div class="inspector-title">
+          <span class="node-dot" style="background:${colors[node.type] || '#9aa7b8'}"></span>
+          <strong>${escapeHtml(node.nodeType || node.type)}</strong>
+        </div>
+        <table><tbody>${rows.map(([k, v]) => `
+          <tr><th>${escapeHtml(k)}</th><td>${escapeHtml(formatValue(v))}</td></tr>
+        `).join('')}</tbody></table>`;
+    }
+
+    function formatValue(value) {
+      if (Array.isArray(value)) return value.join(', ');
+      if (value && typeof value === 'object') return JSON.stringify(value);
+      return String(value);
     }
 
     function renderResults(results) {
@@ -1056,6 +1127,14 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     function renderLegend(graph) {
       const types = [...new Set((graph.nodes || []).map((n) => n.type))].sort();
+      const selected = $('graphFilter').value;
+      const options = '<option value="">All entity types</option>' + types.map((type) => `
+        <option value="${escapeHtml(type)}">${escapeHtml(type)}</option>
+      `).join('');
+      if ($('graphFilter').innerHTML !== options) {
+        $('graphFilter').innerHTML = options;
+        $('graphFilter').value = selected;
+      }
       $('legend').innerHTML = types.slice(0, 12).map((type) => `
         <span><i class="swatch" style="background:${colors[type] || '#9aa7b8'}"></i>${escapeHtml(type)}</span>
       `).join('');
@@ -1076,17 +1155,29 @@ DASHBOARD_HTML = r"""<!doctype html>
       ctx.fillStyle = '#0e1218';
       ctx.fillRect(0, 0, width, height);
 
-      const nodes = (graph.nodes || []).slice(0, 150);
-      const edges = (graph.edges || []).slice(0, 260);
+      const filter = $('graphFilter').value;
+      const query = $('graphSearch').value.trim().toLowerCase();
+      const allNodes = graph.nodes || [];
+      const matched = allNodes.filter((node) => {
+        const byType = !filter || node.type === filter;
+        const haystack = `${node.label || ''} ${node.type || ''} ${JSON.stringify(node.properties || {})}`.toLowerCase();
+        const byQuery = !query || haystack.includes(query);
+        return byType && byQuery;
+      });
+      const nodes = matched.slice(0, 180);
+      const allowed = new Set(nodes.map((node) => node.id));
+      const edges = (graph.edges || []).filter((edge) => allowed.has(edge.source) && allowed.has(edge.target)).slice(0, 320);
+      $('graphCount').textContent = `${nodes.length}/${allNodes.length} nodes`;
+      state.graphPositions = new Map();
       if (!nodes.length) {
         ctx.fillStyle = '#9aa7b8';
         ctx.font = '14px system-ui';
-        ctx.fillText('No graph data yet.', 24, 32);
+        ctx.fillText((graph.nodes || []).length ? 'No nodes match the current filter.' : 'No graph data yet.', 24, 32);
         return;
       }
 
       const byId = new Map(nodes.map((node, index) => [node.id, { ...node, index }]));
-      const center = nodes.find((n) => !['module'].includes(n.type)) || nodes[0];
+      const center = nodes.find((n) => n.id === state.selectedNodeId) || nodes.find((n) => !['module'].includes(n.type)) || nodes[0];
       const centerId = center.id;
       const cx = width / 2;
       const cy = height / 2;
@@ -1118,25 +1209,49 @@ DASHBOARD_HTML = r"""<!doctype html>
       });
 
       nodes.forEach((node) => {
-        const radius = node.id === centerId ? 18 : node.type === 'module' ? 13 : 11;
+        const selected = node.id === state.selectedNodeId;
+        const radius = selected ? 21 : node.id === centerId ? 18 : node.type === 'module' ? 13 : 11;
         ctx.beginPath();
         ctx.fillStyle = colors[node.type] || '#9aa7b8';
         ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#0b0d10';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = selected ? '#edf2f8' : '#0b0d10';
+        ctx.lineWidth = selected ? 4 : 3;
         ctx.stroke();
         ctx.fillStyle = '#edf2f8';
         ctx.font = node.id === centerId ? '700 12px system-ui' : '11px system-ui';
         ctx.textAlign = 'center';
         const label = String(node.label || '').slice(0, 24);
         ctx.fillText(label, node.x, node.y + radius + 14);
+        state.graphPositions.set(node.id, { ...node, radius });
       });
+    }
+
+    function selectGraphNode(event) {
+      if (!state.latest) return;
+      const canvas = $('graphCanvas');
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      let selected = null;
+      let best = 9999;
+      state.graphPositions.forEach((node) => {
+        const distance = Math.hypot(node.x - x, node.y - y);
+        if (distance < Math.max(24, node.radius + 8) && distance < best) {
+          selected = node;
+          best = distance;
+        }
+      });
+      if (!selected) return;
+      state.selectedNodeId = selected.id;
+      renderInspector(selected);
+      renderGraph(state.latest.graph);
     }
 
     function renderAll(data) {
       state.latest = data;
       state.activeModule = 'all';
+      state.selectedNodeId = '';
       $('headline').textContent = data.target_profile.normalized || data.target_profile.original || 'Investigation Workspace';
       $('subline').textContent = `${data.target_profile.kind} / ${Object.keys(data.results || {}).length} modules`;
       metric('mOk', data.dashboard.ok);
@@ -1165,6 +1280,22 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     document.querySelectorAll('[data-view-btn]').forEach((button) => {
       button.addEventListener('click', () => setView(button.dataset.viewBtn));
+    });
+    $('graphCanvas').addEventListener('click', selectGraphNode);
+    $('graphSearch').addEventListener('input', () => {
+      if (state.latest) renderGraph(state.latest.graph);
+    });
+    $('graphFilter').addEventListener('change', () => {
+      if (state.latest) renderGraph(state.latest.graph);
+    });
+    $('resetGraphBtn').addEventListener('click', () => {
+      $('graphSearch').value = '';
+      $('graphFilter').value = '';
+      state.selectedNodeId = '';
+      if (state.latest) {
+        renderProfile(state.latest.target_profile);
+        renderGraph(state.latest.graph);
+      }
     });
 
     $('huntForm').addEventListener('submit', async (event) => {

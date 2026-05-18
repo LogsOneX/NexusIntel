@@ -20,6 +20,36 @@ Implementasi NexusRecon:
 - `doctor` command membedah struktur lokal dan data flow.
 - Report HTML menyertakan node/edge table.
 
+## Maigret
+
+Repository: https://github.com/soxoj/maigret
+
+Pola yang diadaptasi:
+
+- Username dossier.
+- Username permutation.
+- Category/tag thinking.
+- Graph/report oriented output.
+
+Implementasi NexusRecon:
+
+- `modules/identity_expansion.py` membuat username variants, identity links, public search pivots, dan flow hints.
+- `modules/username_presence.py` menambah footprint score, category hits, dan link extraction dari profil publik.
+
+## Sherlock
+
+Repository: https://github.com/sherlock-project/sherlock
+
+Pola yang diadaptasi:
+
+- Public username discovery lintas platform.
+- HTTP status + negative marker untuk mengurangi false positive.
+
+Implementasi NexusRecon:
+
+- `recon/platforms.py` menjadi registry platform standalone.
+- `modules/username_presence.py` menjalankan passive concurrent checks dengan confidence scoring.
+
 ## GHunt
 
 Repository: https://github.com/mxrch/GHunt
@@ -36,6 +66,7 @@ Implementasi NexusRecon:
 - `AnalyticsEngine` menjalankan modul async dengan timeout dan concurrency.
 - `hunt` dan `aggregate` mendukung JSON/Markdown/HTML/graph export.
 - Scanner standalone tetap dapat dipakai via command khusus.
+- `modules/account_pivots.py` menambah public-only workspace/provider pivots dan well-known app-link enrichment tanpa cookies/login.
 
 ## Holehe
 

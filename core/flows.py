@@ -12,11 +12,22 @@ FLOW_TEMPLATES: Dict[str, dict] = {
     "identity_deep": {
         "id": "identity_deep",
         "name": "Identity Deep Pivot",
-        "description": "Username/email to public profiles, account-presence hints, and developer analytics.",
+        "description": "Username/email to permutations, public profiles, account-presence hints, developer analytics, and app/workspace pivots.",
         "input_types": ["username", "email", "url"],
         "steps": [
+            {"id": "identity_expansion", "name": "Identity Expansion", "modules": ["identity_expansion"], "target_types": ["username", "email", "url"], "outputs": ["username", "domain"]},
             {"id": "identity_presence", "name": "Account Presence", "modules": ["account_presence", "username_presence"], "target_types": ["username", "email", "url"], "outputs": ["url", "profile", "service"]},
             {"id": "developer_enrichment", "name": "Developer Enrichment", "modules": ["account_pivots", "user_analytics"], "target_types": ["username", "email", "domain"], "outputs": ["profile", "url", "domain"]},
+        ],
+    },
+    "identity_surface": {
+        "id": "identity_surface",
+        "name": "Identity Surface",
+        "description": "Fast local-first identity expansion plus broad username/account checks.",
+        "input_types": ["username", "email", "url", "unknown"],
+        "steps": [
+            {"id": "expand", "name": "Expand Seeds", "modules": ["identity_expansion"], "target_types": ["username", "email", "url", "unknown"], "outputs": ["username", "domain"]},
+            {"id": "presence", "name": "Presence Sweep", "modules": ["username_presence", "account_presence"], "target_types": ["username", "email", "url"], "outputs": ["url", "profile", "service"]},
         ],
     },
     "domain_surface": {
@@ -155,6 +166,9 @@ def _targets_from_graph(graph: dict, output_types: Optional[List[str]]) -> List[
     for node in graph.get("nodes", []):
         node_type = node.get("type")
         if wanted and node_type not in wanted:
+            continue
+        properties = node.get("properties") or node.get("nodeProperties") or {}
+        if isinstance(properties, dict) and properties.get("method") == "manual_review":
             continue
         label = str(node.get("label", "")).strip()
         if not label or label.startswith(("domain_", "header_", "network_", "username_", "user_", "phone_")):

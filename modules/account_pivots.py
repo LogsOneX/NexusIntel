@@ -7,10 +7,10 @@ from core.targets import classify_target
 
 metadata = {
     "name": "Account Pivot Enrichment",
-    "description": "Email, domain, and username pivots across public account, workspace, and developer signals.",
+    "description": "Email, domain, and username pivots across public account, workspace, developer, and well-known app-link signals.",
     "category": "identity",
     "target_types": ["email", "username", "domain"],
-    "tags": ["account", "google", "github", "gitlab", "public-api"],
+    "tags": ["account", "workspace", "github", "gitlab", "well-known", "public-api"],
     "passive": True,
     "risk": "low",
 }
@@ -24,6 +24,39 @@ async def _dns(client: httpx.AsyncClient, domain: str, record_type: str) -> list
         return [answer.get("data", "") for answer in response.json().get("Answer", []) if answer.get("data")]
     except Exception:
         return []
+
+
+def _provider_signals(mx_records: list[str], txt_records: list[str]) -> dict:
+    mx_text = " ".join(mx_records).lower()
+    txt_text = " ".join(txt_records).lower()
+    providers = []
+    checks = {
+        "Google Workspace": ("google", "aspmx.l.google.com"),
+        "Microsoft 365": ("protection.outlook.com", "outlook.com"),
+        "Zoho Mail": ("zoho",),
+        "Proton Mail": ("protonmail", "proton.ch"),
+        "Fastmail": ("fastmail",),
+        "Yandex": ("yandex",),
+        "Mailgun": ("mailgun",),
+        "SendGrid": ("sendgrid",),
+    }
+    for provider, markers in checks.items():
+        if any(marker in mx_text or marker in txt_text for marker in markers):
+            providers.append(provider)
+    return {
+        "providers": providers,
+        "spf": "v=spf1" in txt_text,
+        "google_site_verification": "google-site-verification" in txt_text,
+        "dmarc_policy_hint": _txt_policy(txt_records, "v=dmarc1"),
+    }
+
+
+def _txt_policy(records: list[str], marker: str) -> str | None:
+    for record in records:
+        clean = record.strip('"').lower()
+        if marker in clean:
+            return clean[:240]
+    return None
 
 
 async def _github_profile(client: httpx.AsyncClient, username: str) -> dict:
@@ -59,6 +92,21 @@ async def _github_profile(client: httpx.AsyncClient, username: str) -> dict:
     return result
 
 
+async def _npm_profile(client: httpx.AsyncClient, username: str) -> dict:
+    try:
+        response = await client.get(f"https://registry.npmjs.org/-/user/org.couchdb.user:{username}")
+        if response.status_code != 200:
+            return {"status": response.status_code}
+        data = response.json()
+        return {
+            "username": data.get("name"),
+            "email": data.get("email"),
+            "created": data.get("date"),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 async def _gitlab_matches(client: httpx.AsyncClient, username: str) -> list[dict]:
     try:
         response = await client.get("https://gitlab.com/api/v4/users", params={"search": username, "per_page": 5})
@@ -77,6 +125,58 @@ async def _gitlab_matches(client: httpx.AsyncClient, username: str) -> list[dict
         return []
 
 
+async def _digital_asset_links(client: httpx.AsyncClient, domain: str) -> list[dict]:
+    url = f"https://{domain}/.well-known/assetlinks.json"
+    try:
+        response = await client.get(url, follow_redirects=True)
+        if response.status_code != 200:
+            return []
+        data = response.json()
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    assets = []
+    for item in data[:30]:
+        if not isinstance(item, dict):
+            continue
+        target = item.get("target") if isinstance(item.get("target"), dict) else {}
+        assets.append(
+            {
+                "namespace": target.get("namespace"),
+                "package_name": target.get("package_name") or target.get("site"),
+                "relations": item.get("relation", []),
+                "fingerprints_count": len(target.get("sha256_cert_fingerprints", []) or []),
+                "source_url": url,
+            }
+        )
+    return [item for item in assets if item.get("package_name")]
+
+
+async def _apple_app_site_association(client: httpx.AsyncClient, domain: str) -> dict:
+    url = f"https://{domain}/.well-known/apple-app-site-association"
+    try:
+        response = await client.get(url, follow_redirects=True)
+        if response.status_code != 200:
+            return {"status": response.status_code, "apps": []}
+        data = response.json()
+    except Exception as exc:
+        return {"error": str(exc), "apps": []}
+
+    apps = []
+    applinks = data.get("applinks") if isinstance(data, dict) else {}
+    details = applinks.get("details", []) if isinstance(applinks, dict) else []
+    for item in details[:30]:
+        if not isinstance(item, dict):
+            continue
+        app_id = item.get("appID") or item.get("appIDs")
+        if isinstance(app_id, list):
+            apps.extend(str(value) for value in app_id)
+        elif app_id:
+            apps.append(str(app_id))
+    return {"status": "found" if apps else "empty", "apps": sorted(set(apps))[:30], "source_url": url}
+
+
 async def run(target: str) -> dict:
     profile = classify_target(target)
     subject = profile.normalized
@@ -87,8 +187,10 @@ async def run(target: str) -> dict:
         "target": subject,
         "target_type": profile.kind,
         "provider": None,
-        "google_workspace_signals": [],
+        "workspace_signals": [],
         "public_search_pivots": [],
+        "digital_asset_links": [],
+        "apple_app_links": {"apps": []},
     }
 
     headers = {"User-Agent": "Mozilla/5.0 NexusRecon/2.0"}
@@ -96,28 +198,37 @@ async def run(target: str) -> dict:
         if domain:
             mx_records = await _dns(client, domain, "MX")
             txt_records = await _dns(client, domain, "TXT")
+            dmarc_records = await _dns(client, f"_dmarc.{domain}", "TXT")
             findings["mx_records"] = mx_records
             findings["txt_records"] = txt_records[:20]
-            if any("google" in record.lower() for record in mx_records):
-                findings["provider"] = "Google / Google Workspace"
-                findings["google_workspace_signals"].append("google_mx")
-            if any("google-site-verification" in record.lower() for record in txt_records):
-                findings["google_workspace_signals"].append("google_site_verification_txt")
+            findings["dmarc_records"] = dmarc_records[:10]
+            findings["mail_provider_signals"] = _provider_signals(mx_records, txt_records + dmarc_records)
+            if findings["mail_provider_signals"]["providers"]:
+                findings["provider"] = findings["mail_provider_signals"]["providers"][0]
+                findings["workspace_signals"].extend(findings["mail_provider_signals"]["providers"])
+            if findings["mail_provider_signals"]["google_site_verification"]:
+                findings["workspace_signals"].append("google_site_verification_txt")
+            dal_task = _digital_asset_links(client, domain)
+            apple_task = _apple_app_site_association(client, domain)
+            findings["digital_asset_links"], findings["apple_app_links"] = await dal_task, await apple_task
 
         if profile.email and profile.email.endswith(("@gmail.com", "@googlemail.com")):
             findings["provider"] = "Google consumer account domain"
-            findings["google_workspace_signals"].append("gmail_domain")
+            findings["workspace_signals"].append("gmail_domain")
 
         if username:
             findings["github"] = await _github_profile(client, username)
             findings["gitlab_matches"] = await _gitlab_matches(client, username)
+            findings["npm"] = await _npm_profile(client, username)
 
     if profile.email:
         encoded = quote_plus(f'"{profile.email}"')
         findings["public_search_pivots"].extend(
             [
                 f"https://www.google.com/search?q={encoded}",
+                f"https://www.bing.com/search?q={encoded}",
                 f"https://github.com/search?q={encoded}&type=code",
+                f"https://gitlab.com/search?search={encoded}",
             ]
         )
     if username:
@@ -126,13 +237,19 @@ async def run(target: str) -> dict:
             [
                 f"https://www.google.com/search?q={encoded_user}",
                 f"https://github.com/search?q={encoded_user}&type=users",
+                f"https://gitlab.com/search?search={encoded_user}",
+                f"https://www.npmjs.com/search?q={encoded_user}",
             ]
         )
 
-    signals = len(findings.get("google_workspace_signals", []))
+    signals = len(findings.get("workspace_signals", []))
     if findings.get("github", {}).get("profile"):
         signals += 1
     signals += len(findings.get("gitlab_matches", []))
+    if findings.get("npm", {}).get("username"):
+        signals += 1
+    signals += len(findings.get("digital_asset_links", []))
+    signals += len(findings.get("apple_app_links", {}).get("apps", []))
 
     return {
         "status": "success",

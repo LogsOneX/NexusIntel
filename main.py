@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from core.engine import AnalyticsEngine
+from core.flows import list_flows, run_flow
 from core.graph import build_investigation_graph
 from core.render import (
     print_banner,
@@ -98,6 +99,18 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = subparsers.add_parser("doctor", help="Show project anatomy, module counts, and data flow.")
     doctor.add_argument("--category", help="Filter module overview by category.")
 
+    flow = subparsers.add_parser("flow", help="List or run chained OSINT flows.")
+    flow_sub = flow.add_subparsers(dest="flow_command", required=True, title="flow commands")
+    flow_list = flow_sub.add_parser("list", help="List available flow templates.")
+    flow_list.set_defaults(flow_command="list")
+    flow_run = flow_sub.add_parser("run", help="Run a chained flow against a target.")
+    flow_run.add_argument("flow_id", help="Flow template id, for example identity_deep.")
+    flow_run.add_argument("target", help="Username, email, domain, URL, or phone number.")
+    flow_run.add_argument("--timeout", type=int, default=18, help="Per-module timeout in seconds.")
+    flow_run.add_argument("--concurrency", type=int, default=6, help="Concurrent modules per flow step.")
+    flow_run.add_argument("--save", action="store_true", help="Save flow results as a report.")
+    flow_run.add_argument("--format", choices=["json", "md", "html", "graph"], default="json", help="Report format.")
+
     dashboard = subparsers.add_parser("dashboard", help="Run the local web dashboard without Docker.")
     dashboard.add_argument("bind", nargs="?", default=DEFAULT_ADDR, help="Bind address, for example 127.0.0.1:8080.")
 
@@ -179,6 +192,33 @@ def list_categories() -> None:
     console.print(table)
 
 
+def list_available_flows() -> None:
+    table = Table(title="NexusRecon Flow Templates", header_style="bold bright_cyan", box=box.SIMPLE_HEAVY)
+    table.add_column("Flow", style="cyan")
+    table.add_column("Inputs", style="green")
+    table.add_column("Steps", style="magenta")
+    table.add_column("Description", style="white")
+    for flow in list_flows():
+        steps = " -> ".join(step["name"] for step in flow.get("steps", []))
+        table.add_row(flow["id"], ", ".join(flow.get("input_types", [])), steps, flow.get("description", ""))
+    console.print(table)
+
+
+async def run_flow_command(args: argparse.Namespace) -> None:
+    if args.flow_command == "list":
+        list_available_flows()
+        return
+
+    payload = await run_flow(args.flow_id, args.target, timeout=args.timeout, concurrency=args.concurrency)
+    profile = classify_target(args.target)
+    render_target_profile(profile)
+    render_run_dashboard(payload["results"], payload["graph"])
+    render_engine_results(payload["results"], title=f"Flow Results: {args.flow_id}")
+    if args.save:
+        path = ReportGenerator(target=args.target, results=payload["results"], profile=profile, run_label=f"flow-{args.flow_id}").generate(args.format)
+        console.print(f"\n[bold green]Saved flow report:[/bold green] [cyan]{path}[/cyan]")
+
+
 async def async_main() -> None:
     parser = build_parser()
     args = parser.parse_args(_normalize_argv(sys.argv[1:]))
@@ -204,6 +244,8 @@ async def async_main() -> None:
         list_categories()
     elif args.command == "doctor":
         show_project_doctor(args.category)
+    elif args.command == "flow":
+        await run_flow_command(args)
     elif args.command == "dashboard":
         serve_dashboard(args.bind)
     else:
@@ -225,6 +267,7 @@ def _normalize_argv(argv: List[str]) -> List[str]:
         "list-modules",
         "categories",
         "doctor",
+        "flow",
         "dashboard",
     }
     if argv and argv[0] not in commands and _looks_like_bind(argv[0]):

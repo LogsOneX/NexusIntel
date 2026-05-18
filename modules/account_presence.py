@@ -21,8 +21,12 @@ metadata = {
 USERNAME_CHECKS = {
     "GitHub": {"domain": "github.com", "method": "profile", "url": "https://github.com/{username}"},
     "GitLab": {"domain": "gitlab.com", "method": "profile", "url": "https://gitlab.com/{username}"},
+    "Codeberg": {"domain": "codeberg.org", "method": "profile", "url": "https://codeberg.org/{username}"},
     "npm": {"domain": "npmjs.com", "method": "profile", "url": "https://www.npmjs.com/~{username}"},
     "PyPI": {"domain": "pypi.org", "method": "profile", "url": "https://pypi.org/user/{username}"},
+    "RubyGems": {"domain": "rubygems.org", "method": "profile", "url": "https://rubygems.org/profiles/{username}"},
+    "Docker Hub": {"domain": "hub.docker.com", "method": "profile", "url": "https://hub.docker.com/u/{username}"},
+    "Hugging Face": {"domain": "huggingface.co", "method": "profile", "url": "https://huggingface.co/{username}"},
     "Keybase": {"domain": "keybase.io", "method": "profile", "url": "https://keybase.io/{username}"},
     "Gravatar Username": {"domain": "gravatar.com", "method": "profile", "url": "https://gravatar.com/{username}"},
     "About.me": {"domain": "about.me", "method": "profile", "url": "https://about.me/{username}"},
@@ -30,6 +34,14 @@ USERNAME_CHECKS = {
     "Bio.link": {"domain": "bio.link", "method": "profile", "url": "https://bio.link/{username}"},
     "ProductHunt": {"domain": "producthunt.com", "method": "profile", "url": "https://producthunt.com/@{username}"},
     "Medium": {"domain": "medium.com", "method": "profile", "url": "https://medium.com/@{username}"},
+    "Reddit": {"domain": "reddit.com", "method": "profile", "url": "https://reddit.com/user/{username}"},
+    "Mastodon": {"domain": "mastodon.social", "method": "profile", "url": "https://mastodon.social/@{username}"},
+    "YouTube Handle": {"domain": "youtube.com", "method": "profile", "url": "https://youtube.com/@{username}"},
+    "Twitch": {"domain": "twitch.tv", "method": "profile", "url": "https://twitch.tv/{username}"},
+    "Behance": {"domain": "behance.net", "method": "profile", "url": "https://behance.net/{username}"},
+    "Dribbble": {"domain": "dribbble.com", "method": "profile", "url": "https://dribbble.com/{username}"},
+    "Flickr": {"domain": "flickr.com", "method": "profile", "url": "https://flickr.com/photos/{username}"},
+    "SoundCloud": {"domain": "soundcloud.com", "method": "profile", "url": "https://soundcloud.com/{username}"},
 }
 
 
@@ -107,6 +119,30 @@ async def _probe_gravatar_email(client: httpx.AsyncClient, email: str) -> Option
     return None
 
 
+async def _probe_libravatar_email(client: httpx.AsyncClient, email: str) -> Optional[dict]:
+    digest = hashlib.md5(email.strip().lower().encode("utf-8")).hexdigest()
+    url = f"https://seccdn.libravatar.org/avatar/{digest}?d=404"
+    try:
+        response = await client.get(url, follow_redirects=True)
+        if response.status_code == 200:
+            return _presence_record(
+                "Libravatar Email Hash",
+                "libravatar.org",
+                "email_hash",
+                "present",
+                False,
+                0.74,
+                url,
+                response.status_code,
+                {"evidence": "public libravatar hash image"},
+            )
+        if response.status_code == 404:
+            return _presence_record("Libravatar Email Hash", "libravatar.org", "email_hash", "absent", False, 0.70, url, response.status_code)
+    except Exception as exc:
+        return _presence_record("Libravatar Email Hash", "libravatar.org", "email_hash", "error", False, 0.0, url, None, {"error": str(exc)})
+    return None
+
+
 async def run(target: str) -> dict:
     profile = classify_target(target)
     usernames = profile.candidate_usernames
@@ -119,6 +155,7 @@ async def run(target: str) -> dict:
         tasks = []
         if profile.email:
             tasks.append(_probe_gravatar_email(client, profile.email))
+            tasks.append(_probe_libravatar_email(client, profile.email))
         if usernames:
             tasks.extend(_probe_username(client, service, config, usernames[0]) for service, config in USERNAME_CHECKS.items())
 
@@ -133,7 +170,7 @@ async def run(target: str) -> dict:
 
     return {
         "status": "success",
-        "summary": f"{len(present)} passive account-presence hint(s) for {identity}.",
+        "summary": f"{len(present)} passive account-presence hint(s), {len(uncertain)} uncertain for {identity}.",
         "data": {
             "identity": identity,
             "target_type": profile.kind,
@@ -141,6 +178,7 @@ async def run(target: str) -> dict:
             "absent_count": len(absent),
             "uncertain_count": len(uncertain),
             "schema": "nexus_account_presence_v1",
+            "coverage": {"services_checked": len(findings), "public_only": True},
             "results": sorted(findings, key=lambda item: item["name"]),
             "present": sorted(present, key=lambda item: (-item.get("confidence", 0), item["service"])),
             "uncertain": sorted(uncertain, key=lambda item: item["service"]),

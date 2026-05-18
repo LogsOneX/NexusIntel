@@ -4,9 +4,15 @@ Modul di bawah ini adalah plugin OSINT pasif yang dimuat otomatis oleh `Analytic
 
 ## identity
 
+### `identity_expansion`
+
+Permutasi username, alias handle, pivot pencarian manual, dan rekomendasi flow. Modul ini offline-first: tidak memukul layanan pihak ketiga, tapi menghasilkan entity baru untuk graph dan flow chaining.
+
+Target: `username`, `email`, `url`, `domain`, `unknown`
+
 ### `username_presence`
 
-Enumerasi username lintas platform publik. Modul ini memakai registry `recon/platforms.py`, negative markers, HTTP status, dan confidence score.
+Enumerasi username lintas platform publik. Modul ini memakai registry `recon/platforms.py`, negative markers, HTTP status, confidence score, profile title extraction, external profile links, category hits, dan footprint score.
 
 Target: `username`, `email`, `url`
 
@@ -33,7 +39,7 @@ Target: `email`, `username`
 
 ### `account_pivots`
 
-Account/workspace enrichment yang aman: MX/TXT Google Workspace hints, Gmail domain hints, GitHub/GitLab public API enrichment, dan search pivot links.
+Account/workspace enrichment yang aman: MX/TXT provider hints, SPF/DMARC posture, Gmail domain hints, GitHub/GitLab/npm public API enrichment, search pivot links, Digital Asset Links, dan Apple app-site association.
 
 Target: `email`, `username`, `domain`
 
@@ -119,6 +125,9 @@ Setiap modul tidak perlu membuat graph sendiri. Engine mengumpulkan output, lalu
 - service/profile,
 - URL,
 - domain/hostname,
+- username variants,
+- application/app-link nodes,
+- flow hints,
 - DNS record/IP,
 - risk,
 - signal.

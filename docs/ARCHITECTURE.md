@@ -8,7 +8,7 @@ NexusRecon sekarang dipisah menjadi empat lapisan utama.
 
 - parsing command dan opsi,
 - menampilkan banner/tabel Rich,
-- memilih workflow (`hunt`, `aggregate`, `username`, `email`, `phone`, `domain`, `doctor`, `dashboard`),
+- memilih workflow (`hunt`, `flow`, `aggregate`, `username`, `email`, `phone`, `domain`, `doctor`, `dashboard`),
 - memanggil engine atau scanner standalone,
 - menyimpan report bila `--save` dipakai.
 
@@ -19,6 +19,8 @@ NexusRecon sekarang dipisah menjadi empat lapisan utama.
 `core/engine.py` memuat modul dari `modules/`, membaca metadata, memfilter kategori, menjalankan modul secara asynchronous, dan memberi timeout per modul.
 
 `core/graph.py` mengubah hasil modul menjadi investigation graph berisi `nodes`, `edges`, dan ringkasan tipe node.
+
+`core/flows.py` menyimpan flow templates dan menjalankan chained enrichment. Output graph dari satu step dapat menjadi input step berikutnya, dengan filter agar pivot manual tidak dieksekusi otomatis.
 
 `core/reporter.py` membuat report JSON, Markdown, dan HTML.
 

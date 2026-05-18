@@ -95,6 +95,10 @@ class EntityGraphBuilder:
         self._extract_collection(module_name, module_id, target_id, data.get("links"), "observed_link")
         self._extract_collection(module_name, module_id, target_id, data.get("external_links"), "external_link")
         self._extract_collection(module_name, module_id, target_id, data.get("internal_links"), "internal_link")
+        self._extract_collection(module_name, module_id, target_id, data.get("username_variants"), "username_variant")
+        self._extract_collection(module_name, module_id, target_id, data.get("identity_links"), "identity_link")
+        self._extract_collection(module_name, module_id, target_id, data.get("digital_asset_links"), "mobile_app_link")
+        self._extract_collection(module_name, module_id, target_id, data.get("flow_hints"), "recommended_flow")
 
         if isinstance(data.get("github"), dict):
             github = data["github"]
@@ -171,11 +175,22 @@ class EntityGraphBuilder:
 
         pivots = data.get("public_search_pivots")
         if isinstance(pivots, list):
-            for url in pivots:
+            for item in pivots:
+                url = item.get("url") if isinstance(item, dict) else item
                 if isinstance(url, str):
-                    url_id = self._add_node("url", url, {"source_module": module_name})
+                    properties = {"source_module": module_name}
+                    if isinstance(item, dict):
+                        properties.update(item)
+                    url_id = self._add_node("url", url, properties)
                     self._add_edge(target_id, url_id, "search_pivot", module_name)
                     self._add_edge(module_id, url_id, "emitted", module_name)
+
+        apple_links = data.get("apple_app_links")
+        if isinstance(apple_links, dict):
+            for app_id in apple_links.get("apps", [])[:40]:
+                app_node = self._add_node("application", str(app_id), {"source_module": module_name, "ecosystem": "apple", "app_id": app_id})
+                self._add_edge(target_id, app_node, "mobile_app_link", module_name)
+                self._add_edge(module_id, app_node, "emitted", module_name)
 
     def _extract_collection(
         self,
@@ -191,8 +206,17 @@ class EntityGraphBuilder:
             if not isinstance(item, dict):
                 self._extract_value(module_name, module_id, target_id, item, relationship)
                 continue
-            label = item.get("platform") or item.get("service") or item.get("username") or item.get("name") or item.get("url")
-            node_type = "service" if item.get("service") or item.get("name") else "profile"
+            label = (
+                item.get("platform")
+                or item.get("service")
+                or item.get("username")
+                or item.get("package_name")
+                or item.get("flow_id")
+                or item.get("label")
+                or item.get("name")
+                or item.get("url")
+            )
+            node_type = _node_type_for_item(item, relationship)
             if label:
                 node_id = self._add_node(node_type, str(label), item)
                 self._add_edge(target_id, node_id, relationship, module_name)
@@ -202,6 +226,10 @@ class EntityGraphBuilder:
                 if item.get("domain"):
                     domain_id = self._add_node("domain", str(item["domain"]), {"source_module": module_name})
                     self._add_edge(node_id, domain_id, "uses_domain", module_name)
+                for link in item.get("links", [])[:12] if isinstance(item.get("links"), list) else []:
+                    if isinstance(link, dict) and link.get("url"):
+                        link_id = self._add_node("url", str(link["url"]), {"source_module": module_name, **link})
+                        self._add_edge(node_id, link_id, "links_to", module_name)
 
     def _extract_dns_values(self, module_name: str, module_id: str, anchor_id: str, record_type: str, values: Iterable[Any]) -> None:
         for value in list(values)[:100]:
@@ -318,6 +346,23 @@ def _signal_label(signal: Any) -> str:
             parts.append(str(signal["code"]))
         return ":".join(parts)
     return str(signal)
+
+
+def _node_type_for_item(item: dict, relationship: str) -> str:
+    declared = str(item.get("type") or "").lower()
+    if declared in {"username", "email", "domain", "url", "phone", "ip", "hostname", "flow"}:
+        return declared
+    if relationship in {"observed_link", "external_link", "internal_link"} or item.get("url") and not item.get("platform"):
+        return "url"
+    if item.get("package_name") or item.get("namespace") in {"android_app", "web"}:
+        return "application"
+    if item.get("flow_id"):
+        return "flow"
+    if item.get("username"):
+        return "username"
+    if item.get("service") or item.get("name"):
+        return "service"
+    return "profile"
 
 
 def _looks_like_ip(value: str) -> bool:

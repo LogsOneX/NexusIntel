@@ -42,14 +42,15 @@ http://127.0.0.1:8080
 - Sidebar untuk target, kategori, include/exclude module, timeout, concurrency, dan save format.
 - Case/Sketch selector untuk menyimpan graph investigasi lokal.
 - Executive metrics untuk OK, skipped, errors, signals, nodes, dan edges.
-- Canvas investigation graph untuk target, modules, profiles, URLs, domains, DNS records, IPs, trackers, dan risk nodes.
-- Target profile table.
+- Canvas investigation graph untuk target, modules, profiles, URLs, domains, DNS records, IPs, trackers, app-link nodes, flow hints, dan risk nodes.
+- Graph tools untuk search, filter entity type, reset view, dan click-to-inspect node.
+- Entity inspector untuk target profile atau node graph yang dipilih.
 - Module result table dengan tab per modul.
-- Flow Studio untuk menjalankan flow chained seperti `Domain Surface`, `Identity Deep Pivot`, dan `Phone Triage`.
+- Flow Studio untuk menjalankan flow chained seperti `Identity Surface`, `Domain Surface`, `Identity Deep Pivot`, dan `Phone Triage`.
 - Vault untuk menyimpan API key lokal dengan file permission `0600`; UI hanya menampilkan masked value.
 - Entity Types registry untuk melihat schema, icon, warna, shape, dan field utama.
 - Raw JSON output untuk pipeline/debug.
 
 ## Design Notes
 
-Dashboard ini mengikuti konsep Flowsint pada level workflow: graph-minded investigation, enrichers, flows, vault, entity types, dan local-first operation. Implementasinya tetap dibuat ulang dan dipadatkan untuk mode single-file local server agar mudah dijalankan tanpa Docker.
+Dashboard ini mengikuti konsep graph-minded investigation pada level workflow: enrichers, flows, vault, entity types, local-first operation, search/filter graph, dan node inspector. Implementasinya tetap dibuat ulang dan dipadatkan untuk mode single-file local server agar mudah dijalankan tanpa Docker.

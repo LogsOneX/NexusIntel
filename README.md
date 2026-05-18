@@ -28,12 +28,13 @@ Desain ini mengambil pola investigasi modern:
 
 - CLI Rich dan dashboard web lokal yang lebih estetik dengan target profile, graph canvas, module results, raw JSON, dan report save.
 - Workflow `hunt` untuk menjalankan modul OSINT sesuai tipe target: username, email, domain, URL, atau phone.
-- Modul standalone NexusRecon untuk username presence, account presence, account pivots, dan domain intelligence dalam versi pasif dan aman.
-- Username enumeration lintas kategori: social, tech, creative, professional, identity, finance, marketplace, travel, fitness, gaming, blog.
+- Modul standalone NexusRecon untuk identity expansion, username presence, account presence, account pivots, dan domain intelligence dalam versi pasif dan aman.
+- Username enumeration lintas kategori: social, tech, creative, professional, identity, finance, marketplace, travel, fitness, gaming, blog, plus profile link extraction dan footprint score.
 - Email intelligence: validasi format, provider hint, MX lookup, Gravatar hash profile, disposable-domain hint.
+- Account/workspace pivots: DNS provider signals, SPF/DMARC hints, public developer profiles, search pivots, Digital Asset Links, dan Apple app-site association.
 - Domain intelligence: RDAP, DNS A/AAAA/MX/NS/TXT/CAA, certificate transparency, security headers, mail posture, website surface, IP/RDAP network hints, dan risk summary.
-- Investigation graph otomatis untuk menghubungkan target, modul, service, URL, DNS record, domain, hostname, dan risk.
-- Flow Studio lokal untuk chaining enrichers: output entity bisa menjadi input step berikutnya.
+- Investigation graph otomatis untuk menghubungkan target, modul, service, URL, DNS record, domain, hostname, aplikasi, flow hint, dan risk.
+- Flow Studio lokal dan CLI `flow` untuk chaining enrichers: output entity bisa menjadi input step berikutnya.
 - Vault lokal untuk API key, case/sketch persistence, dan entity type registry.
 - Export laporan ke JSON, Markdown, HTML, atau graph JSON untuk workflow `hunt` dan `aggregate`.
 
@@ -41,7 +42,7 @@ Desain ini mengambil pola investigasi modern:
 
 ```text
 .
-├── main.py                  # CLI utama: hunt, aggregate, username, email, phone, domain
+├── main.py                  # CLI utama: hunt, flow, aggregate, username, email, phone, domain
 ├── core/
 │   ├── engine.py            # Dynamic module loader + concurrency + timeout + metadata
 │   ├── graph.py             # Entity graph builder ala investigation graph
@@ -52,6 +53,7 @@ Desain ini mengambil pola investigasi modern:
 │   └── server.py            # Local web dashboard tanpa Docker
 ├── modules/
 │   ├── username_presence.py # Username enumeration pasif
+│   ├── identity_expansion.py # Permutasi username, alias, dan pivot manual
 │   ├── account_presence.py  # Account presence hints + Nexus schema
 │   ├── account_pivots.py    # Public account enrichment + workspace pivots
 │   ├── domain_intelligence.py # Domain/RDAP/DNS/CRT/header intelligence
@@ -137,6 +139,7 @@ python3 main.py list-modules
 python3 main.py list-modules --category identity
 python3 main.py categories
 python3 main.py doctor
+python3 main.py flow list
 ```
 
 ## Workflow Advanced
@@ -145,6 +148,9 @@ Filter modul tertentu:
 
 ```bash
 python3 main.py hunt johndoe --include username_presence,user_analytics,account_pivots
+python3 main.py hunt "John Doe" --include identity_expansion
+python3 main.py flow run identity_surface johndoe --timeout 12 --concurrency 4
+python3 main.py flow run domain_surface example.com --save --format graph
 ```
 
 Kecualikan modul tertentu:
@@ -204,7 +210,10 @@ Gunakan hanya untuk target yang kamu miliki izin untuk analisis, investigasi int
 Terima kasih untuk developer dan project berikut sebagai inspirasi desain:
 
 - reconurge untuk [Flowsint](https://github.com/reconurge/flowsint), terutama konsep graph-based investigation dan enricher architecture.
+- soxoj untuk [Maigret](https://github.com/soxoj/maigret), terutama konsep username dossier, permutation, tags, recursive pivots, dan report graph.
+- Sherlock Project untuk [Sherlock](https://github.com/sherlock-project/sherlock), terutama konsep username discovery lintas platform publik.
 - mxrch untuk [GHunt](https://github.com/mxrch/GHunt), terutama pola framework async, CLI modules, dan JSON export.
 - megadose untuk [Holehe](https://github.com/megadose/holehe), terutama standar account-presence output dan ide email-to-accounts OSINT.
+- Maltego dan OSINT Industries sebagai referensi UX untuk graph investigation, entity inspector, dan workflow investigasi modern.
 
-NexusRecon tidak menyalin kode dari ketiga project tersebut. Implementasi di repo ini dibuat ulang sebagai toolkit pasif, dengan credit dan respect terhadap lisensi masing-masing project.
+NexusRecon tidak menyalin kode dari project referensi tersebut. Implementasi di repo ini dibuat ulang sebagai toolkit pasif, dengan credit dan respect terhadap lisensi masing-masing project.
