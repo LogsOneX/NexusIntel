@@ -1,91 +1,203 @@
-# DATA AGGREGATOR / NEXUSRECON UNIFIED OSINT
+# NexusRecon / Data Aggregator
 
-Sebuah toolkit OSINT terintegrasi untuk:
-- Analisis target publik (`aggregate`)
-- Enumerasi username lintas platform (`username`)
-- Verifikasi email dan temuan metadata (`email`)
-- Pemeriksaan nomor telepon ringan (`phone`)
-- Intelijen domain RDAP/DNS (`domain`)
+NexusRecon adalah command center OSINT pasif untuk menggabungkan enumerasi username, inspeksi email, domain intelligence, HTTP header diagnostics, dan enrichment profil publik dalam satu CLI yang lebih rapi.
 
-## Struktur Folder
+Fokus project ini adalah **public-source reconnaissance**: memakai endpoint publik, DNS/RDAP, certificate transparency, profile page publik, dan API publik. Tidak ada bypass, credential stuffing, private API abuse, atau flow agresif terhadap layanan pihak ketiga.
 
-- `main.py` - CLI utama yang menggabungkan semua mode.
-- `core/` - Engine modul dan generator laporan untuk agregator.
-- `modules/` - Plugin analisis modular yang dapat diperluas.
-- `recon/` - Scanner username dan NexusRecon Ultimate baru.
-- `results/` - Output laporan otomatis.
-- `legacy/` - Arsip versi lama `nexusrecon` dan `nexusrecon_ultimate`.
+## Bedah Cara Kerja
+
+```text
+input target
+  -> core.targets.classify_target()
+  -> core.engine.AnalyticsEngine.load_modules()
+  -> modules/*.py dipilih berdasarkan metadata target_types/category
+  -> async run(target) per modul
+  -> hasil dinormalisasi: status, summary, signal_count, data, module
+  -> core.graph.EntityGraphBuilder membuat nodes/edges investigasi
+  -> core.render menampilkan dashboard CLI
+  -> core.reporter menulis JSON/Markdown/HTML/Graph JSON
+```
+
+Desain ini mengambil pola:
+
+- Flowsint-style graph investigation: setiap temuan diubah menjadi entity graph nodes/edges.
+- GHunt-style async module workflow dan export JSON.
+- Holehe-style account presence schema: `name`, `domain`, `method`, `rateLimit`, `exists`, `emailrecovery`, `phoneNumber`, `others`.
+
+## Fitur Utama
+
+- CLI Rich dan dashboard web lokal yang lebih estetik dengan target profile, graph canvas, module results, raw JSON, dan report save.
+- Workflow `hunt` untuk menjalankan modul OSINT sesuai tipe target: username, email, domain, URL, atau phone.
+- Modul bergaya Sherlock, Holehe, GHunt, dan Flowsint dalam versi pasif dan aman.
+- Username enumeration lintas kategori: social, tech, creative, professional, identity, finance, marketplace, travel, fitness, gaming, blog.
+- Email intelligence: validasi format, provider hint, MX lookup, Gravatar hash profile, disposable-domain hint.
+- Domain intelligence: RDAP, DNS A/AAAA/MX/NS/TXT/CAA, certificate transparency, security headers, mail posture, website surface, IP/RDAP network hints, dan risk summary.
+- Investigation graph otomatis untuk menghubungkan target, modul, service, URL, DNS record, domain, hostname, dan risk.
+- Flow Studio lokal untuk chaining enrichers seperti Flowsint: output entity bisa menjadi input step berikutnya.
+- Vault lokal untuk API key, case/sketch persistence, dan entity type registry.
+- Export laporan ke JSON, Markdown, HTML, atau graph JSON untuk workflow `hunt` dan `aggregate`.
+
+## Struktur Project
+
+```text
+.
+├── main.py                  # CLI utama: hunt, aggregate, username, email, phone, domain
+├── core/
+│   ├── engine.py            # Dynamic module loader + concurrency + timeout + metadata
+│   ├── graph.py             # Entity graph builder ala investigation graph
+│   ├── reporter.py          # Export JSON/Markdown/HTML
+│   ├── render.py            # Tampilan Rich untuk CLI
+│   └── targets.py           # Target classifier: username/email/domain/url/phone
+├── dashboard/
+│   └── server.py            # Local web dashboard tanpa Docker
+├── modules/
+│   ├── sherlock_username.py # Username enumeration pasif
+│   ├── holehe_style.py      # Account presence hints + Holehe-like schema
+│   ├── ghunt_recon.py       # Public account enrichment + Google-adjacent pivots
+│   ├── flowsint_insight.py  # Domain/RDAP/DNS/CRT/header intelligence
+│   ├── ip_asn_lookup.py     # IP/RDAP network ownership hints
+│   ├── website_surface.py   # Website metadata, links, emails, tracker hints
+│   ├── network_mapping.py   # Passive DNS + RDAP network hints
+│   ├── header_diagnostics.py
+│   ├── phone_intel.py
+│   └── user_analytics.py
+├── recon/
+│   ├── platforms.py         # Registry platform username
+│   ├── username_scanner.py  # Scanner username standalone
+│   └── ultimate_scanner.py  # Email/phone/domain standalone
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── DASHBOARD.md
+│   ├── MODULES.md
+│   └── REFERENCES.md
+├── legacy/                  # Arsip versi lama
+├── requirements.txt
+└── pyproject.toml
+```
 
 ## Instalasi
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
-## Panduan Penggunaan
-
-Jalankan CLI utama:
+Opsional sebagai CLI package:
 
 ```bash
-python main.py <perintah> [opsi]
+python3 -m pip install -e .
+nexusrecon --help
 ```
 
-### Mode `aggregate`
-Menjalankan semua modul analisis terhadap target.
+## Penggunaan Cepat
+
+Jalankan dashboard lokal tanpa Docker:
 
 ```bash
-python main.py aggregate -t example.com --save --format json
+python3 main.py dashboard 127.0.0.1:8080
+python3 main.py 127.0.0.1:8080
 ```
 
-### Mode `username`
-Melakukan enumerasi username terhadap banyak platform.
+Jalankan unified workflow:
 
 ```bash
-python main.py username john_doe --workers 50 --timeout 12 --save --format txt
+python3 main.py hunt johndoe --save --format html
+python3 main.py hunt alice@example.com --category identity --save --format md
+python3 main.py hunt example.com --category infrastructure --save --format json
+python3 main.py hunt example.com --category infrastructure --save --format graph
 ```
 
-### Mode `email`
-Memeriksa format email dan metadata publik.
+Username scanner standalone:
 
 ```bash
-python main.py email alice@example.com --save --format json
+python3 main.py username johndoe --workers 60 --timeout 12 --save
+python3 main.py username johndoe --category tech
 ```
 
-### Mode `phone`
-Analisis cepat pola nomor telepon.
+Email, phone, dan domain standalone:
 
 ```bash
-python main.py phone "+62 812-3456-7890" --save --format txt
+python3 main.py email alice@example.com --save
+python3 main.py phone "+62 812-3456-7890"
+python3 main.py domain example.com --save
 ```
 
-### Mode `domain`
-Mengambil data RDAP dan DNS untuk domain.
+Lihat modul dan kategori:
 
 ```bash
-python main.py domain example.com --save --format json
+python3 main.py list-modules
+python3 main.py list-modules --category identity
+python3 main.py categories
+python3 main.py doctor
 ```
 
-### Menampilkan modul yang tersedia
+## Workflow Advanced
+
+Filter modul tertentu:
 
 ```bash
-python main.py list-modules
+python3 main.py hunt johndoe --include sherlock_username,user_analytics,ghunt_recon
 ```
 
-## Pengembangan Modul
+Kecualikan modul tertentu:
 
-Tambahkan file Python baru ke folder `modules/` dengan fungsi async bernama `run(target: str) -> dict`.
-Contoh minimal:
+```bash
+python3 main.py aggregate -t example.com --exclude header_diagnostics
+```
+
+Atur timeout dan concurrency:
+
+```bash
+python3 main.py hunt example.com --timeout 30 --concurrency 10 --save --format html
+```
+
+## Format Laporan
+
+Workflow `hunt` dan `aggregate` mendukung:
+
+- `json` untuk pipeline dan parsing otomatis.
+- `md` untuk catatan investigasi.
+- `html` untuk report visual yang bisa dibuka di browser.
+- `graph` untuk export nodes/edges investigasi sebagai JSON.
+
+Output default disimpan di `results/`.
+
+## Menambah Modul
+
+Buat file baru di `modules/` dengan metadata dan fungsi `async run(target: str) -> dict`.
 
 ```python
-import httpx
+metadata = {
+    "name": "Example Module",
+    "description": "Describe what the module collects.",
+    "category": "identity",
+    "target_types": ["username", "email"],
+    "tags": ["example"],
+    "passive": True,
+    "risk": "low",
+}
 
 async def run(target: str) -> dict:
-    return {"status": "success", "data": {"example": "OK"}}
+    return {
+        "status": "success",
+        "summary": "Example signal collected.",
+        "data": {"target": target},
+    }
 ```
 
-## Catatan Final
+Kategori umum: `identity`, `infrastructure`, `general`.
 
-Struktur ini menggabungkan semua kemampuan `core`, `modules`, dan `recon` ke dalam satu CLI modern yang lebih estetis, modular, dan mudah dikembangkan.
-Jika kamu ingin menyimpan versi lama sebagai referensi, direktori `legacy/` sudah dibuat.
+## Catatan Etika
+
+Gunakan hanya untuk target yang kamu miliki izin untuk analisis, investigasi internal, threat intelligence defensif, atau riset data publik yang sah. Batasi concurrency jika layanan memberi rate limit, dan jangan gunakan hasil OSINT untuk harassment, doxxing, impersonation, atau akses tidak sah.
+
+## Thanks and Credits
+
+Terima kasih untuk developer dan project berikut sebagai inspirasi desain:
+
+- reconurge untuk [Flowsint](https://github.com/reconurge/flowsint), terutama konsep graph-based investigation dan enricher architecture.
+- mxrch untuk [GHunt](https://github.com/mxrch/GHunt), terutama pola framework async, CLI modules, dan JSON export.
+- megadose untuk [Holehe](https://github.com/megadose/holehe), terutama standar account-presence output dan ide email-to-accounts OSINT.
+
+NexusRecon tidak menyalin kode dari ketiga project tersebut. Implementasi di repo ini dibuat ulang sebagai toolkit pasif, dengan credit dan respect terhadap lisensi masing-masing project.

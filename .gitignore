@@ -69,4 +69,8 @@ Thumbs.db
 *.pem
 *.crt
 *.cert
-```
+
+# Local scan output
+results/
+reports/
+.nexusrecon/

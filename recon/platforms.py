@@ -1,0 +1,83 @@
+from typing import Dict, List
+
+
+USERNAME_PLATFORMS: Dict[str, Dict[str, object]] = {
+    "GitHub": {"url": "https://github.com/{username}", "type": "tech", "negative": ["not found"]},
+    "GitLab": {"url": "https://gitlab.com/{username}", "type": "tech", "negative": ["not found"]},
+    "Codeberg": {"url": "https://codeberg.org/{username}", "type": "tech", "negative": ["not found"]},
+    "Bitbucket": {"url": "https://bitbucket.org/{username}", "type": "tech", "negative": ["not found"]},
+    "Dev.to": {"url": "https://dev.to/{username}", "type": "tech", "negative": ["404"]},
+    "StackOverflow": {"url": "https://stackoverflow.com/users/{username}", "type": "tech", "negative": ["page not found"]},
+    "HackerRank": {"url": "https://hackerrank.com/{username}", "type": "tech", "negative": ["not found"]},
+    "Kaggle": {"url": "https://kaggle.com/{username}", "type": "tech", "negative": ["not found"]},
+    "HuggingFace": {"url": "https://huggingface.co/{username}", "type": "tech", "negative": ["404"]},
+    "PyPI": {"url": "https://pypi.org/user/{username}", "type": "tech", "negative": ["404"]},
+    "npm": {"url": "https://www.npmjs.com/~{username}", "type": "tech", "negative": ["not found"]},
+    "Docker Hub": {"url": "https://hub.docker.com/u/{username}", "type": "tech", "negative": ["not found"]},
+    "Replit": {"url": "https://replit.com/@{username}", "type": "tech", "negative": ["not found"]},
+    "CodePen": {"url": "https://codepen.io/{username}", "type": "tech", "negative": ["not found"]},
+    "SourceForge": {"url": "https://sourceforge.net/u/{username}", "type": "tech", "negative": ["not found"]},
+    "Launchpad": {"url": "https://launchpad.net/~{username}", "type": "tech", "negative": ["not found"]},
+    "RubyGems": {"url": "https://rubygems.org/profiles/{username}", "type": "tech", "negative": ["not found"]},
+    "Twitter/X": {"url": "https://twitter.com/{username}", "type": "social", "negative": ["does not exist"]},
+    "Instagram": {"url": "https://instagram.com/{username}", "type": "social", "negative": ["page not found"]},
+    "Reddit": {"url": "https://reddit.com/user/{username}", "type": "social", "negative": ["page not found"]},
+    "TikTok": {"url": "https://tiktok.com/@{username}", "type": "social", "negative": ["couldn't find"]},
+    "Pinterest": {"url": "https://pinterest.com/{username}", "type": "social", "negative": ["not found"]},
+    "YouTube": {"url": "https://youtube.com/@{username}", "type": "social", "negative": ["not found"]},
+    "Telegram": {"url": "https://t.me/{username}", "type": "social", "negative": ["not found"]},
+    "Snapchat": {"url": "https://snapchat.com/add/{username}", "type": "social", "negative": ["not found"]},
+    "Mastodon": {"url": "https://mastodon.social/@{username}", "type": "social", "negative": ["not found"]},
+    "VK": {"url": "https://vk.com/{username}", "type": "social", "negative": ["not found"]},
+    "Tumblr": {"url": "https://{username}.tumblr.com", "type": "blog", "negative": ["not found"]},
+    "Medium": {"url": "https://medium.com/@{username}", "type": "blog", "negative": ["not found"]},
+    "WordPress": {"url": "https://{username}.wordpress.com", "type": "blog", "negative": ["doesn't exist"]},
+    "Blogger": {"url": "https://{username}.blogspot.com", "type": "blog", "negative": ["not found"]},
+    "Substack": {"url": "https://substack.com/@{username}", "type": "blog", "negative": ["not found"]},
+    "LinkedIn": {"url": "https://linkedin.com/in/{username}", "type": "professional", "negative": ["not found"]},
+    "ProductHunt": {"url": "https://producthunt.com/@{username}", "type": "professional", "negative": ["not found"]},
+    "AngelList": {"url": "https://angel.co/u/{username}", "type": "professional", "negative": ["not found"]},
+    "Crunchbase": {"url": "https://crunchbase.com/person/{username}", "type": "professional", "negative": ["not found"]},
+    "Fiverr": {"url": "https://fiverr.com/{username}", "type": "marketplace", "negative": ["not found"]},
+    "Upwork": {"url": "https://upwork.com/freelancers/{username}", "type": "marketplace", "negative": ["not found"]},
+    "Etsy": {"url": "https://etsy.com/shop/{username}", "type": "marketplace", "negative": ["not found"]},
+    "eBay": {"url": "https://ebay.com/usr/{username}", "type": "marketplace", "negative": ["not found"]},
+    "Behance": {"url": "https://behance.net/{username}", "type": "creative", "negative": ["not found"]},
+    "Dribbble": {"url": "https://dribbble.com/{username}", "type": "creative", "negative": ["not found"]},
+    "ArtStation": {"url": "https://artstation.com/{username}", "type": "creative", "negative": ["not found"]},
+    "Vimeo": {"url": "https://vimeo.com/{username}", "type": "creative", "negative": ["not found"]},
+    "SoundCloud": {"url": "https://soundcloud.com/{username}", "type": "creative", "negative": ["not found"]},
+    "Bandcamp": {"url": "https://bandcamp.com/{username}", "type": "creative", "negative": ["not found"]},
+    "Flickr": {"url": "https://flickr.com/photos/{username}", "type": "creative", "negative": ["not found"]},
+    "Twitch": {"url": "https://twitch.tv/{username}", "type": "gaming", "negative": ["not found"]},
+    "Steam": {"url": "https://steamcommunity.com/id/{username}", "type": "gaming", "negative": ["not found"]},
+    "Roblox": {"url": "https://www.roblox.com/user.aspx?username={username}", "type": "gaming", "negative": ["not found"]},
+    "Keybase": {"url": "https://keybase.io/{username}", "type": "identity", "negative": ["not found"]},
+    "Gravatar": {"url": "https://gravatar.com/{username}", "type": "identity", "negative": ["not found"]},
+    "About.me": {"url": "https://about.me/{username}", "type": "identity", "negative": ["not found"]},
+    "Linktree": {"url": "https://linktr.ee/{username}", "type": "identity", "negative": ["not found"]},
+    "Bio.link": {"url": "https://bio.link/{username}", "type": "identity", "negative": ["not found"]},
+    "Carrd": {"url": "https://{username}.carrd.co", "type": "identity", "negative": ["not found"]},
+    "PayPal": {"url": "https://paypal.me/{username}", "type": "finance", "negative": ["not found"]},
+    "Venmo": {"url": "https://venmo.com/{username}", "type": "finance", "negative": ["not found"]},
+    "CashApp": {"url": "https://cash.app/${username}", "type": "finance", "negative": ["not found"]},
+    "TripAdvisor": {"url": "https://tripadvisor.com/members/{username}", "type": "travel", "negative": ["not found"]},
+    "Airbnb": {"url": "https://airbnb.com/users/show/{username}", "type": "travel", "negative": ["not found"]},
+    "Strava": {"url": "https://strava.com/athletes/{username}", "type": "fitness", "negative": ["not found"]},
+    "Komoot": {"url": "https://komoot.com/user/{username}", "type": "fitness", "negative": ["not found"]},
+}
+
+
+def platform_categories() -> List[str]:
+    return sorted({str(config["type"]) for config in USERNAME_PLATFORMS.values()})
+
+
+def filter_platforms(category: str | None = None) -> Dict[str, Dict[str, object]]:
+    if not category:
+        return dict(USERNAME_PLATFORMS)
+    wanted = category.lower()
+    return {
+        name: config
+        for name, config in USERNAME_PLATFORMS.items()
+        if str(config.get("type", "")).lower() == wanted
+    }

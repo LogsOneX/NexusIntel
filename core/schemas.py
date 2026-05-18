@@ -1,0 +1,54 @@
+from dataclasses import dataclass, field
+from typing import Dict, List
+
+
+@dataclass(frozen=True)
+class EntityType:
+    name: str
+    label: str
+    color: str
+    icon: str
+    shape: str = "circle"
+    fields: List[str] = field(default_factory=list)
+    description: str = ""
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "label": self.label,
+            "color": self.color,
+            "icon": self.icon,
+            "shape": self.shape,
+            "fields": self.fields,
+            "description": self.description,
+        }
+
+
+ENTITY_TYPES: Dict[str, EntityType] = {
+    "target": EntityType("target", "Target", "#56d6ff", "Crosshair", "circle", ["original", "kind", "normalized"], "Investigation root entity."),
+    "username": EntityType("username", "Username", "#56d6ff", "User", "circle", ["username"], "Public username or account handle."),
+    "email": EntityType("email", "Email", "#56d6ff", "Mail", "circle", ["email", "domain"], "Email address or local-part pivot."),
+    "phone": EntityType("phone", "Phone", "#56d6ff", "Phone", "circle", ["phone", "country_hint"], "Phone number pattern entity."),
+    "domain": EntityType("domain", "Domain", "#7be39d", "Globe", "square", ["domain", "root"], "DNS domain or registrable root."),
+    "hostname": EntityType("hostname", "Hostname", "#7be39d", "Server", "square", ["hostname"], "Subdomain or host name."),
+    "ip": EntityType("ip", "IP Address", "#f1c36c", "Network", "square", ["ip", "country", "asn"], "IPv4 or IPv6 address."),
+    "dns_record": EntityType("dns_record", "DNS Record", "#7ca6d8", "Network", "square", ["record_type", "value"], "DNS answer emitted by an enricher."),
+    "url": EntityType("url", "URL", "#7ca6d8", "Link", "circle", ["url", "host"], "Observed web location."),
+    "service": EntityType("service", "Service", "#ffb86c", "Boxes", "hexagon", ["service", "domain", "exists"], "Service or platform signal."),
+    "profile": EntityType("profile", "Profile", "#ffb86c", "UserRound", "circle", ["platform", "url", "confidence"], "Public profile match."),
+    "module": EntityType("module", "Module", "#b78cff", "Puzzle", "hexagon", ["display_name", "category", "status"], "NexusRecon module/enricher."),
+    "risk": EntityType("risk", "Risk", "#ff7a7a", "TriangleAlert", "triangle", ["risk_score", "risk_level"], "Risk or posture finding."),
+    "signal": EntityType("signal", "Signal", "#f1c36c", "Activity", "circle", ["type", "value"], "Generic emitted signal."),
+    "tracker": EntityType("tracker", "Tracker", "#e78ac3", "Radar", "triangle", ["name", "marker"], "Web tracker or analytics hint."),
+    "organization": EntityType("organization", "Organization", "#9dd6a5", "Building2", "square", ["name", "country"], "Organization or owner hint."),
+    "asn": EntityType("asn", "ASN", "#c2a3ff", "Route", "hexagon", ["asn", "name"], "Autonomous System Number."),
+    "cidr": EntityType("cidr", "CIDR", "#c2a3ff", "Brackets", "hexagon", ["cidr"], "Network range."),
+}
+
+
+def get_entity_types() -> List[dict]:
+    return [ENTITY_TYPES[key].as_dict() for key in sorted(ENTITY_TYPES)]
+
+
+def entity_style(entity_type: str) -> EntityType:
+    return ENTITY_TYPES.get(entity_type, EntityType(entity_type, entity_type.title(), "#9aa7b8", "Circle", "circle"))
