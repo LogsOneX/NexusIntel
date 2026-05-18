@@ -125,7 +125,6 @@ def render_project_overview(modules: Iterable[Mapping[str, object]]) -> None:
     structure.add_row("modules/", "passive enrichers loaded by metadata and target type")
     structure.add_row("recon/", "standalone scanners and shared platform registry")
     structure.add_row("docs/", "architecture, module catalog, and reference notes")
-    structure.add_row("legacy/", "archived historical versions")
 
     stats = ", ".join(f"{name}={count}" for name, count in sorted(categories.items()))
     body = Group(

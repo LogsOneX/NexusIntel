@@ -1,6 +1,6 @@
 # Deployment
 
-NexusRecon bisa dijalankan sebagai local dashboard manual, Docker Compose service, atau single-command bootstrap. Default binding sengaja `127.0.0.1:8080` supaya dashboard tidak terbuka ke network publik tanpa keputusan eksplisit.
+NexusIntel berjalan sebagai stack Docker Compose penuh dari root repo: React frontend di `frontend/`, FastAPI backend di `backend/`, Celery worker, Redis broker/event bus, dan PostgreSQL graph store. Default binding sengaja `127.0.0.1:8080` supaya dashboard tidak terbuka ke network publik tanpa keputusan eksplisit.
 
 ## One-command path
 
@@ -20,13 +20,13 @@ Stop service:
 make down
 ```
 
-Jika Docker Compose belum tersedia, gunakan bootstrap lokal:
+Alternatif langsung:
 
 ```bash
-./start.sh
+docker compose up -d --build
 ```
 
-Script ini memakai Docker Compose jika tersedia. Jika Docker Compose tidak ada, script akan membuat `.venv`, menginstal dependency, dan menjalankan dashboard di `127.0.0.1:8080`.
+`./start.sh` juga tersedia sebagai wrapper singkat untuk Compose.
 
 ## Custom host atau port
 
@@ -42,11 +42,10 @@ NEXUS_HOST=127.0.0.1 NEXUS_PORT=9090 ./start.sh
 
 ## Runtime data
 
-Docker Compose memasang volume lokal berikut agar hasil investigasi tetap tersimpan:
+Docker Compose memakai named volume berikut agar graph dan broker state tetap tersimpan:
 
-- `./results:/app/results`
-- `./reports:/app/reports`
-- `./.nexusrecon:/app/.nexusrecon`
+- `nexus_pgdata`
+- `nexus_redis`
 
 ## Health dan readiness
 
@@ -54,6 +53,19 @@ Health endpoint:
 
 ```text
 GET /api/health
+```
+
+Graph endpoint:
+
+```text
+GET /api/investigations/{id}/graph
+```
+
+Live event stream:
+
+```text
+GET /api/investigations/{id}/events
+WS  /api/investigations/{id}/ws
 ```
 
 Operational readiness lokal:
@@ -69,6 +81,8 @@ make doctor
 ```
 
 ## Manual local mode
+
+Manual local mode di bawah ini hanya untuk CLI/dashboard legacy, bukan stack penuh:
 
 ```bash
 python3 -m venv .venv

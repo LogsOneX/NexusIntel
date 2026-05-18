@@ -1,8 +1,32 @@
-# NexusRecon / Data Aggregator
+# NexusRecon / NexusIntel OSINT Platform
 
-NexusRecon adalah command center OSINT public-source untuk menggabungkan enumerasi username, inspeksi email, domain intelligence, active surface sweep, HTTP header diagnostics, dan enrichment profil publik dalam satu CLI/dashboard yang lebih rapi.
+NexusIntel adalah platform OSINT public-source standalone dengan visual link analysis, backend API, worker queue, Redis live event bus, dan PostgreSQL graph store. Stack utama sekarang hidup langsung di root melalui `backend/` dan `frontend/`: tidak clone atau bergantung pada repo eksternal untuk core code.
+
+NexusRecon CLI lama tetap ada untuk workflow terminal, sementara deployment utama sekarang menjalankan platform enterprise-style: React/Cytoscape frontend, FastAPI API, Celery worker, Redis, dan PostgreSQL.
 
 Fokus project ini adalah **public-source reconnaissance**: memakai endpoint publik, DNS/RDAP, certificate transparency, profile page publik, API publik, dan active crawling read-only untuk target yang kamu punya izin. Tidak ada bypass, credential stuffing, private API abuse, spam register/forgot-password, atau rate-limit evasion.
+
+## NexusIntel Enterprise Stack
+
+```text
+React/Cytoscape UI
+  -> FastAPI backend
+  -> Celery worker
+  -> Redis broker + SSE event bus
+  -> PostgreSQL graph database
+  -> internal Python OSINT modules
+```
+
+Kapabilitas baru:
+
+- visual graph canvas besar untuk drag/drop, select, expand, remove, search, dan filter entity.
+- live recon HUD via Server-Sent Events.
+- autonomous worker untuk identity profiling, email/workspace recon, domain recon, website surface recon, dan phone triage.
+- unified entity/relationship schema di PostgreSQL.
+- 100% free public-source methods, tanpa paid API subscription.
+- one-command deployment dengan Compose master.
+
+Blueprint lengkap: `docs/NEXUSINTEL_BLUEPRINT.md`.
 
 ## Bedah Cara Kerja
 
@@ -46,7 +70,11 @@ Desain ini mengambil pola investigasi modern:
 
 ```text
 .
-├── main.py                  # CLI utama: hunt, flow, aggregate, username, email, phone, domain
+├── main.py                  # CLI legacy: hunt, flow, aggregate, username, email, phone, domain
+├── backend/                 # FastAPI API + Celery worker + internal OSINT engine
+│   ├── app/
+│   └── workers/             # Bridges to legacy NexusRecon/core/modules
+├── frontend/                # React + Cytoscape command graph UI
 ├── core/
 │   ├── engine.py            # Dynamic module loader + concurrency + timeout + metadata
 │   ├── graph.py             # Entity graph builder ala investigation graph
@@ -77,11 +105,10 @@ Desain ini mengambil pola investigasi modern:
 │   ├── ARCHITECTURE.md
 │   ├── DASHBOARD.md
 │   ├── DEPLOYMENT.md
+│   ├── NEXUSINTEL_BLUEPRINT.md
 │   ├── MODULES.md
 │   └── REFERENCES.md
-├── legacy/                  # Arsip versi lama
-├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml       # Master stack: frontend, API, worker, PostgreSQL, Redis
 ├── Makefile
 ├── start.sh
 ├── requirements.txt
@@ -114,7 +141,7 @@ Fallback tanpa Docker Compose:
 ./start.sh
 ```
 
-Script ini otomatis membuat `.venv`, menginstal dependency, dan menjalankan dashboard di `127.0.0.1:8080`. Detail deployment ada di `docs/DEPLOYMENT.md`.
+Script ini menjalankan Compose master. Docker Compose diperlukan karena stack penuh memakai frontend, API, worker, Redis, dan PostgreSQL. Detail deployment ada di `docs/DEPLOYMENT.md`.
 
 ## Instalasi Manual
 
