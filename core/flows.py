@@ -15,8 +15,8 @@ FLOW_TEMPLATES: Dict[str, dict] = {
         "description": "Username/email to public profiles, account-presence hints, and developer analytics.",
         "input_types": ["username", "email", "url"],
         "steps": [
-            {"id": "identity_presence", "name": "Account Presence", "modules": ["holehe_style", "sherlock_username"], "target_types": ["username", "email", "url"], "outputs": ["url", "profile", "service"]},
-            {"id": "developer_enrichment", "name": "Developer Enrichment", "modules": ["ghunt_recon", "user_analytics"], "target_types": ["username", "email", "domain"], "outputs": ["profile", "url", "domain"]},
+            {"id": "identity_presence", "name": "Account Presence", "modules": ["account_presence", "username_presence"], "target_types": ["username", "email", "url"], "outputs": ["url", "profile", "service"]},
+            {"id": "developer_enrichment", "name": "Developer Enrichment", "modules": ["account_pivots", "user_analytics"], "target_types": ["username", "email", "domain"], "outputs": ["profile", "url", "domain"]},
         ],
     },
     "domain_surface": {
@@ -25,7 +25,7 @@ FLOW_TEMPLATES: Dict[str, dict] = {
         "description": "Domain to DNS, RDAP, CT, website, headers, IP ownership, and graph links.",
         "input_types": ["domain", "url", "email"],
         "steps": [
-            {"id": "domain_foundation", "name": "Infrastructure Foundation", "modules": ["flowsint_insight", "network_mapping", "header_diagnostics"], "target_types": ["domain", "url", "email"], "outputs": ["ip", "hostname", "dns_record", "risk"]},
+            {"id": "domain_foundation", "name": "Infrastructure Foundation", "modules": ["domain_intelligence", "network_mapping", "header_diagnostics"], "target_types": ["domain", "url", "email"], "outputs": ["ip", "hostname", "dns_record", "risk"]},
             {"id": "website_surface", "name": "Website Surface", "modules": ["website_surface"], "target_types": ["domain", "url"], "outputs": ["url", "email", "tracker"]},
             {"id": "ip_ownership", "name": "IP Ownership", "modules": ["ip_asn_lookup"], "target_types": ["ip", "domain", "url", "email"], "outputs": ["ip", "organization", "asn", "cidr"]},
         ],
@@ -157,7 +157,7 @@ def _targets_from_graph(graph: dict, output_types: Optional[List[str]]) -> List[
         if wanted and node_type not in wanted:
             continue
         label = str(node.get("label", "")).strip()
-        if not label or label.startswith(("flowsint_", "header_", "network_", "sherlock_", "user_", "phone_")):
+        if not label or label.startswith(("domain_", "header_", "network_", "username_", "user_", "phone_")):
             continue
         if node_type in {"ip", "domain", "url", "email", "username", "phone", "hostname"}:
             values.append(label)

@@ -524,6 +524,33 @@ DASHBOARD_HTML = r"""<!doctype html>
       grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 12px;
     }
+    .viewbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 16px 32px var(--shadow);
+    }
+    .viewbar button {
+      min-height: 34px;
+      border-radius: 7px;
+      color: var(--muted);
+    }
+    .viewbar button.active {
+      border-color: #286f83;
+      background: #12323c;
+      color: var(--cyan);
+    }
+    .view-panel {
+      display: none;
+      gap: 16px;
+    }
+    .view-panel.active {
+      display: grid;
+    }
     .metric, .panel {
       border: 1px solid var(--line);
       background: var(--surface);
@@ -682,6 +709,11 @@ DASHBOARD_HTML = r"""<!doctype html>
       gap: 16px;
       align-items: start;
     }
+    .single-column {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
     .small-muted {
       color: var(--muted);
       font-size: 12px;
@@ -796,35 +828,44 @@ DASHBOARD_HTML = r"""<!doctype html>
         <div class="metric"><span>Nodes</span><strong id="mNodes">0</strong></div>
         <div class="metric"><span>Edges</span><strong id="mEdges">0</strong></div>
       </section>
-      <div class="workspace">
+      <nav class="viewbar" id="viewbar" aria-label="Workspace views">
+        <button type="button" class="active" data-view-btn="overview">Overview</button>
+        <button type="button" data-view-btn="flow">Flow</button>
+        <button type="button" data-view-btn="vault">Vault</button>
+        <button type="button" data-view-btn="types">Types</button>
+        <button type="button" data-view-btn="raw">Raw</button>
+      </nav>
+      <div class="view-panel active" data-view="overview">
+        <div class="workspace">
+          <section class="panel">
+            <header>
+              <h3>Investigation Graph</h3>
+              <div class="legend" id="legend"></div>
+            </header>
+            <div class="graph-wrap">
+              <canvas id="graphCanvas" width="960" height="520"></canvas>
+            </div>
+          </section>
+          <section class="panel">
+            <header>
+              <h3>Target Profile</h3>
+            </header>
+            <div class="panel-body" id="profileView">
+              <div class="empty">No target loaded.</div>
+            </div>
+          </section>
+        </div>
         <section class="panel">
           <header>
-            <h3>Investigation Graph</h3>
-            <div class="legend" id="legend"></div>
+            <h3>Module Results</h3>
+            <div class="tabs" id="tabs"></div>
           </header>
-          <div class="graph-wrap">
-            <canvas id="graphCanvas" width="960" height="520"></canvas>
-          </div>
-        </section>
-        <section class="panel">
-          <header>
-            <h3>Target Profile</h3>
-          </header>
-          <div class="panel-body" id="profileView">
-            <div class="empty">No target loaded.</div>
+          <div class="panel-body" id="resultsView">
+            <div class="empty">Run a hunt to populate module results.</div>
           </div>
         </section>
       </div>
-      <section class="panel">
-        <header>
-          <h3>Module Results</h3>
-          <div class="tabs" id="tabs"></div>
-        </header>
-        <div class="panel-body" id="resultsView">
-          <div class="empty">Run a hunt to populate module results.</div>
-        </div>
-      </section>
-      <div class="tool-grid">
+      <div class="view-panel single-column" data-view="flow">
         <section class="panel">
           <header><h3>Flow Studio</h3></header>
           <div class="panel-body">
@@ -836,6 +877,8 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="scrollbox" id="flowLog"><div class="empty">No flow execution yet.</div></div>
           </div>
         </section>
+      </div>
+      <div class="view-panel single-column" data-view="vault">
         <section class="panel">
           <header><h3>Vault</h3></header>
           <div class="panel-body">
@@ -847,6 +890,8 @@ DASHBOARD_HTML = r"""<!doctype html>
             <div class="scrollbox" id="vaultList"><div class="empty">No vault keys loaded.</div></div>
           </div>
         </section>
+      </div>
+      <div class="view-panel single-column" data-view="types">
         <section class="panel">
           <header><h3>Entity Types</h3></header>
           <div class="panel-body scrollbox" id="typeList">
@@ -854,19 +899,21 @@ DASHBOARD_HTML = r"""<!doctype html>
           </div>
         </section>
       </div>
-      <section class="panel">
-        <header>
-          <h3>Raw Output</h3>
-          <div class="save-row">
-            <span id="saveStatus"></span>
-          </div>
-        </header>
-        <div class="panel-body"><pre id="rawOutput">{}</pre></div>
-      </section>
+      <div class="view-panel" data-view="raw">
+        <section class="panel">
+          <header>
+            <h3>Raw Output</h3>
+            <div class="save-row">
+              <span id="saveStatus"></span>
+            </div>
+          </header>
+          <div class="panel-body"><pre id="rawOutput">{}</pre></div>
+        </section>
+      </div>
     </main>
   </div>
   <script>
-    const state = { latest: null, activeModule: 'all', modules: [], flows: [], cases: [], selectedCase: '' };
+    const state = { latest: null, activeModule: 'all', activeView: 'overview', modules: [], flows: [], cases: [], selectedCase: '' };
     const colors = {
       target: '#56d6ff', username: '#56d6ff', email: '#56d6ff', domain: '#7be39d',
       url: '#7ca6d8', hostname: '#7be39d', ip: '#f1c36c', module: '#b78cff',
@@ -893,12 +940,23 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     function metric(id, value) { $(id).textContent = Number(value || 0).toLocaleString(); }
 
+    function setView(view) {
+      state.activeView = view;
+      document.querySelectorAll('[data-view]').forEach((panel) => {
+        panel.classList.toggle('active', panel.dataset.view === view);
+      });
+      document.querySelectorAll('[data-view-btn]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.viewBtn === view);
+      });
+      if (view === 'overview' && state.latest) requestAnimationFrame(() => renderGraph(state.latest.graph));
+    }
+
     function renderModules(data) {
       state.modules = data.modules || [];
       $('moduleList').innerHTML = state.modules.map((m) => `
         <div class="module-pill">
-          <strong>${escapeHtml(m.name)}</strong>
-          <span>${escapeHtml(m.category)} / ${(m.target_types || []).join(', ')}</span>
+          <strong>${escapeHtml(m.display_name || m.name)}</strong>
+          <span>${escapeHtml(m.name)} / ${(m.target_types || []).join(', ')}</span>
         </div>
       `).join('');
     }
@@ -918,7 +976,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         return;
       }
       const steps = (flow.steps || []).map((step, index) => `${index + 1}. ${step.name}`).join(' -> ');
-      $('flowDescription').textContent = `${flow.description} / ${steps}`;
+      $('flowDescription').textContent = `${flow.description} | ${steps}`;
     }
 
     function renderVault(data) {
@@ -1105,6 +1163,10 @@ DASHBOARD_HTML = r"""<!doctype html>
         .replaceAll("'", '&#039;');
     }
 
+    document.querySelectorAll('[data-view-btn]').forEach((button) => {
+      button.addEventListener('click', () => setView(button.dataset.viewBtn));
+    });
+
     $('huntForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
@@ -1114,6 +1176,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       setStatus('Running', 'busy');
       try {
         const data = await api('/api/hunt', { method: 'POST', body: JSON.stringify(payload) });
+        setView('overview');
         renderAll(data);
         setStatus('Ready');
       } catch (error) {
@@ -1159,6 +1222,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           concurrency: $('concurrency').value
         };
         const data = await api('/api/flow/run', { method: 'POST', body: JSON.stringify(payload) });
+        setView('overview');
         renderAll({
           target_profile: data.target_profile,
           catalog: state.modules,

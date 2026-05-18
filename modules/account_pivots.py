@@ -6,11 +6,11 @@ from core.targets import classify_target
 
 
 metadata = {
-    "name": "GHunt-style Public Account Recon",
-    "description": "Google-account-adjacent passive pivots plus public developer profile enrichment without private API abuse.",
+    "name": "Account Pivot Enrichment",
+    "description": "Email, domain, and username pivots across public account, workspace, and developer signals.",
     "category": "identity",
     "target_types": ["email", "username", "domain"],
-    "tags": ["ghunt", "google", "github", "gitlab", "public-api"],
+    "tags": ["account", "google", "github", "gitlab", "public-api"],
     "passive": True,
     "risk": "low",
 }

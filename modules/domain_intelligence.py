@@ -7,11 +7,11 @@ from core.targets import classify_target, normalize_domain
 
 
 metadata = {
-    "name": "Flowsint-style Domain Insight",
+    "name": "Domain Intelligence",
     "description": "Passive infrastructure enrichment: RDAP, DNS, certificate transparency, mail posture, and header posture.",
     "category": "infrastructure",
     "target_types": ["domain", "url", "email"],
-    "tags": ["flowsint", "domain", "dns", "rdap", "crtsh", "headers"],
+    "tags": ["domain", "dns", "rdap", "crtsh", "headers"],
     "passive": True,
     "risk": "low",
 }

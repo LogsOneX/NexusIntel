@@ -36,7 +36,7 @@ browser
   -> canvas graph + tables + raw JSON
 ```
 
-Dashboard juga punya endpoint Flowsint-style:
+Dashboard juga punya endpoint graph-workspace:
 
 - `/api/flows` dan `/api/flow/run` untuk chained enrichment.
 - `/api/vault` untuk local API key vault.
@@ -75,7 +75,7 @@ CLI command
 
 ## Pola yang Diadaptasi
 
-- Dari Flowsint: konsep graph-based investigation, enricher modular, dan pemisahan core/enrichers/app.
+- Dari Flowsint: konsep graph-based investigation, enricher modular, flows, vault, entity types, dan pemisahan core/enrichers/app.
 - Dari GHunt: workflow CLI modular, async execution, dan export JSON.
 - Dari Holehe: schema account-presence yang mudah dibaca pipeline (`name`, `domain`, `method`, `rateLimit`, `exists`, `emailrecovery`, `phoneNumber`, `others`).
 

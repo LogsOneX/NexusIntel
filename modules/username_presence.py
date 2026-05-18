@@ -9,11 +9,11 @@ from recon.platforms import USERNAME_PLATFORMS
 
 
 metadata = {
-    "name": "Sherlock-style Username Recon",
+    "name": "Username Presence",
     "description": "Fast passive username enumeration across social, developer, creative, finance, and identity platforms.",
     "category": "identity",
     "target_types": ["username", "email", "url"],
-    "tags": ["sherlock", "username", "profiles"],
+    "tags": ["username", "profiles", "social", "developer"],
     "passive": True,
     "risk": "low",
 }

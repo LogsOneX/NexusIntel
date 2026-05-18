@@ -4,17 +4,17 @@ Modul di bawah ini adalah plugin OSINT pasif yang dimuat otomatis oleh `Analytic
 
 ## identity
 
-### `sherlock_username`
+### `username_presence`
 
 Enumerasi username lintas platform publik. Modul ini memakai registry `recon/platforms.py`, negative markers, HTTP status, dan confidence score.
 
 Target: `username`, `email`, `url`
 
-### `holehe_style`
+### `account_presence`
 
-Account-presence hints berbasis data publik seperti Gravatar hash profile, identity hubs, package registries, dan profile endpoint. Ini bukan clone agresif Holehe yang memakai flow registrasi private.
+Account-presence hints berbasis data publik seperti Gravatar hash profile, identity hubs, package registries, dan profile endpoint. Modul ini tidak memakai flow registrasi, forgotten-password, atau endpoint private.
 
-Output `results` mengikuti subset schema yang kompatibel secara konsep:
+Output `results` mengikuti schema NexusRecon account-presence:
 
 ```json
 {
@@ -31,9 +31,9 @@ Output `results` mengikuti subset schema yang kompatibel secara konsep:
 
 Target: `email`, `username`
 
-### `ghunt_recon`
+### `account_pivots`
 
-Google-account-adjacent enrichment yang aman: MX/TXT Google Workspace hints, Gmail domain hints, GitHub/GitLab public API enrichment, dan search pivot links.
+Account/workspace enrichment yang aman: MX/TXT Google Workspace hints, Gmail domain hints, GitHub/GitLab public API enrichment, dan search pivot links.
 
 Target: `email`, `username`, `domain`
 
@@ -51,7 +51,7 @@ Target: `phone`
 
 ## infrastructure
 
-### `flowsint_insight`
+### `domain_intelligence`
 
 Domain intelligence pasif: RDAP, DNS A/AAAA/MX/NS/TXT/CAA, certificate transparency, security headers, mail posture, dan risk summary.
 

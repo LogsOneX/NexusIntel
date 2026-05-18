@@ -8,11 +8,11 @@ from core.targets import classify_target
 
 
 metadata = {
-    "name": "Holehe-style Account Presence",
+    "name": "Account Presence",
     "description": "Passive account-presence hints from public profile endpoints, Gravatar, package registries, and identity hubs.",
     "category": "identity",
     "target_types": ["email", "username"],
-    "tags": ["holehe", "email", "account-presence", "passive"],
+    "tags": ["email", "account-presence", "profiles", "passive"],
     "passive": True,
     "risk": "low",
 }
@@ -44,9 +44,9 @@ async def _probe_username(client: httpx.AsyncClient, service: str, config: dict,
             status, confidence = "absent", 0.90
         else:
             status, confidence = "unknown", 0.30
-        return _holehe_record(service, config["domain"], config["method"], status, rate_limited, confidence, url, response.status_code)
+        return _presence_record(service, config["domain"], config["method"], status, rate_limited, confidence, url, response.status_code)
     except Exception as exc:
-        return _holehe_record(service, config["domain"], config["method"], "error", False, 0.0, url, None, {"error": str(exc)})
+        return _presence_record(service, config["domain"], config["method"], "error", False, 0.0, url, None, {"error": str(exc)})
 
 
 async def _probe_gravatar_email(client: httpx.AsyncClient, email: str) -> Optional[dict]:
@@ -140,7 +140,7 @@ async def run(target: str) -> dict:
             "present_count": len(present),
             "absent_count": len(absent),
             "uncertain_count": len(uncertain),
-            "schema": "holehe_compatible_public_subset",
+            "schema": "nexus_account_presence_v1",
             "results": sorted(findings, key=lambda item: item["name"]),
             "present": sorted(present, key=lambda item: (-item.get("confidence", 0), item["service"])),
             "uncertain": sorted(uncertain, key=lambda item: item["service"]),
@@ -148,7 +148,7 @@ async def run(target: str) -> dict:
     }
 
 
-def _holehe_record(
+def _presence_record(
     name: str,
     domain: str,
     method: str,

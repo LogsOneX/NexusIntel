@@ -49,7 +49,7 @@ Pola yang diadaptasi:
 
 Implementasi NexusRecon:
 
-- `modules/holehe_style.py` mengeluarkan subset schema account-presence.
+- `modules/account_presence.py` mengeluarkan schema account-presence NexusRecon.
 - Implementasi tetap pasif dan tidak memakai flow forgotten-password atau register endpoint agresif.
 
 ## License and Code Copying

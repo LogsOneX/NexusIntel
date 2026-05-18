@@ -18,22 +18,22 @@ input target
   -> core.reporter menulis JSON/Markdown/HTML/Graph JSON
 ```
 
-Desain ini mengambil pola:
+Desain ini mengambil pola investigasi modern:
 
-- Flowsint-style graph investigation: setiap temuan diubah menjadi entity graph nodes/edges.
-- GHunt-style async module workflow dan export JSON.
-- Holehe-style account presence schema: `name`, `domain`, `method`, `rateLimit`, `exists`, `emailrecovery`, `phoneNumber`, `others`.
+- Graph-first investigation: setiap temuan diubah menjadi entity graph nodes/edges.
+- Async module workflow dan export JSON/Markdown/HTML/graph.
+- Account-presence schema konsisten: `name`, `domain`, `method`, `rateLimit`, `exists`, `emailrecovery`, `phoneNumber`, `others`.
 
 ## Fitur Utama
 
 - CLI Rich dan dashboard web lokal yang lebih estetik dengan target profile, graph canvas, module results, raw JSON, dan report save.
 - Workflow `hunt` untuk menjalankan modul OSINT sesuai tipe target: username, email, domain, URL, atau phone.
-- Modul bergaya Sherlock, Holehe, GHunt, dan Flowsint dalam versi pasif dan aman.
+- Modul standalone NexusRecon untuk username presence, account presence, account pivots, dan domain intelligence dalam versi pasif dan aman.
 - Username enumeration lintas kategori: social, tech, creative, professional, identity, finance, marketplace, travel, fitness, gaming, blog.
 - Email intelligence: validasi format, provider hint, MX lookup, Gravatar hash profile, disposable-domain hint.
 - Domain intelligence: RDAP, DNS A/AAAA/MX/NS/TXT/CAA, certificate transparency, security headers, mail posture, website surface, IP/RDAP network hints, dan risk summary.
 - Investigation graph otomatis untuk menghubungkan target, modul, service, URL, DNS record, domain, hostname, dan risk.
-- Flow Studio lokal untuk chaining enrichers seperti Flowsint: output entity bisa menjadi input step berikutnya.
+- Flow Studio lokal untuk chaining enrichers: output entity bisa menjadi input step berikutnya.
 - Vault lokal untuk API key, case/sketch persistence, dan entity type registry.
 - Export laporan ke JSON, Markdown, HTML, atau graph JSON untuk workflow `hunt` dan `aggregate`.
 
@@ -51,10 +51,10 @@ Desain ini mengambil pola:
 ├── dashboard/
 │   └── server.py            # Local web dashboard tanpa Docker
 ├── modules/
-│   ├── sherlock_username.py # Username enumeration pasif
-│   ├── holehe_style.py      # Account presence hints + Holehe-like schema
-│   ├── ghunt_recon.py       # Public account enrichment + Google-adjacent pivots
-│   ├── flowsint_insight.py  # Domain/RDAP/DNS/CRT/header intelligence
+│   ├── username_presence.py # Username enumeration pasif
+│   ├── account_presence.py  # Account presence hints + Nexus schema
+│   ├── account_pivots.py    # Public account enrichment + workspace pivots
+│   ├── domain_intelligence.py # Domain/RDAP/DNS/CRT/header intelligence
 │   ├── ip_asn_lookup.py     # IP/RDAP network ownership hints
 │   ├── website_surface.py   # Website metadata, links, emails, tracker hints
 │   ├── network_mapping.py   # Passive DNS + RDAP network hints
@@ -99,6 +99,13 @@ python3 main.py dashboard 127.0.0.1:8080
 python3 main.py 127.0.0.1:8080
 ```
 
+Matikan dashboard:
+
+```bash
+# dari terminal dashboard: Ctrl+C
+pkill -f "main.py.*dashboard"
+```
+
 Jalankan unified workflow:
 
 ```bash
@@ -137,7 +144,7 @@ python3 main.py doctor
 Filter modul tertentu:
 
 ```bash
-python3 main.py hunt johndoe --include sherlock_username,user_analytics,ghunt_recon
+python3 main.py hunt johndoe --include username_presence,user_analytics,account_pivots
 ```
 
 Kecualikan modul tertentu:
