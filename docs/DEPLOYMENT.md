@@ -1,94 +1,111 @@
 # Deployment
 
-NexusIntel berjalan sebagai stack Docker Compose penuh dari root repo: React frontend di `frontend/`, FastAPI backend di `backend/`, Celery worker, Redis broker/event bus, dan PostgreSQL graph store. Default binding sengaja `127.0.0.1:8080` supaya dashboard tidak terbuka ke network publik tanpa keputusan eksplisit.
+NexusIntel berjalan sebagai stack Docker Compose dari root repo.
 
-## One-command path
-
-```bash
-make up
-```
-
-Dashboard tersedia di:
-
-```text
-http://127.0.0.1:8080
-```
-
-Stop service:
-
-```bash
-make down
-```
-
-Alternatif langsung:
+## One-command
 
 ```bash
 docker compose up -d --build
 ```
 
-`./start.sh` juga tersedia sebagai wrapper singkat untuk Compose.
-
-## Custom host atau port
+Atau:
 
 ```bash
-make up HOST=0.0.0.0 PORT=8080
+make up
+```
+
+Dashboard:
+
+```text
+http://127.0.0.1:8080
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+## Services
+
+- `frontend`: Nginx static React dashboard, reverse proxy `/api/`.
+- `api`: FastAPI dari `backend/main.py`.
+- `worker`: Celery dari `backend/tasks.py`.
+- `redis`: broker Celery dan live log pub/sub.
+- `postgres`: graph database.
+
+## Ports
+
+Default:
+
+```text
+127.0.0.1:8080 -> frontend:80
+```
+
+Custom:
+
+```bash
+NEXUS_HOST=0.0.0.0 NEXUS_PORT=9090 docker compose up -d --build
 ```
 
 Atau:
 
 ```bash
-NEXUS_HOST=127.0.0.1 NEXUS_PORT=9090 ./start.sh
+make up HOST=0.0.0.0 PORT=9090
 ```
 
-## Runtime data
+## Persistent Data
 
-Docker Compose memakai named volume berikut agar graph dan broker state tetap tersimpan:
+Compose memakai bind mount lokal:
 
-- `nexus_pgdata`
-- `nexus_redis`
+```text
+data/postgres
+data/redis
+```
 
-## Health dan readiness
+Folder `data/` di-ignore dari git.
 
-Health endpoint:
+## Health Checks
+
+API:
 
 ```text
 GET /api/health
+GET /api/v1/health
 ```
 
-Graph endpoint:
+Graph:
 
 ```text
-GET /api/investigations/{id}/graph
+GET /api/v1/investigations/{id}/graph
 ```
 
-Live event stream:
+Task:
 
 ```text
-GET /api/investigations/{id}/events
-WS  /api/investigations/{id}/ws
+GET /api/v1/tasks/{task_id}
+GET /api/v1/tasks/{task_id}/graph
+WS  /api/v1/ws/logs/{task_id}
 ```
 
-Operational readiness lokal:
+## Build Verification
 
 ```bash
-make readiness
+python3 -m py_compile backend/main.py backend/tasks.py
+cd frontend && npm ci && npm run build
+docker compose config
+docker compose build
 ```
 
-CLI anatomy check:
+## Local Legacy Mode
 
-```bash
-make doctor
-```
-
-## Manual local mode
-
-Manual local mode di bawah ini hanya untuk CLI/dashboard legacy, bukan stack penuh:
+CLI/dashboard legacy manual:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
-python3 main.py --no-banner dashboard 127.0.0.1:8080
+python3 main.py dashboard 127.0.0.1:8080
 ```
 
-NexusRecon tetap local-first. Gunakan mode `active` atau `aggressive` hanya untuk target yang kamu miliki izin untuk dianalisis.
+Untuk platform enterprise terbaru, gunakan Compose.

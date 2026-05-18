@@ -30,5 +30,4 @@ node_modules
 frontend/node_modules
 frontend/dist
 backend/__pycache__
-backend/app/**/__pycache__
-backend/workers/**/__pycache__
+backend/**/__pycache__

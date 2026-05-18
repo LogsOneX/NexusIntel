@@ -1,5 +1,7 @@
 # Module Catalog
 
+Dokumen ini menjelaskan modul CLI legacy yang dimuat oleh `core.engine.AnalyticsEngine`. Dashboard enterprise terbaru tidak menampilkan module picker; dashboard menjalankan transform dari node, lalu `backend/tasks.py` yang memutuskan wrapper OSINT mana yang dipakai. Folder `modules/` tetap penting untuk CLI dan legacy-compatible engine.
+
 Modul di bawah ini adalah plugin OSINT yang dimuat otomatis oleh `AnalyticsEngine`. Mode `standard` menjaga eksekusi ringan, sedangkan `active` dan `aggressive` mengaktifkan modul/crawling read-only yang lebih dalam.
 
 ## identity

@@ -1,96 +1,97 @@
 # Architecture
 
-NexusRecon sekarang dipisah menjadi empat lapisan utama.
+NexusIntel sekarang memakai arsitektur root-first. Runtime platform tidak lagi masuk lewat `backend/app/main.py`, tetapi lewat `backend/main.py` untuk API dan `backend/tasks.py` untuk worker.
 
-## 1. CLI Layer
-
-`main.py` bertanggung jawab untuk:
-
-- parsing command dan opsi,
-- menampilkan banner/tabel Rich,
-- memilih workflow (`hunt`, `flow`, `aggregate`, `username`, `email`, `phone`, `domain`, `doctor`, `dashboard`),
-- meneruskan mode eksekusi `standard`, `active`, atau `aggressive`,
-- memanggil engine atau scanner standalone,
-- menyimpan report bila `--save` dipakai.
-
-## 2. Core Layer
-
-`core/targets.py` melakukan klasifikasi target menjadi `username`, `email`, `domain`, `url`, `phone`, atau `unknown`.
-
-`core/engine.py` memuat modul dari `modules/`, membaca metadata, memfilter kategori, menjalankan modul secara asynchronous, dan memberi timeout per modul.
-
-Engine juga meneruskan `mode` ke modul yang mendukung parameter `mode`. Modul lama tetap kompatibel karena engine akan memanggil `run(target)` bila modul belum menerima mode.
-
-`core/graph.py` mengubah hasil modul menjadi investigation graph berisi `nodes`, `edges`, dan ringkasan tipe node.
-
-`core/flows.py` menyimpan flow templates dan menjalankan chained enrichment. Output graph dari satu step dapat menjadi input step berikutnya, dengan filter agar pivot manual tidak dieksekusi otomatis.
-
-`core/reporter.py` membuat report JSON, Markdown, dan HTML.
-
-`core/render.py` menyimpan komponen tampilan Rich supaya CLI tidak penuh kode presentasi.
-
-## 3. Dashboard Layer
-
-`dashboard/server.py` menjalankan local dashboard tanpa Docker dan tanpa framework tambahan. Endpoint lokal memanggil `AnalyticsEngine`, `EntityGraphBuilder`, dan `ReportGenerator`.
+## Runtime Stack
 
 ```text
 browser
-  -> /api/hunt
-  -> AnalyticsEngine
-  -> EntityGraphBuilder
-  -> canvas graph + tables + raw JSON
+  -> frontend nginx
+  -> FastAPI backend/main.py
+  -> Celery backend/tasks.py
+  -> Redis broker + log pub/sub
+  -> PostgreSQL graph store
+  -> nexusrecon/core/modules/recon local OSINT code
 ```
 
-Dashboard juga punya endpoint graph-workspace:
+## Backend Gateway
 
-- `/api/flows` dan `/api/flow/run` untuk chained enrichment.
-- `/api/vault` untuk local API key vault.
-- `/api/types` untuk entity type registry.
-- `/api/cases` untuk case/sketch persistence.
+`backend/main.py` bertanggung jawab untuk:
 
-## 4. Recon Layer
+- membuat table PostgreSQL saat startup,
+- membuat dan membaca investigation,
+- menulis manual entity,
+- menghapus entity dan relationship terkait,
+- dispatch transform ke Celery,
+- mengirim graph payload ke frontend,
+- membuka WebSocket `/api/v1/ws/logs/{task_id}` untuk live terminal HUD.
 
-`recon/platforms.py` adalah registry platform username bersama.
+Model data utama:
 
-`recon/username_scanner.py` adalah scanner username standalone dengan progress bar dan confidence scoring.
+- `investigations`
+- `entities`
+- `relationships`
+- `task_records`
+- `events`
 
-`recon/ultimate_scanner.py` adalah scanner standalone untuk email, phone, dan domain.
+## Worker Engine
 
-## 5. Modules Layer
+`backend/tasks.py` adalah entrypoint Celery canonical. Worker menjalankan transform berikut:
 
-Folder `modules/` berisi plugin OSINT pasif. Setiap modul wajib punya:
+- `run_nexusrecon_task`: bridge ke `nexusrecon.main.NexusRecon`, capture stdout/stderr, lalu normalisasi profil publik menjadi graph.
+- `run_email_google_task`: email/workspace recon public-source: local part, domain, MX/TXT, DMARC, BIMI, provider hints, dan Gravatar hash check.
+- `run_domain_task`: DNS/domain recon: A/AAAA/MX/NS/TXT/CAA dan candidate subdomain read-only untuk mode standard/aggressive.
 
-- `metadata` dict,
-- `async run(target: str) -> dict`.
+Semua worker menulis entity/relationship ke PostgreSQL dan publish log ke Redis channel `logs:{task_id}`.
 
-Engine akan skip modul jika tipe target tidak sesuai dengan `metadata["target_types"]`.
+## Frontend
+
+Frontend canonical:
+
+- `frontend/src/components/Dashboard.tsx`
+- `frontend/src/components/GraphCanvas.tsx`
+- `frontend/src/App.jsx`
+- `frontend/src/styles.css`
+
+Dashboard menyediakan:
+
+- left console untuk target acquisition, recon mode, manual entity, dan investigation list,
+- central Cytoscape graph canvas sebagai workspace utama,
+- right deep data drawer untuk structured JSON intelligence,
+- bottom terminal HUD yang subscribe ke WebSocket task log,
+- right-click context menu untuk menjalankan transform dari node.
+
+## Legacy Compatibility
+
+Folder berikut tetap dipakai sebagai engine lokal:
+
+- `nexusrecon/`
+- `core/`
+- `modules/`
+- `recon/`
+
+`dashboard/server.py` tetap ada untuk dashboard legacy manual dari CLI. Untuk stack enterprise terbaru, gunakan Compose dan entrypoint root backend.
 
 ## Data Flow
 
 ```text
-CLI command
-  -> classify_target()
-  -> AnalyticsEngine.load_modules()
-  -> module.run(target)
-  -> normalized result dict
-  -> EntityGraphBuilder nodes/edges dengan nodeType/nodeLabel/nodeProperties/nodeShape/nodeIcon
-  -> Rich table
-  -> optional ReportGenerator
+Target submit
+  -> POST /api/v1/scans/nexusrecon
+  -> FastAPI creates investigation + root node
+  -> Celery task queued
+  -> Worker runs local OSINT method
+  -> Worker writes normalized entities/edges
+  -> Worker publishes Redis log events
+  -> UI streams logs through WebSocket
+  -> UI polls task graph and redraws Cytoscape
 ```
 
-## Pola yang Diadaptasi
+## Safety Model
 
-- Dari Flowsint: konsep graph-based investigation, enricher modular, flows, vault, entity types, dan pemisahan core/enrichers/app.
-- Dari GHunt: workflow CLI modular, async execution, dan export JSON.
-- Dari Holehe: schema account-presence yang mudah dibaca pipeline (`name`, `domain`, `method`, `rateLimit`, `exists`, `emailrecovery`, `phoneNumber`, `others`).
+Arsitektur ini public-source first:
 
-Tidak ada kode vendor dari project referensi. Semua implementasi dibuat ulang untuk mode pasif dan defensif.
-
-## Prinsip Desain
-
-- Passive first: hanya sumber publik.
-- Active mode: read-only crawling/probing untuk target yang diizinkan, tanpa bypass, login abuse, register spam, atau forgotten-password probing.
-- Modular: tambah modul tanpa mengubah engine.
-- Fail soft: error satu modul tidak mematikan scan lain.
-- Explainable: setiap hasil menyimpan status, signal count, dan summary.
-- Reportable: output bisa dipakai manusia atau pipeline.
+- no paid API,
+- no external repo runtime dependency,
+- no credential or private session use,
+- no register/forgot-password probing,
+- active/aggressive mode tetap read-only dan hanya untuk target authorized.

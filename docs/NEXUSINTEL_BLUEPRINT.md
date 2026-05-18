@@ -1,97 +1,97 @@
-# NexusIntel Platform Blueprint
+# NexusIntel Blueprint
 
-NexusIntel adalah stack OSINT standalone yang dibangun ulang secara independen. Flowsint, Maltego, OSINT Industries, Maigret, Sherlock, GHunt, dan Holehe dipakai sebagai referensi konsep produk dan pola kerja, bukan sebagai dependency atau vendor code. Stack utama berada di root: `backend/` dan `frontend/`.
+NexusIntel adalah OSINT investigation platform standalone yang menggabungkan graph workflow, transform-style investigation, dan data panel industri. Semua runtime core berada di repo ini.
 
-## Stack
-
-```text
-React + Cytoscape UI
-  -> Nginx reverse proxy
-  -> FastAPI backend
-  -> Celery task queue
-  -> Redis broker + live event bus
-  -> PostgreSQL graph store
-  -> internal Python OSINT workers
-  -> legacy bridges for nexusrecon/core/modules
-```
-
-## Data Flow
+## Canonical Runtime
 
 ```text
-UI submits target
-  -> POST /api/investigations
-  -> FastAPI creates investigation + root entity
-  -> Celery worker starts autonomous modules
-  -> modules normalize findings into entity/relationship JSON
-  -> PostgreSQL stores graph nodes and edges
-  -> Redis publishes live events
-  -> UI receives SSE logs and refreshes Cytoscape graph
+frontend/src/components/Dashboard.tsx
+frontend/src/components/GraphCanvas.tsx
+backend/main.py
+backend/tasks.py
+docker-compose.yml
 ```
 
-## Internal Modules
+## Product Goals
 
-- `intel_planner`: builds collection plan, tasks, and guardrail context.
-- `identity_profiler`: standalone username enumeration across public profile surfaces.
-- `email_workspace_recon`: email format, local-part, domain, MX/TXT, DMARC/BIMI, public Gravatar hash/avatar check in active modes, and workspace provider hints.
-- `domain_recon`: DNS, RDAP, certificate transparency in active modes, and mail/security posture notes.
-- `website_surface_recon`: page fetch, title, internal links, exposed emails, tracker hints, and shallow active crawl.
-- `phone_recon`: offline normalization and country-code hints.
-- `legacy_nexusrecon_bridge`: wraps `nexusrecon.main.NexusRecon` and streams captured terminal output into live events.
-- `legacy_analytics_bridge`: wraps `core.AnalyticsEngine`, executes `modules/*`, and normalizes the legacy graph into the PostgreSQL schema.
+- Graph-first investigation seperti Flowsint/Maltego.
+- Context transform dari node, bukan module picker mentah.
+- Deep entity data table seperti OSINT.Industries.
+- Live terminal HUD untuk melihat worker bergerak.
+- Public-source, free, dan deployable dengan satu command.
+
+## Investigation Loop
+
+```text
+seed target
+  -> root entity
+  -> transform
+  -> task record
+  -> live logs
+  -> normalized entities
+  -> directed relationships
+  -> inspect node
+  -> next transform
+```
+
+## Transform Families
+
+### Identity
+
+- Username presence sweep.
+- Public profile normalization.
+- Platform/service node generation.
+- Local-part pivot dari email.
+
+### Email and Workspace
+
+- Email local-part/domain split.
+- MX/TXT lookup.
+- DMARC and BIMI lookup.
+- Google/Microsoft/Zoho/Proton workspace hints.
+- Gravatar hash/avatar check in standard/aggressive modes.
+
+### Domain and Infrastructure
+
+- A/AAAA/MX/NS/TXT/CAA lookup.
+- IP node extraction.
+- DNS record graphing.
+- Candidate subdomain resolution in standard/aggressive modes.
 
 ## Graph Schema
 
-The platform stores OSINT output as:
+Entity fields:
 
-- `investigations`: target, mode, status, summary.
-- `entities`: typed nodes with confidence, source, properties.
-- `relationships`: typed directed edges with confidence and properties.
-- `events`: live execution history mirrored to Redis SSE channels.
+- `id`
+- `type`
+- `label`
+- `value`
+- `source`
+- `confidence`
+- `data`
 
-Entity examples:
+Relationship fields:
 
-- `username`
-- `email`
-- `domain`
-- `website`
-- `url`
-- `ip`
-- `subdomain`
-- `service`
-- `developer_profile`
-- `social_profile`
-- `risk`
-- `task`
-- `signal`
+- `id`
+- `source`
+- `target`
+- `type`
+- `confidence`
+- `data`
 
-## UI/UX Model
+## Runtime Boundaries
 
-The first screen is the actual command graph:
+`nexusrecon/`, `core/`, `modules/`, dan `recon/` tetap menjadi local intelligence engine. Backend baru memanggilnya melalui wrapper root-level agar platform bisa berjalan sebagai service modern.
 
-- left rail: launch target, mode, cases, manual entity entry.
-- center: large Cytoscape link-analysis canvas with search/filter.
-- right rail: entity inspector and live terminal-style recon HUD.
-- graph nodes can be selected, dragged, expanded, or removed.
+## References
 
-## Guardrails
+Project referensi dipakai untuk belajar pola:
 
-NexusIntel is public-source and defensive by design:
+- Flowsint: graph investigation, flows, enricher UX.
+- Maltego: node expansion mental model.
+- OSINT.Industries: deep structured data presentation.
+- Maigret/Sherlock: username discovery concept.
+- GHunt: async CLI/export style and Google OSINT thinking.
+- Holehe: account-presence schema idea.
 
-- no paid API dependency,
-- no cloned external OSINT repo dependency,
-- no credential stuffing,
-- no private API abuse,
-- no password-reset or registration probing,
-- active/aggressive mode is read-only and intended for owned or authorized targets.
-
-## Deployment
-
-```bash
-docker compose up -d --build
-```
-
-Open:
-
-```text
-http://127.0.0.1:8080
-```
+Tidak ada vendor code yang di-copy ke runtime core.

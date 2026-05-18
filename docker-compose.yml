@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-nexus}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus}
     volumes:
-      - nexus_pgdata:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus} -d ${POSTGRES_DB:-nexusintel}"]
       interval: 10s
@@ -22,7 +22,7 @@ services:
     container_name: nexusintel-redis
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - nexus_redis:/data
+      - ./data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -39,7 +39,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
-      CORS_ORIGINS: "*"
+      ALLOWED_ORIGINS: "*"
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,7 +60,7 @@ services:
       dockerfile: backend/Dockerfile
     image: nexusintel-api:latest
     container_name: nexusintel-worker
-    command: ["celery", "-A", "app.celery_app.celery", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
+    command: ["celery", "-A", "tasks.celery_app", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
@@ -90,7 +90,3 @@ services:
       timeout: 5s
       retries: 8
     restart: unless-stopped
-
-volumes:
-  nexus_pgdata:
-  nexus_redis:

@@ -1,69 +1,84 @@
 # Dashboard
 
-NexusRecon punya local web dashboard yang bisa berjalan manual atau lewat Docker Compose. Server memakai Python standard library, lalu memanggil engine OSINT yang sama dengan CLI.
+Dashboard terbaru adalah command-center UI berbasis React + Cytoscape. Entry point-nya `frontend/src/components/Dashboard.tsx`; canvas link analysis ada di `frontend/src/components/GraphCanvas.tsx`.
 
 ## Run
 
-Mode deployment satu perintah:
-
 ```bash
-make up
+docker compose up -d --build
 ```
 
-Mode lokal manual:
-
-```bash
-python3 main.py dashboard 127.0.0.1:8080
-```
-
-Shortcut kompatibel:
-
-```bash
-python3 main.py 127.0.0.1:8080
-```
-
-Buka:
+Open:
 
 ```text
 http://127.0.0.1:8080
 ```
 
-## Endpoint Lokal
+Stop:
 
-- `GET /` - dashboard UI.
-- `GET /api/modules` - katalog modul, kategori, dan target types.
-- `GET /api/types` - dynamic entity type registry.
-- `GET /api/flows` - flow templates.
-- `GET /api/vault` - masked vault key list.
-- `GET /api/cases` - local case/sketch store.
-- `GET /api/health` - health check.
-- `POST /api/hunt` - menjalankan workflow OSINT.
-- `POST /api/flow/run` - menjalankan chained flow.
-- `POST /api/vault` - menyimpan local API key.
-- `POST /api/vault/delete` - menghapus local vault key.
-- `POST /api/cases` - membuat case/sketch.
-- `POST /api/cases/save` - menyimpan graph ke case/sketch.
-- `POST /api/save` - menyimpan hasil terakhir ke `results/`.
+```bash
+docker compose down
+```
 
-## UI Sections
+## Layout
 
-- Sidebar untuk target, operation mode, timeout, concurrency, save format, dan case/sketch.
-- Dashboard memilih modul otomatis berdasarkan target dan mode; tidak ada include/exclude atau module picker di UI.
-- Mode selector untuk `standard`, `active`, dan `aggressive`.
-- Case/Sketch selector untuk menyimpan graph investigasi lokal.
-- Executive metrics untuk OK, skipped, errors, signals, nodes, dan edges.
-- Canvas investigation graph besar sebagai workspace utama untuk target, modules, profiles, URLs, domains, DNS records, IPs, trackers, app-link nodes, tasks, hypotheses, flow hints, dan risk nodes.
-- Graph tools untuk search, filter entity type, reset view, dan click-to-inspect node.
-- Entity operations untuk menambahkan entity manual, menghubungkan ke node terpilih, dan menghapus node terpilih dari graph kerja.
-- Entity inspector untuk target profile atau node graph yang dipilih.
-- Module result table dengan tab per modul.
-- Flow Studio untuk menjalankan flow chained seperti `Identity Surface`, `Domain Surface`, `Identity Deep Pivot`, dan `Phone Triage`.
-- Timeline view untuk menyusun edge/event hasil flow dan graph.
-- Ops readiness view untuk mengecek modul, flow, entity schema, local storage, vault, dan deploy readiness.
-- Vault untuk menyimpan API key lokal dengan file permission `0600`; UI hanya menampilkan masked value.
-- Entity Types registry untuk melihat schema, icon, warna, shape, dan field utama.
-- Raw JSON output untuk pipeline/debug.
+- Left console: target acquisition, mode selector, manual entity builder, investigation list.
+- Center canvas: graph besar sebagai area kerja utama.
+- Right drawer: deep entity data dengan field filter dan raw JSON.
+- Bottom HUD: terminal log real-time dari worker melalui WebSocket.
 
-## Design Notes
+## Graph Workflow
 
-Dashboard ini mengikuti konsep graph-minded investigation pada level workflow: enrichers, flows, vault, entity types, local-first operation, search/filter graph, dan node inspector. Implementasinya tetap dibuat ulang dan dipadatkan untuk mode single-file local server agar mudah dijalankan manual ataupun lewat Docker Compose.
+1. Buat investigation dari target awal.
+2. Worker membuat node root dan entity hasil recon.
+3. Klik node untuk inspect data.
+4. Right-click node untuk menjalankan transform.
+5. Terminal HUD menampilkan output task live.
+6. Graph refresh otomatis saat task berjalan.
+
+## Context Transforms
+
+Transform yang tersedia berubah mengikuti tipe node:
+
+- `username`: username sweep dan Sherlock-style pivot.
+- `email`: email footprint, Google/workspace public indicators, local-part username pivot.
+- `domain`: DNS/domain recon, workspace recon, website surface.
+- `profile/platform`: host/domain pivot dan identity sweep ulang.
+
+Dashboard tidak menampilkan include/exclude atau module picker. UI dibuat agar investigator memilih entity dan transform, bukan memilih modul internal.
+
+## Data Panel
+
+Panel kanan menampilkan:
+
+- tipe entity,
+- label dan value,
+- source,
+- confidence,
+- nested JSON fields dalam table searchable,
+- raw JSON untuk debugging dan export mental model.
+
+## Terminal HUD
+
+Terminal HUD subscribe ke:
+
+```text
+WS /api/v1/ws/logs/{task_id}
+```
+
+Worker menyiarkan:
+
+- queue/start event,
+- captured stdout/stderr dari NexusRecon,
+- DNS/email/domain recon progress,
+- success/error summary.
+
+## Legacy Local Dashboard
+
+Dashboard legacy dari `dashboard/server.py` masih bisa dijalankan via:
+
+```bash
+python3 main.py dashboard 127.0.0.1:8080
+```
+
+Mode ini hanya untuk fallback manual. UI enterprise terbaru berjalan lewat Compose.
