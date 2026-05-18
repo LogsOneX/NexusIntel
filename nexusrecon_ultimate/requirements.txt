@@ -1,0 +1,16 @@
+aiohttp==3.9.1
+aiofiles==23.2.1
+colorama==0.4.6
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+dnspython==2.4.2
+whois==0.9.27
+python-whois==0.8.0
+phonenumbers==8.13.25
+email-validator==2.1.0
+pycryptodome==3.19.0
+jinja2==3.1.2
+tabulate==0.9.0
+tqdm==4.66.1
+asyncio==3.4.3

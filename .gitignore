@@ -1,29 +1,72 @@
 ```
-# Compiled and build artifacts
-*.pyc
+# Python
 __pycache__/
-*.o
-*.obj
-
-# Dependencies
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
 venv/
 .venv/
-node_modules/
+.ENV
+.ENV.*
+.venv.bak/
+venv.bak/
 
-# Logs and temp files
+# Build and distribution artifacts
+build/
+dist/
+*.egg
+*.egg-info/
+*.so
+*.whl
+
+# Dependencies
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
+*.pot
+*.mo
+*.diff
+*.patch
+*.orig
+*.rej
+*.bak
 *.tmp
 *.swp
+*.swo
+*~
 
-# Environment
+# Environment variables
 .env
 .env.local
-*.env.*
+.env.*
+!.env.example
 
-# Editors
+# IDE and editor files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
-# Reports and generated files
-reports/
+# Testing
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# Security
+*.key
+*.pem
+*.crt
+*.cert
 ```

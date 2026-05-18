@@ -1,0 +1,1015 @@
+{
+  "scan_type": "username",
+  "identifier": "github",
+  "timestamp": "2026-05-18T03:04:11.506329",
+  "results": [
+    {
+      "platform": "beeg",
+      "url": "https://beeg.com/profile/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.30499302600014744,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "blogger",
+      "url": "https://github.blogspot.com",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.34145788099999663,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "devto",
+      "url": "https://dev.to/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.29750822300002255,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "dockerhub",
+      "url": "https://hub.docker.com/u/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.5751122159999795,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "dribbble",
+      "url": "https://dribbble.com/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.7888113540000177,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "fansly",
+      "url": "https://fansly.com/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.40045924800006105,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "github",
+      "url": "https://github.com/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 1.3606841430000713,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "gitlab",
+      "url": "https://gitlab.com/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 1.2926313030000074,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "line",
+      "url": "https://line.me/ti/p/~github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.3011475050000172,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "onlyfans",
+      "url": "https://onlyfans.com/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.5370489919998818,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "poshmark",
+      "url": "https://poshmark.com/closet/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.6424086150000221,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "pypi",
+      "url": "https://pypi.org/user/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.46163559499996154,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "replit",
+      "url": "https://replit.com/@github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.4228164179999112,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "signal",
+      "url": "https://signal.me/#p/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.2009545060000164,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "soundcloud",
+      "url": "https://soundcloud.com/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.5365814049998789,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "steam",
+      "url": "https://steamcommunity.com/id/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.3610493520000091,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "substack",
+      "url": "https://substack.com/@github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.11850453300007757,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "telegram",
+      "url": "https://t.me/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.5523818490000849,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "vimeo",
+      "url": "https://vimeo.com/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.3850080180000077,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "xbox",
+      "url": "https://xboxgamertag.com/search/github",
+      "status": "found",
+      "http_code": 200,
+      "response_time": 0.2585748330000115,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "airbnb",
+      "url": "https://airbnb.com/users/show/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 1.1384092800001326,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "alotporn",
+      "url": "https://alotporn.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.9191672899999048,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "angelist",
+      "url": "https://angel.co/u/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.3215671460000067,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "anysex",
+      "url": "https://anysex.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.5605321569998978,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "artstation",
+      "url": "https://artstation.com/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.15904279100004715,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "bandcamp",
+      "url": "https://bandcamp.com/github",
+      "status": "not_found",
+      "http_code": 404,
+      "response_time": 0.5819472989999213,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "behance",
+      "url": "https://behance.net/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.23885181499986174,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "bongacams",
+      "url": "https://bongacams.com/profile/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.21656420399995113,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "booking",
+      "url": "https://booking.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 1.0008754269999827,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "bumble",
+      "url": "https://bumble.com/@github",
+      "status": "not_found",
+      "http_code": 404,
+      "response_time": 1.3781975780000266,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "cam4",
+      "url": "https://cam4.com/github",
+      "status": "not_found",
+      "http_code": 302,
+      "response_time": 1.1685360670001046,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "cashapp",
+      "url": "https://cash.app/$github",
+      "status": "not_found",
+      "http_code": 303,
+      "response_time": 0.7199974860000111,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "chaturbate",
+      "url": "https://chaturbate.com/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.3398767520000092,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "codeforces",
+      "url": "https://codeforces.com/profile/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.09778636900000492,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "codepen",
+      "url": "https://codepen.io/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.12298764999991363,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "crunchbase",
+      "url": "https://crunchbase.com/person/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.18139704199984408,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "depop",
+      "url": "https://depop.com/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.28284399200015287,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "drthuber",
+      "url": "https://drtuber.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.9372698780000519,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "ebay",
+      "url": "https://ebay.com/usr/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.6204098890000296,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "empflix",
+      "url": "https://empflix.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 1.3180114489998687,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "epicgames",
+      "url": "https://epicgames.com/id/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.8402397070001371,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "etsy",
+      "url": "https://etsy.com/shop/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.41486006900004213,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "facebook",
+      "url": "https://facebook.com/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.2758024709999063,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "fapality",
+      "url": "https://fapality.com/profile/github",
+      "status": "not_found",
+      "http_code": 404,
+      "response_time": 1.0062485589999142,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "fitbit",
+      "url": "https://fitbit.com/user/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.3186475720001454,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "flickr",
+      "url": "https://flickr.com/photos/github",
+      "status": "not_found",
+      "http_code": 429,
+      "response_time": 0.35948880399996597,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "fux",
+      "url": "https://fux.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.11939153800017266,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "garmin",
+      "url": "https://connect.garmin.com/modern/profile/github",
+      "status": "not_found",
+      "http_code": 302,
+      "response_time": 0.22340942499999983,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "gotporn",
+      "url": "https://gotporn.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.4156289810000544,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "hackerrank",
+      "url": "https://hackerrank.com/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 1.0067115560000275,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "hardsextube",
+      "url": "https://hardsextube.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.07945592300006865,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "hotshame",
+      "url": "https://hotshame.com/profile/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.9316838909999205,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "instagram",
+      "url": "https://instagram.com/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.23925230100007866,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "justforfans",
+      "url": "https://justfor.fans/github",
+      "status": "not_found",
+      "http_code": 302,
+      "response_time": 1.1089554560001034,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "keezmovies",
+      "url": "https://keezmovies.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.38108377600019594,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "keybase",
+      "url": "https://keybase.io/github",
+      "status": "not_found",
+      "http_code": 302,
+      "response_time": 0.8152032429998144,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "kik",
+      "url": "https://kik.com/github",
+      "status": "not_found",
+      "http_code": 404,
+      "response_time": 0.13763088800010337,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "ko-fi",
+      "url": "https://ko-fi.com/github",
+      "status": "not_found",
+      "http_code": 200,
+      "response_time": 0.25763849100007974,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "linkedin",
+      "url": "https://linkedin.com/in/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.4202655719998347,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "livejasmin",
+      "url": "https://livejasmin.com/en/girls/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.2394440030000169,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "manyvids",
+      "url": "https://manyvids.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.45839114399996106,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "mastodon",
+      "url": "https://mastodon.social/@github",
+      "status": "not_found",
+      "http_code": 410,
+      "response_time": 0.10208441700001458,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "medium",
+      "url": "https://medium.com/@github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.14260176400011915,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "mercari",
+      "url": "https://mercari.com/u/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.29904980900005285,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "motherless",
+      "url": "https://motherless.com/member/github",
+      "status": "not_found",
+      "http_code": 200,
+      "response_time": 1.3967657419998432,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "myfitnesspal",
+      "url": "https://myfitnesspal.com/user/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.5969242759999815,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "npm",
+      "url": "https://npmjs.com/~github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.22214509299988094,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "nuvid",
+      "url": "https://nuvid.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.6987501569999495,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "ok",
+      "url": "https://ok.ru/github",
+      "status": "not_found",
+      "http_code": 200,
+      "response_time": 1.2245762089999062,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "patreon",
+      "url": "https://patreon.com/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.199240533999955,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "paypal",
+      "url": "https://paypal.me/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.318567948000009,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "peloton",
+      "url": "https://onepeloton.com/members/github",
+      "status": "not_found",
+      "http_code": 308,
+      "response_time": 0.19990692999999737,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "pinterest",
+      "url": "https://pinterest.com/github",
+      "status": "not_found",
+      "http_code": 308,
+      "response_time": 0.2983859560001747,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "playstation",
+      "url": "https://psnprofiles.com/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.07909848600002078,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "porncom",
+      "url": "https://porn.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 1.0875107749998278,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "pornerbros",
+      "url": "https://pornerbros.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.14306539800008977,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "pornhd",
+      "url": "https://pornhd.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.24038109399998575,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "pornhub",
+      "url": "https://pornhub.com/users/github",
+      "status": "not_found",
+      "http_code": 410,
+      "response_time": 0.09917108800004826,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "producthunt",
+      "url": "https://producthunt.com/@github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.1417201090000617,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "reddit",
+      "url": "https://reddit.com/user/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.2226241599998957,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "redtube",
+      "url": "https://redtube.com/users/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.4165283190000082,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "roblox",
+      "url": "https://roblox.com/user.aspx?username=github",
+      "status": "not_found",
+      "http_code": 308,
+      "response_time": 0.12174350899999808,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "sexu",
+      "url": "https://sexu.com/profile/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.15747568100005083,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "snapchat",
+      "url": "https://snapchat.com/add/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.37973262900004556,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "spankbang",
+      "url": "https://spankbang.com/user/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.09884061299999303,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "spankwire",
+      "url": "https://spankwire.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.2624675060001209,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "stackoverflow",
+      "url": "https://stackoverflow.com/users/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.33885200600002463,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "strava",
+      "url": "https://strava.com/athletes/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.872669999999971,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "stripchat",
+      "url": "https://stripchat.com/github",
+      "status": "not_found",
+      "http_code": 406,
+      "response_time": 0.3977935580001031,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "sunporno",
+      "url": "https://sunporno.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.7214140599999155,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "tiktok",
+      "url": "https://tiktok.com/@github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.15933594200009793,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "tinder",
+      "url": "https://tinder.com/@github",
+      "status": "not_found",
+      "http_code": 200,
+      "response_time": 0.6812945469998795,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "tnaflix",
+      "url": "https://tnaflix.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 1.3788264140000592,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "tripadvisor",
+      "url": "https://tripadvisor.com/members/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.6209245510001438,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "tube8",
+      "url": "https://tube8.com/user/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.0964278659998854,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "tumblr",
+      "url": "https://github.tumblr.com",
+      "status": "not_found",
+      "http_code": 429,
+      "response_time": 0.8415259749999677,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "twitch",
+      "url": "https://twitch.tv/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.12007027699996797,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "twitter",
+      "url": "https://twitter.com/github",
+      "status": "error",
+      "http_code": null,
+      "response_time": 0.0,
+      "error_message": "400, message='Got more than 8190 bytes (9976) when reading Header value is too long.', url='https://twitter.com/github'",
+      "metadata": null
+    },
+    {
+      "platform": "uber eats",
+      "url": "https://ubereats.com/store/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.423825423000153,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "venmo",
+      "url": "https://venmo.com/github",
+      "status": "not_found",
+      "http_code": 302,
+      "response_time": 0.7785642789999656,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "vk",
+      "url": "https://vk.com/github",
+      "status": "not_found",
+      "http_code": 200,
+      "response_time": 1.0947268320001058,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "voyeurhit",
+      "url": "https://voyeurhit.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 1.0974681589998454,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "wankoz",
+      "url": "https://wankoz.com/profile/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.35340132200008156,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "wechat",
+      "url": "https://wechat.com/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.30087317200013786,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "weibo",
+      "url": "https://weibo.com/github",
+      "status": "not_found",
+      "http_code": 302,
+      "response_time": 0.3223719570000867,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "whatsapp",
+      "url": "https://wa.me/github",
+      "status": "not_found",
+      "http_code": 302,
+      "response_time": 0.3970897159999822,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "wordpress",
+      "url": "https://github.wordpress.com",
+      "status": "not_found",
+      "http_code": 410,
+      "response_time": 0.27968071899999813,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "xhamster",
+      "url": "https://xhamster.com/users/github",
+      "status": "not_found",
+      "http_code": 403,
+      "response_time": 0.08946548199992321,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "xvideos",
+      "url": "https://xvideos.com/profiles/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.6164951450000444,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "yelp",
+      "url": "https://yelp.com/user_details?userid=github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.6645728480000344,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "youporn",
+      "url": "https://youporn.com/uservids/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.08141783899986876,
+      "error_message": null,
+      "metadata": null
+    },
+    {
+      "platform": "zomato",
+      "url": "https://zomato.com/github",
+      "status": "not_found",
+      "http_code": 301,
+      "response_time": 0.2368085550001524,
+      "error_message": null,
+      "metadata": null
+    }
+  ]
+}
