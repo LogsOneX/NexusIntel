@@ -1,8 +1,16 @@
 # Dashboard
 
-NexusRecon punya local web dashboard tanpa Docker dan tanpa framework web tambahan. Server memakai Python standard library, lalu memanggil engine OSINT yang sama dengan CLI.
+NexusRecon punya local web dashboard yang bisa berjalan manual atau lewat Docker Compose. Server memakai Python standard library, lalu memanggil engine OSINT yang sama dengan CLI.
 
 ## Run
+
+Mode deployment satu perintah:
+
+```bash
+make up
+```
+
+Mode lokal manual:
 
 ```bash
 python3 main.py dashboard 127.0.0.1:8080
@@ -58,4 +66,4 @@ http://127.0.0.1:8080
 
 ## Design Notes
 
-Dashboard ini mengikuti konsep graph-minded investigation pada level workflow: enrichers, flows, vault, entity types, local-first operation, search/filter graph, dan node inspector. Implementasinya tetap dibuat ulang dan dipadatkan untuk mode single-file local server agar mudah dijalankan tanpa Docker.
+Dashboard ini mengikuti konsep graph-minded investigation pada level workflow: enrichers, flows, vault, entity types, local-first operation, search/filter graph, dan node inspector. Implementasinya tetap dibuat ulang dan dipadatkan untuk mode single-file local server agar mudah dijalankan manual ataupun lewat Docker Compose.

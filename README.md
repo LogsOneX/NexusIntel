@@ -76,14 +76,47 @@ Desain ini mengambil pola investigasi modern:
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── DASHBOARD.md
+│   ├── DEPLOYMENT.md
 │   ├── MODULES.md
 │   └── REFERENCES.md
 ├── legacy/                  # Arsip versi lama
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile
+├── start.sh
 ├── requirements.txt
 └── pyproject.toml
 ```
 
-## Instalasi
+## One-Command Deployment
+
+Fresh clone bisa dinaikkan dengan satu perintah:
+
+```bash
+make up
+```
+
+Dashboard akan tersedia di:
+
+```text
+http://127.0.0.1:8080
+```
+
+Stop service:
+
+```bash
+make down
+```
+
+Fallback tanpa Docker Compose:
+
+```bash
+./start.sh
+```
+
+Script ini otomatis membuat `.venv`, menginstal dependency, dan menjalankan dashboard di `127.0.0.1:8080`. Detail deployment ada di `docs/DEPLOYMENT.md`.
+
+## Instalasi Manual
 
 ```bash
 python3 -m venv .venv

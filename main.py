@@ -262,7 +262,10 @@ async def async_main() -> None:
 
 
 def main() -> None:
-    asyncio.run(async_main())
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        return
 
 
 def _normalize_argv(argv: List[str]) -> List[str]:
