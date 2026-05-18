@@ -51,6 +51,7 @@ http://127.0.0.1:8080
 - Module result table dengan tab per modul.
 - Flow Studio untuk menjalankan flow chained seperti `Identity Surface`, `Domain Surface`, `Identity Deep Pivot`, dan `Phone Triage`.
 - Timeline view untuk menyusun edge/event hasil flow dan graph.
+- Ops readiness view untuk mengecek modul, flow, entity schema, local storage, vault, dan deploy readiness.
 - Vault untuk menyimpan API key lokal dengan file permission `0600`; UI hanya menampilkan masked value.
 - Entity Types registry untuk melihat schema, icon, warna, shape, dan field utama.
 - Raw JSON output untuk pipeline/debug.

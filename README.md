@@ -39,6 +39,7 @@ Desain ini mengambil pola investigasi modern:
 - Investigation graph otomatis untuk menghubungkan target, modul, service, URL, DNS record, domain, hostname, aplikasi, flow hint, dan risk.
 - Flow Studio lokal dan CLI `flow` untuk chaining enrichers: output entity bisa menjadi input step berikutnya.
 - Vault lokal untuk API key, case/sketch persistence, dan entity type registry.
+- Ops readiness checks untuk memastikan modul, flow, entity schema, storage lokal, vault, dan runtime siap dipakai.
 - Export laporan ke JSON, Markdown, HTML, atau graph JSON untuk workflow `hunt` dan `aggregate`.
 
 ## Struktur Project

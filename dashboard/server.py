@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from core.engine import AnalyticsEngine
 from core.flows import list_flows, run_flow_sync
 from core.graph import build_investigation_graph
+from core.readiness import readiness_report
 from core.reporter import ReportGenerator
 from core.schemas import get_entity_types
 from core.targets import classify_target
@@ -76,6 +77,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_json(vault_status())
         elif parsed.path == "/api/cases":
             self._send_json(case_store())
+        elif parsed.path == "/api/readiness":
+            self._send_json(readiness_report())
         elif parsed.path == "/api/health":
             self._send_json({"status": "ok", "service": "nexusrecon-dashboard"})
         else:
@@ -911,6 +914,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         <button type="button" class="active" data-view-btn="overview">Overview</button>
         <button type="button" data-view-btn="flow">Flow</button>
         <button type="button" data-view-btn="timeline">Timeline</button>
+        <button type="button" data-view-btn="ops">Ops</button>
         <button type="button" data-view-btn="vault">Vault</button>
         <button type="button" data-view-btn="types">Types</button>
         <button type="button" data-view-btn="raw">Raw</button>
@@ -983,6 +987,14 @@ DASHBOARD_HTML = r"""<!doctype html>
           <header><h3>Timeline</h3></header>
           <div class="panel-body">
             <div class="timeline" id="timelineView"><div class="empty">No timeline yet.</div></div>
+          </div>
+        </section>
+      </div>
+      <div class="view-panel single-column" data-view="ops">
+        <section class="panel">
+          <header><h3>Operational Readiness</h3><span id="readinessScore" class="small-muted">Not checked</span></header>
+          <div class="panel-body" id="readinessView">
+            <div class="empty">Loading readiness checks.</div>
           </div>
         </section>
       </div>
@@ -1137,6 +1149,22 @@ DASHBOARD_HTML = r"""<!doctype html>
           <td>${escapeHtml(type.shape)}<br><span class="small-muted">${escapeHtml((type.fields || []).join(', '))}</span></td>
         </tr>
       `).join('')}</tbody></table>`;
+    }
+
+    function renderReadiness(data) {
+      $('readinessScore').textContent = `${data.status} / ${data.score}%`;
+      const checks = data.checks || [];
+      $('readinessView').innerHTML = `<table>
+        <thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
+        <tbody>${checks.map((item) => {
+          const cls = item.status === 'ok' ? 'ok' : item.status === 'warn' ? 'skip' : 'error';
+          return `<tr>
+            <td>${escapeHtml(item.name)}</td>
+            <td><span class="badge ${cls}">${escapeHtml(item.status)}</span></td>
+            <td>${escapeHtml(item.detail)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
     }
 
     function renderCases(data) {
@@ -1691,6 +1719,7 @@ DASHBOARD_HTML = r"""<!doctype html>
     api('/api/vault').then(renderVault);
     api('/api/types').then(renderTypes);
     api('/api/cases').then(renderCases);
+    api('/api/readiness').then(renderReadiness);
   </script>
 </body>
 </html>"""
