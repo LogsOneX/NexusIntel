@@ -18,6 +18,7 @@ dist
 results
 reports
 .nexusrecon
+data
 .env
 .env.*
 !.env.example

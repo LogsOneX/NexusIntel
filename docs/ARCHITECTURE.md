@@ -1,6 +1,6 @@
 # Architecture
 
-NexusIntel sekarang memakai arsitektur root-first. Runtime platform tidak lagi masuk lewat `backend/app/main.py`, tetapi lewat `backend/main.py` untuk API dan `backend/tasks.py` untuk worker.
+NexusIntel memakai arsitektur root-first. Runtime platform masuk lewat `backend/main.py` untuk API dan `backend/tasks.py` untuk worker.
 
 ## Runtime Stack
 

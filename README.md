@@ -27,28 +27,130 @@ React + Cytoscape dashboard
   -> NexusRecon/core/modules/recon local OSINT engine
 ```
 
-## One-command Run
+## Cara Hidupin dan Matiin Tools
+
+### Hidupin stack utama
 
 ```bash
 docker compose up -d --build
 ```
 
-Atau:
+Alternatif via Makefile:
 
 ```bash
 make up
 ```
 
-Dashboard:
+Buka dashboard:
 
 ```text
 http://127.0.0.1:8080
 ```
 
-Stop:
+Stack ini menjalankan frontend, API, worker, Redis, dan PostgreSQL.
+
+### Cek status service
+
+```bash
+docker compose ps
+```
+
+Status normal:
+
+- `postgres` healthy
+- `redis` healthy
+- `api` healthy
+- `worker` running
+- `frontend` healthy
+
+### Lihat logs
+
+Semua service:
+
+```bash
+docker compose logs -f
+```
+
+API saja:
+
+```bash
+docker compose logs -f api
+```
+
+Worker saja:
+
+```bash
+docker compose logs -f worker
+```
+
+### Restart service
+
+Restart semua:
+
+```bash
+docker compose restart
+```
+
+Restart satu service:
+
+```bash
+docker compose restart api
+docker compose restart worker
+docker compose restart frontend
+```
+
+### Matiin stack
+
+Stop dan hapus container/network, data tetap aman:
+
+```bash
+docker compose down
+```
+
+Atau:
 
 ```bash
 make down
+```
+
+### Reset data lokal
+
+Matikan stack dulu:
+
+```bash
+docker compose down
+```
+
+Lalu hapus runtime database/cache lokal:
+
+```bash
+sudo rm -rf data
+```
+
+Gunakan reset hanya kalau memang ingin menghapus semua investigation lama.
+
+### Ganti host atau port
+
+```bash
+NEXUS_HOST=127.0.0.1 NEXUS_PORT=9090 docker compose up -d --build
+```
+
+Atau:
+
+```bash
+make up HOST=127.0.0.1 PORT=9090
+```
+
+Dashboard berubah menjadi:
+
+```text
+http://127.0.0.1:9090
+```
+
+### Health check cepat
+
+```bash
+curl http://127.0.0.1:8080/api/v1/health
 ```
 
 Data runtime disimpan lokal di:
@@ -119,8 +221,6 @@ WS   /api/v1/ws/logs/{task_id}
 ├── Makefile
 └── start.sh
 ```
-
-`backend/app/` dan `backend/workers/` adalah legacy backend tree dari iterasi sebelumnya. Runtime Docker terbaru tidak meng-copy atau menjalankannya; canonical backend sekarang adalah `backend/main.py` dan `backend/tasks.py`.
 
 ## CLI Legacy
 
