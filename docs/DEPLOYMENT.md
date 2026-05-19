@@ -2,6 +2,36 @@
 
 NexusIntel berjalan sebagai stack Docker Compose dari root repo. Stack utama menjalankan frontend, API, worker, Redis, dan PostgreSQL.
 
+Repository resmi:
+
+```text
+https://github.com/LogsOneX/NexusIntel
+```
+
+## Kebutuhan Sistem
+
+Minimum untuk testing ringan:
+
+- CPU: 2 core / 2 vCPU
+- RAM: 4 GB
+- Storage kosong: 12 GB
+- OS: Linux x86_64 direkomendasikan
+- Runtime: Docker Engine 24+ dan Docker Compose v2
+
+Rekomendasi harian:
+
+- CPU: 4 core / 4 vCPU
+- RAM: 8 GB
+- Storage kosong: 25 GB
+
+Operasi besar atau banyak case:
+
+- CPU: 4-8 core
+- RAM: 16 GB
+- Storage kosong: 50 GB+
+
+Storage bisa bertambah karena Docker image/build cache dan data investigation di `data/postgres`.
+
 ## Hidupin Stack
 
 ```bash

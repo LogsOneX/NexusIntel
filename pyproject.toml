@@ -1,12 +1,12 @@
 [project]
-name = "data-aggregator"
+name = "nexusintel"
 version = "0.1.0"
-description = "Unified OSINT scanner combining analytics modules, username enumeration, email, phone, and domain discovery."
+description = "Standalone OSINT investigation platform with visual graph analysis, FastAPI, Celery, Redis, and PostgreSQL."
 readme = "README.md"
 authors = [ { name = "LogsOneX" } ]
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-keywords = ["osint", "recon", "username", "domain", "email", "scanner"]
+keywords = ["osint", "recon", "intelligence", "graph", "username", "domain", "email", "scanner"]
 dependencies = [
     "rich>=13.7.0",
     "httpx>=0.27.0",
@@ -21,6 +21,7 @@ classifiers = [
 
 [project.scripts]
 data-aggregator = "main:main"
+nexusintel = "main:main"
 nexusrecon = "main:main"
 
 [tool.setuptools.packages.find]

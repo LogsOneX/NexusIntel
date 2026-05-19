@@ -2,6 +2,12 @@
 
 NexusIntel adalah platform investigasi OSINT standalone: visual graph dashboard, FastAPI gateway, Celery worker, Redis live telemetry, dan PostgreSQL graph store. Core code berjalan langsung dari root repo lewat `frontend/`, `backend/main.py`, dan `backend/tasks.py`.
 
+Repository resmi:
+
+```text
+https://github.com/LogsOneX/NexusIntel
+```
+
 Project ini tidak menumpang repo OSINT eksternal untuk runtime core. Konsep dari Flowsint, Maigret, Sherlock, GHunt, Holehe, Maltego, dan OSINT.Industries dipakai sebagai inspirasi produk dan workflow; implementasi di sini dibuat ulang dengan metode public-source/free.
 
 ## Guardrail
@@ -26,6 +32,38 @@ React + Cytoscape dashboard
   -> PostgreSQL graph database
   -> NexusRecon/core/modules/recon local OSINT engine
 ```
+
+## Kebutuhan Sistem
+
+Minimum untuk testing ringan:
+
+- CPU: 2 core / 2 vCPU
+- RAM: 4 GB
+- Storage kosong: 12 GB
+- OS: Linux x86_64 direkomendasikan
+- Runtime: Docker Engine 24+ dan Docker Compose v2
+
+Rekomendasi harian:
+
+- CPU: 4 core / 4 vCPU
+- RAM: 8 GB
+- Storage kosong: 25 GB
+- Network stabil untuk DNS/HTTP public-source recon
+
+Operasi besar atau banyak case:
+
+- CPU: 4-8 core
+- RAM: 16 GB
+- Storage kosong: 50 GB+
+
+Estimasi penggunaan storage:
+
+- Docker images + build cache awal: 4-10 GB
+- `data/postgres`: mulai kecil, bisa tumbuh 1-20 GB tergantung jumlah investigation
+- `data/redis`: biasanya kecil, ratusan MB, tergantung task/log history
+- `results/`, `reports/`, `.nexusrecon/`: output lokal bila CLI legacy dipakai
+
+Detail lengkap ada di [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
 ## Cara Hidupin dan Matiin Tools
 
