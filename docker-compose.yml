@@ -51,6 +51,7 @@ services:
       INTELX_API_KEY: ${INTELX_API_KEY:-}
       VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
       NEXUS_EGRESS_PROXY: ${NEXUS_EGRESS_PROXY:-}
+      NEXUS_PLATFORM_CATALOG: ${NEXUS_PLATFORM_CATALOG:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,6 +77,7 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
       NEXUS_EGRESS_PROXY: ${NEXUS_EGRESS_PROXY:-}
+      NEXUS_PLATFORM_CATALOG: ${NEXUS_PLATFORM_CATALOG:-}
     depends_on:
       postgres:
         condition: service_healthy
