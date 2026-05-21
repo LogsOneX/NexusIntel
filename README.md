@@ -79,10 +79,23 @@ Alternatif via Makefile:
 make up
 ```
 
-Buka dashboard:
+Buka command center:
 
 ```text
 http://127.0.0.1:8080
+```
+
+Login lokal default untuk development:
+
+```text
+username: admin
+password: nexusintel
+```
+
+Ganti credential sebelum operasi nyata:
+
+```bash
+NEXUS_ADMIN_USER=operator NEXUS_ADMIN_PASSWORD="passphrase-kuat" NEXUS_AUTH_SECRET="secret-panjang" docker compose up -d --build
 ```
 
 Stack ini menjalankan frontend, API, worker, Redis, dan PostgreSQL.
@@ -200,9 +213,9 @@ data/redis
 
 Folder `data/` di-ignore dari git.
 
-## Dashboard Flow
+## Command Center Flow
 
-Dashboard terbaru tidak memakai include/exclude/module picker. Investigator cukup memasukkan target, memilih mode, lalu graph utama menjadi pusat operasi. UI sekarang memakai `FlowCanvas` berbasis Cytoscape dengan drag-and-drop entity pipeline, right-click Logic Flow, data drawer, dan terminal HUD.
+UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan drag-and-drop entity pipeline, right-click Logic Flow, Playbooks, Smart Selector, data drawer, terminal HUD, Timeline Mode, dan Export Intelligence report.
 
 1. Submit target username/email/domain/IP/phone.
 2. API mengklasifikasi target dan membuat investigation + root entity.
@@ -324,3 +337,16 @@ NexusIntel dirilis sebagai open source di bawah **Apache License 2.0**.
 Copyright 2026 LogsOneX and NexusIntel contributors.
 
 Lihat [LICENSE](LICENSE) untuk teks lisensi lengkap.
+
+
+## AI Oracle dan BYOK
+
+NexusIntel sekarang punya `/oracle` dan Oracle panel di `/graph` serta `/workspace`. Tanpa LLM eksternal, Oracle memakai local rule-based engine untuk highlight entity dan briefing dasar. Untuk LLM lokal/remote, buka Settings atau set env:
+
+```bash
+NEXUS_LLM_PROVIDER=ollama
+NEXUS_LLM_ENDPOINT=http://localhost:11434
+NEXUS_LLM_MODEL=llama3.1
+```
+
+Optional BYOK keys tersedia untuk Shodan, IntelX, dan VirusTotal di Settings. Core OSINT tetap berjalan tanpa paid API.

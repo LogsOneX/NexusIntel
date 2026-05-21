@@ -2528,3 +2528,571 @@ select:focus {
     display: none;
   }
 }
+
+/* NexusIntel Command Center multi-page shell */
+.login-screen,
+.command-shell {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #000000;
+  color: #ffffff;
+}
+
+.login-screen {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-terminal {
+  display: grid;
+  gap: 14px;
+  width: min(440px, 100%);
+  border: 1px solid #333333;
+  background: #050505;
+  padding: 24px;
+}
+
+.login-brand,
+.command-brand,
+.command-sidebar nav button,
+.sidebar-footer button,
+.graph-command-bar,
+.graph-command-bar form,
+.oracle-panel header,
+.oracle-context,
+.oracle-input,
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-terminal h1,
+.page-header h1 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 22px;
+  text-transform: uppercase;
+}
+
+.login-terminal p,
+.command-card p,
+.entity-spec p {
+  color: #888888;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.login-terminal label,
+.settings-page label,
+.case-editor label {
+  display: grid;
+  gap: 6px;
+  color: #888888;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.auth-error,
+.save-toast {
+  border: 1px solid #ffffff;
+  background: #111111;
+  color: #ffffff;
+  padding: 9px 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.command-shell {
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+}
+
+.command-shell.nav-collapsed {
+  grid-template-columns: 68px minmax(0, 1fr);
+}
+
+.command-sidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  border-right: 1px solid #333333;
+  background: #050505;
+}
+
+.command-brand {
+  min-height: 70px;
+  border-bottom: 1px solid #333333;
+  padding: 0 16px;
+}
+
+.command-brand strong,
+.command-brand span {
+  display: block;
+}
+
+.command-brand span,
+.sidebar-footer code,
+.oracle-panel header span {
+  color: #888888;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.command-sidebar nav {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.command-sidebar nav button,
+.sidebar-footer button {
+  min-height: 42px;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: #888888 !important;
+  justify-content: flex-start;
+  padding: 0 11px;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.command-sidebar nav button.active,
+.command-sidebar nav button:hover,
+.sidebar-footer button:hover {
+  border-color: #333333 !important;
+  background: #111111 !important;
+  color: #ffffff !important;
+}
+
+.command-shell.nav-collapsed .command-brand div,
+.command-shell.nav-collapsed nav span,
+.command-shell.nav-collapsed .sidebar-footer span,
+.command-shell.nav-collapsed .sidebar-footer code {
+  display: none;
+}
+
+.sidebar-footer {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #333333;
+  padding: 12px;
+}
+
+.command-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #000000;
+}
+
+.page-grid,
+.workspace-page,
+.settings-page,
+.oracle-page,
+.account-page,
+.graph-page {
+  display: grid;
+  gap: 14px;
+  min-height: 100%;
+  padding: 18px;
+}
+
+.page-header {
+  justify-content: space-between;
+  min-height: 64px;
+  border: 1px solid #333333;
+  background: #050505;
+  padding: 14px 16px;
+}
+
+.command-card,
+.case-folder,
+.entity-spec,
+.case-strip,
+.case-editor,
+.oracle-panel,
+.graph-terminal,
+.graph-command-bar {
+  border: 1px solid #333333;
+  background: #050505;
+}
+
+.command-card {
+  padding: 16px;
+}
+
+.command-card.wide {
+  grid-column: 1 / -1;
+}
+
+.command-card h2,
+.entity-spec h2,
+.case-editor h2,
+.settings-page h2 {
+  margin: 0 0 12px;
+  color: #ffffff;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.intel-table {
+  display: grid;
+  border-top: 1px solid #333333;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.intel-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) 120px 120px 190px;
+  gap: 10px;
+  width: 100%;
+  border: 0 !important;
+  border-bottom: 1px solid #333333 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+  padding: 10px;
+  text-align: left;
+}
+
+.intel-row.head {
+  color: #888888 !important;
+  text-transform: uppercase;
+}
+
+.folder-grid,
+.settings-grid,
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.case-folder {
+  display: grid;
+  gap: 8px;
+  color: #ffffff;
+  padding: 16px;
+  text-align: left;
+}
+
+.case-folder span,
+.case-strip span {
+  color: #888888;
+  font-size: 11px;
+}
+
+.graph-page {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
+}
+
+.graph-command-bar {
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 8px;
+}
+
+.graph-command-bar form {
+  flex: 1;
+  min-width: 0;
+}
+
+.graph-command-bar input {
+  max-width: 420px;
+}
+
+.graph-command-bar select {
+  max-width: 150px;
+}
+
+.graph-operational-grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 330px;
+  grid-template-rows: minmax(0, 1fr) 210px;
+  gap: 10px;
+  min-height: 0;
+}
+
+.graph-operational-grid.terminal-hidden {
+  grid-template-rows: minmax(0, 1fr) 0;
+}
+
+.graph-operational-grid .tactical-graph-shell {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.case-strip {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.case-strip.large {
+  min-height: 520px;
+}
+
+.case-strip > strong {
+  color: #888888;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.case-strip button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #333333 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+  padding: 9px;
+  text-align: left;
+}
+
+.case-strip button.active,
+.case-strip button:hover {
+  border-color: #ffffff !important;
+}
+
+.entity-spec {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.graph-terminal {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.graph-terminal header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border-bottom: 1px solid #333333;
+  padding: 0 12px;
+}
+
+.graph-terminal header span {
+  color: #888888;
+  font-size: 11px;
+}
+
+.graph-terminal > div {
+  overflow: auto;
+  padding: 9px 12px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.graph-terminal p {
+  display: grid;
+  grid-template-columns: 78px 72px minmax(0, 1fr);
+  gap: 10px;
+  margin: 0 0 4px;
+  color: #888888;
+  font-size: 11px;
+}
+
+.graph-terminal code {
+  color: #ffffff;
+  white-space: pre-wrap;
+}
+
+.case-editor {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 14px;
+}
+
+.case-editor textarea {
+  min-height: 220px;
+  border: 1px solid #333333;
+  background: #000000;
+  color: #ffffff;
+  padding: 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.brief-box {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid #333333;
+  background: #000000;
+  padding: 12px;
+  color: #ffffff;
+}
+
+.oracle-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 360px;
+  overflow: hidden;
+}
+
+.graph-page > .oracle-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 55;
+  width: min(420px, calc(100vw - 36px));
+  height: 410px;
+  box-shadow: 0 0 0 1px #333333;
+}
+
+.oracle-panel header {
+  justify-content: space-between;
+  min-height: 42px;
+  border-bottom: 1px solid #333333;
+  padding: 0 12px;
+}
+
+.oracle-context {
+  border-bottom: 1px solid #333333;
+  color: #888888;
+  padding: 8px 12px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.oracle-messages {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.oracle-message {
+  border: 1px solid #333333;
+  background: #000000;
+  padding: 9px;
+}
+
+.oracle-message strong {
+  color: #888888;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.oracle-message p {
+  margin: 5px 0 0;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.oracle-input {
+  border-top: 1px solid #333333;
+  padding: 8px;
+}
+
+.oracle-input input {
+  min-width: 0;
+  flex: 1;
+}
+
+.oracle-input button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #333333 !important;
+  background: #111111 !important;
+  color: #ffffff !important;
+}
+
+.graph-smart-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 190px;
+  color: #888888;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.graph-smart-selector select {
+  width: 150px;
+  min-height: 34px;
+}
+
+.context-oracle {
+  border-bottom: 1px solid #333333 !important;
+  background: #000000 !important;
+}
+
+@media (max-width: 1180px) {
+  .graph-operational-grid {
+    grid-template-columns: minmax(0, 1fr) 310px;
+  }
+
+  .case-strip {
+    display: none;
+  }
+
+  .graph-operational-grid .tactical-graph-shell {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 860px) {
+  .command-shell,
+  .command-shell.nav-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .command-sidebar {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto;
+    border-right: 0;
+    border-bottom: 1px solid #333333;
+  }
+
+  .command-sidebar nav {
+    grid-auto-flow: column;
+    overflow-x: auto;
+  }
+
+  .command-brand,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .graph-operational-grid,
+  .graph-operational-grid.terminal-hidden {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(480px, 1fr) auto auto;
+  }
+
+  .entity-spec,
+  .graph-terminal,
+  .graph-operational-grid .tactical-graph-shell {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .graph-page > .oracle-panel {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+  }
+}

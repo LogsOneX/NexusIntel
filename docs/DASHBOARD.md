@@ -1,6 +1,6 @@
 # Dashboard
 
-Dashboard terbaru adalah command-center UI berbasis React + Cytoscape. Entry point-nya `frontend/src/components/Dashboard.tsx`; canvas link analysis utama ada di `frontend/src/components/FlowCanvas.tsx`, dengan `GraphCanvas.tsx` sebagai compatibility wrapper.
+Dashboard terbaru adalah multi-page Intelligence Command Center berbasis React + Cytoscape. Entry point-nya `frontend/src/components/CommandCenter.tsx`; canvas link analysis utama ada di `frontend/src/components/GraphCanvas.tsx`, sementara `FlowCanvas.tsx` hanya compatibility wrapper.
 
 ## Run
 
@@ -14,6 +14,12 @@ Open:
 http://127.0.0.1:8080
 ```
 
+Development login default:
+
+```text
+admin / nexusintel
+```
+
 Stop:
 
 ```bash
@@ -22,10 +28,11 @@ docker compose down
 
 ## Layout
 
-- Left console: target acquisition, mode selector, manual entity builder, investigation list.
-- Center canvas: graph besar sebagai area kerja utama, entity palette, drag-and-drop pipeline, dan Logic Flow context menu.
-- Right drawer: deep entity data dengan field filter dan raw JSON.
-- Bottom HUD: terminal log real-time dari worker melalui WebSocket.
+- Persistent sidebar: Dashboard, Workspace, Network Graph, AI Oracle, Settings, Account.
+- Dashboard: recent investigations, case folders, timeline/report quick links.
+- Workspace: case name, assigned operator, markdown notes, AI auto-briefing.
+- Network Graph: tactical canvas, intelligence toolbar, Smart Selector, Playbooks, Ask Oracle, terminal HUD.
+- Settings: BYOK API keys and LLM provider configuration.
 
 ## Graph Workflow
 
@@ -101,3 +108,8 @@ python3 main.py dashboard 127.0.0.1:8080
 ```
 
 Mode ini hanya untuk fallback manual. UI enterprise terbaru berjalan lewat Compose.
+
+
+## AI Oracle
+
+Oracle panel tersedia di `/graph`, `/workspace`, dan `/oracle`. Prompt natural language dikirim ke `/api/v1/oracle/chat` bersama JSON graph state. Jika LLM belum dikonfigurasi, backend memakai local rule-based Oracle untuk highlight entity type, summary, dan transform suggestion.

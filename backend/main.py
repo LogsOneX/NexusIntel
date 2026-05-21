@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
+import time
 import uuid
 import ipaddress
 from contextlib import asynccontextmanager
@@ -9,7 +13,8 @@ from datetime import datetime
 from typing import Any, Literal
 
 import redis.asyncio as aioredis
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+import httpx
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint, create_engine, select
@@ -25,6 +30,9 @@ DATABASE_URL = os.getenv(
 )
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")]
+AUTH_USER = os.getenv("NEXUS_ADMIN_USER", "admin")
+AUTH_PASSWORD = os.getenv("NEXUS_ADMIN_PASSWORD", "nexusintel")
+AUTH_SECRET = os.getenv("NEXUS_AUTH_SECRET", "change-this-local-secret")
 
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
@@ -106,6 +114,14 @@ class Event(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
+class SettingRecord(Base):
+    __tablename__ = "settings"
+
+    key = Column(String(96), primary_key=True)
+    value = Column(JSONB, nullable=False, default=dict)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class InvestigationCreate(BaseModel):
     target: str = Field(..., min_length=2, max_length=512)
     target_type: str | None = Field(default=None, max_length=64)
@@ -129,6 +145,33 @@ class ManualEntityRequest(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., min_length=1, max_length=256)
+
+
+class CaseUpdate(BaseModel):
+    case_name: str | None = Field(default=None, max_length=256)
+    assigned_operator: str | None = Field(default=None, max_length=128)
+    notes: str | None = Field(default=None, max_length=20000)
+
+
+class SettingsUpdate(BaseModel):
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class OracleChatRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=8000)
+    investigation_id: str | None = None
+    graph_state: dict[str, Any] = Field(default_factory=dict)
+    node: dict[str, Any] | None = None
+
+
+class OracleBriefingRequest(BaseModel):
+    investigation_id: str | None = None
+    graph_state: dict[str, Any] = Field(default_factory=dict)
+
+
 class ApiResponse(BaseModel):
     ok: bool
     data: dict[str, Any] = Field(default_factory=dict)
@@ -144,6 +187,47 @@ def get_db() -> Session:
 
 def now_iso() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+
+def confidence_level(confidence: str | None, data: dict[str, Any] | None = None) -> int:
+    if data and isinstance(data.get("confidence_level"), (int, float)):
+        return max(0, min(100, int(data["confidence_level"])))
+    raw = str(confidence or "medium").lower()
+    if raw in {"confirmed", "exact", "high", "success"}:
+        return 90
+    if raw in {"medium", "observed", "probable"}:
+        return 60
+    if raw in {"low", "candidate", "weak"}:
+        return 30
+    return 50
+
+
+def encode_token(username: str) -> str:
+    payload = {"sub": username, "iat": int(time.time())}
+    body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
+    signature = hmac.new(AUTH_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return f"{body}.{signature}"
+
+
+def verify_token(token: str | None) -> str:
+    if not token or "." not in token:
+        raise HTTPException(status_code=401, detail="Missing authentication token")
+    body, signature = token.rsplit(".", 1)
+    expected = hmac.new(AUTH_SECRET.encode(), body.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
+    try:
+        padded = body + "=" * (-len(body) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Malformed authentication token") from exc
+    return str(payload.get("sub") or "operator")
+
+
+def current_operator(authorization: str | None = Header(default=None)) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    return verify_token(authorization.split(" ", 1)[1].strip())
 
 
 def classify_target(value: str) -> str:
@@ -186,6 +270,7 @@ def serialize_relationship(edge: Relationship) -> dict[str, Any]:
         "target": edge.target_id,
         "type": edge.type,
         "confidence": edge.confidence,
+        "confidence_level": confidence_level(edge.confidence, edge.data or {}),
         "data": edge.data or {},
         "created_at": edge.created_at.isoformat() + "Z",
     }
@@ -240,6 +325,7 @@ def upsert_relationship(
     confidence: str = "medium",
     data: dict[str, Any] | None = None,
 ) -> Relationship:
+    relationship_data = {**(data or {}), "confidence_level": confidence_level(confidence, data or {})}
     existing = db.execute(
         select(Relationship).where(
             Relationship.investigation_id == investigation_id,
@@ -250,7 +336,7 @@ def upsert_relationship(
     ).scalar_one_or_none()
     if existing:
         existing.confidence = confidence or existing.confidence
-        existing.data = {**(existing.data or {}), **(data or {})}
+        existing.data = {**(existing.data or {}), **relationship_data}
         return existing
 
     edge = Relationship(
@@ -261,7 +347,7 @@ def upsert_relationship(
         type=type_,
         source=source,
         confidence=confidence,
-        data=data or {},
+        data=relationship_data,
     )
     db.add(edge)
     return edge
@@ -330,6 +416,208 @@ app.add_middleware(
 def health() -> dict[str, Any]:
     return {"ok": True, "service": "nexusintel-api", "time": now_iso()}
 
+
+
+
+def default_settings() -> dict[str, Any]:
+    return {
+        "llm": {
+            "provider": os.getenv("NEXUS_LLM_PROVIDER", "local"),
+            "endpoint": os.getenv("NEXUS_LLM_ENDPOINT", "http://localhost:11434"),
+            "model": os.getenv("NEXUS_LLM_MODEL", "llama3.1"),
+            "api_key": os.getenv("NEXUS_LLM_API_KEY", ""),
+        },
+        "api_keys": {
+            "shodan": os.getenv("SHODAN_API_KEY", ""),
+            "intelx": os.getenv("INTELX_API_KEY", ""),
+            "virustotal": os.getenv("VIRUSTOTAL_API_KEY", ""),
+        },
+    }
+
+
+def get_settings(db: Session) -> dict[str, Any]:
+    record = db.get(SettingRecord, "runtime")
+    if not record:
+        return default_settings()
+    merged = default_settings()
+    value = record.value or {}
+    merged["llm"] = {**merged.get("llm", {}), **(value.get("llm") or {})}
+    merged["api_keys"] = {**merged.get("api_keys", {}), **(value.get("api_keys") or {})}
+    return merged
+
+
+def serialize_case(item: Investigation) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "target": item.target,
+        "target_type": item.target_type,
+        "status": item.status,
+        "mode": item.mode,
+        "created_at": item.created_at.isoformat() + "Z",
+        "updated_at": item.updated_at.isoformat() + "Z",
+        "meta": item.meta or {},
+    }
+
+
+def graph_metrics(graph_state: dict[str, Any]) -> dict[str, Any]:
+    nodes = graph_state.get("nodes") or []
+    edges = graph_state.get("edges") or []
+    by_type: dict[str, int] = {}
+    high_conf_ips = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = str(node.get("type") or node.get("nodeType") or "unknown")
+        by_type[node_type] = by_type.get(node_type, 0) + 1
+        confidence = str(node.get("confidence") or node.get("nodeProperties", {}).get("confidence") or "medium").lower()
+        if node_type == "ip" and confidence in {"confirmed", "high"}:
+            high_conf_ips.append(node.get("value") or node.get("nodeLabel"))
+    return {"nodes": len(nodes), "edges": len(edges), "by_type": by_type, "high_conf_ips": high_conf_ips[:25]}
+
+
+def fallback_oracle(prompt: str, graph_state: dict[str, Any], node: dict[str, Any] | None = None) -> dict[str, Any]:
+    lowered = prompt.lower()
+    metrics = graph_metrics(graph_state)
+    commands: list[dict[str, Any]] = []
+    if "clear" in lowered and "highlight" in lowered:
+        commands.append({"type": "clear_highlight"})
+    elif "ip" in lowered:
+        commands.append({"type": "highlight_type", "nodeType": "ip", "minConfidence": 80 if "high" in lowered else 0})
+    elif "email" in lowered:
+        commands.append({"type": "highlight_type", "nodeType": "email"})
+    elif "domain" in lowered or "dns" in lowered:
+        commands.append({"type": "highlight_type", "nodeType": "domain"})
+    elif "profile" in lowered or "social" in lowered or "username" in lowered:
+        commands.append({"type": "highlight_type", "nodeType": "profile" if "profile" in lowered else "username"})
+
+    node_hint = ""
+    if node:
+        node_hint = f" Active node {node.get('label') or node.get('value')} is a {node.get('type')} pivot. Recommended next transform: full_identity_pipeline for identities, domain_recon for domains, email_footprint for emails."
+    reply = (
+        f"Graph contains {metrics['nodes']} entities and {metrics['edges']} relationships. "
+        f"Type distribution: {metrics['by_type']}. "
+        f"High-confidence IP candidates: {metrics['high_conf_ips'] or 'none observed'}." + node_hint
+    )
+    if commands:
+        reply += " I queued a UI command to focus the relevant entity type."
+    return {"reply": reply, "commands": commands, "metrics": metrics, "provider": "local_rules"}
+
+
+async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[str, Any], node: dict[str, Any] | None) -> dict[str, Any]:
+    provider = str((settings.get("llm") or {}).get("provider") or "local").lower()
+    if provider in {"local", "rules", "none"}:
+        return fallback_oracle(prompt, graph_state, node)
+
+    system = (
+        "You are NexusIntel Oracle. Return concise JSON with keys reply and commands. "
+        "Commands may include {type:'highlight_type', nodeType:'ip|domain|email|username|profile'} or {type:'clear_highlight'}."
+    )
+    compact_graph = {"metrics": graph_metrics(graph_state), "active_node": node}
+    user_prompt = f"Prompt: {prompt}\nGraph: {json.dumps(compact_graph, default=str)[:12000]}"
+    endpoint = str((settings.get("llm") or {}).get("endpoint") or "").rstrip("/")
+    model = str((settings.get("llm") or {}).get("model") or "llama3.1")
+    api_key = str((settings.get("llm") or {}).get("api_key") or "")
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            if provider == "ollama":
+                response = await client.post(f"{endpoint}/api/chat", json={"model": model, "stream": False, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_prompt}]})
+                response.raise_for_status()
+                content = response.json().get("message", {}).get("content", "")
+            elif provider == "openai":
+                response = await client.post(
+                    f"{endpoint or 'https://api.openai.com/v1'}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_prompt}], "temperature": 0.1},
+                )
+                response.raise_for_status()
+                content = response.json()["choices"][0]["message"]["content"]
+            else:
+                return fallback_oracle(prompt, graph_state, node)
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, dict) and "reply" in parsed:
+                parsed.setdefault("commands", [])
+                parsed.setdefault("provider", provider)
+                return parsed
+        except Exception:
+            pass
+        return {"reply": content or "Oracle returned an empty response.", "commands": [], "provider": provider}
+    except Exception as exc:
+        fallback = fallback_oracle(prompt, graph_state, node)
+        fallback["reply"] = f"Configured LLM failed ({exc}). " + fallback["reply"]
+        fallback["provider"] = "fallback_after_llm_error"
+        return fallback
+
+
+@app.post("/api/v1/auth/login", response_model=ApiResponse)
+def login(payload: LoginRequest) -> ApiResponse:
+    if not hmac.compare_digest(payload.username, AUTH_USER) or not hmac.compare_digest(payload.password, AUTH_PASSWORD):
+        raise HTTPException(status_code=401, detail="Invalid local credentials")
+    return ApiResponse(ok=True, data={"token": encode_token(payload.username), "user": payload.username})
+
+
+@app.get("/api/v1/auth/me", response_model=ApiResponse)
+def me(operator: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data={"user": operator, "auth": "local"})
+
+
+@app.get("/api/v1/cases", response_model=ApiResponse)
+def list_cases(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    items = db.execute(select(Investigation).order_by(Investigation.updated_at.desc())).scalars().all()
+    return ApiResponse(ok=True, data={"items": [serialize_case(item) for item in items]})
+
+
+@app.patch("/api/v1/cases/{investigation_id}", response_model=ApiResponse)
+def update_case(investigation_id: str, payload: CaseUpdate, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Case not found")
+    meta = dict(investigation.meta or {})
+    if payload.case_name is not None:
+        meta["case_name"] = payload.case_name
+    if payload.assigned_operator is not None:
+        meta["assigned_operator"] = payload.assigned_operator
+    if payload.notes is not None:
+        meta["notes"] = payload.notes
+    investigation.meta = meta
+    investigation.updated_at = datetime.utcnow()
+    db.commit()
+    return ApiResponse(ok=True, data={"case": serialize_case(investigation)})
+
+
+@app.get("/api/v1/settings", response_model=ApiResponse)
+def read_settings(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data={"settings": get_settings(db)})
+
+
+@app.put("/api/v1/settings", response_model=ApiResponse)
+def write_settings(payload: SettingsUpdate, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    record = db.get(SettingRecord, "runtime")
+    if not record:
+        record = SettingRecord(key="runtime", value=payload.settings)
+        db.add(record)
+    else:
+        record.value = payload.settings
+        record.updated_at = datetime.utcnow()
+    db.commit()
+    return ApiResponse(ok=True, data={"settings": get_settings(db)})
+
+
+@app.post("/api/v1/oracle/chat", response_model=ApiResponse)
+async def oracle_chat(payload: OracleChatRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    result = await llm_oracle(get_settings(db), payload.prompt, payload.graph_state, payload.node)
+    return ApiResponse(ok=True, data=result)
+
+
+@app.post("/api/v1/oracle/briefing", response_model=ApiResponse)
+async def oracle_briefing(payload: OracleBriefingRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    metrics = graph_metrics(payload.graph_state)
+    prompt = "Generate an executive summary and threat assessment for this OSINT graph."
+    oracle = await llm_oracle(get_settings(db), prompt, payload.graph_state, None)
+    executive = oracle.get("reply") or f"This workspace has {metrics['nodes']} entities and {metrics['edges']} relationships across {metrics['by_type']}."
+    threat = f"Confidence-weighted review: prioritize high-confidence IP/domain infrastructure, then validate low-confidence profile candidates. Current high-confidence IPs: {metrics['high_conf_ips'] or 'none observed'}."
+    return ApiResponse(ok=True, data={"executive_summary": executive, "threat_assessment": threat, "metrics": metrics})
 
 @app.post("/api/v1/investigations", response_model=ApiResponse)
 async def create_investigation(payload: InvestigationCreate, db: Session = Depends(get_db)) -> ApiResponse:

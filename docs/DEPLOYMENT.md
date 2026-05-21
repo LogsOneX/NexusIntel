@@ -44,10 +44,16 @@ Atau:
 make up
 ```
 
-Buka dashboard:
+Buka command center:
 
 ```text
 http://127.0.0.1:8080
+```
+
+Default development login:
+
+```text
+admin / nexusintel
 ```
 
 ## Cek Status
@@ -117,6 +123,33 @@ Gunakan hanya saat ingin menghapus semua investigation/cache lokal.
 ```bash
 docker compose down
 sudo rm -rf data
+```
+
+
+## Auth dan LLM Environment
+
+Ganti login lokal sebelum operasi nyata:
+
+```bash
+NEXUS_ADMIN_USER=operator \
+NEXUS_ADMIN_PASSWORD="passphrase-kuat" \
+NEXUS_AUTH_SECRET="secret-panjang" \
+docker compose up -d --build
+```
+
+Konfigurasi Oracle LLM opsional:
+
+```bash
+NEXUS_LLM_PROVIDER=ollama \
+NEXUS_LLM_ENDPOINT=http://localhost:11434 \
+NEXUS_LLM_MODEL=llama3.1 \
+docker compose up -d --build
+```
+
+BYOK opsional:
+
+```bash
+SHODAN_API_KEY=... INTELX_API_KEY=... VIRUSTOTAL_API_KEY=... docker compose up -d --build
 ```
 
 ## Services

@@ -75,6 +75,7 @@ type GraphCanvasProps = {
   onTaskStart: (taskId: string, transform: string, node: ApiGraphNode) => void;
   onError: (message: string) => void;
   onSystemLog?: (message: string) => void;
+  onOracleNode?: (node: ApiGraphNode) => void;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
@@ -351,7 +352,8 @@ function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
   };
 }
 
-function edgeElement(edge: GraphEdge, runningNodeId: string | null): cytoscape.ElementDefinition {
+function edgeElement(edge: GraphEdge, runningNodeId: string | null, faded = false): cytoscape.ElementDefinition {
+  const confidence = edge.confidence_level || 60;
   return {
     group: "edges",
     data: {
@@ -359,9 +361,10 @@ function edgeElement(edge: GraphEdge, runningNodeId: string | null): cytoscape.E
       source: edge.source,
       target: edge.target,
       label: edge.label,
-      confidence_level: edge.confidence_level || 60,
+      confidence_level: confidence,
+      width: Math.max(1, confidence / 38),
     },
-    classes: `edge ${edge.confidence_level && edge.confidence_level < 50 ? "low-confidence" : ""} ${runningNodeId && edge.source === runningNodeId ? "running-flow" : ""}`,
+    classes: `edge ${confidence < 50 ? "low-confidence" : ""} ${runningNodeId && edge.source === runningNodeId ? "running-flow" : ""} ${faded ? "faded" : ""}`,
   };
 }
 
@@ -375,6 +378,7 @@ export default function GraphCanvas({
   onTaskStart,
   onError,
   onSystemLog,
+  onOracleNode,
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
@@ -392,6 +396,7 @@ export default function GraphCanvas({
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("force");
   const [timelineMode, setTimelineMode] = useState(false);
+  const [highlightType, setHighlightType] = useState("all");
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [contextTab, setContextTab] = useState<ContextTab>("transforms");
   const [runningTask, setRunningTask] = useState<string | null>(null);
@@ -675,7 +680,7 @@ export default function GraphCanvas({
         {
           selector: "edge",
           style: {
-            width: 1,
+            width: "data(width)",
             "line-color": "#666666",
             "target-arrow-shape": "triangle",
             "target-arrow-color": "#666666",
@@ -693,6 +698,11 @@ export default function GraphCanvas({
         {
           selector: "edge.low-confidence",
           style: { "line-style": "dashed", "line-color": "#444444", "target-arrow-color": "#444444" },
+        },
+
+        {
+          selector: ".faded",
+          style: { opacity: 0.2 },
         },
         {
           selector: "edge.running-flow",
@@ -749,6 +759,7 @@ export default function GraphCanvas({
     if (!cy) return;
     const nodeMap = new Map(graphNodes.map((node) => [node.id, node]));
     const edgeMap = new Map(graphEdges.map((edge) => [edge.id, edge]));
+    const typeById = new Map(graphNodes.map((node) => [node.id, node.nodeType]));
 
     cy.batch(() => {
       cy.nodes().forEach((node) => {
@@ -761,7 +772,8 @@ export default function GraphCanvas({
       graphNodes.forEach((node) => {
         const existing = cy.getElementById(node.id);
         const element = nodeElement(node);
-        const classes = `${element.classes || ""} ${node.id === runningNodeId ? "processing" : ""}`.trim();
+        const faded = highlightType !== "all" && node.nodeType !== highlightType;
+        const classes = `${element.classes || ""} ${node.id === runningNodeId ? "processing" : ""} ${faded ? "faded" : ""}`.trim();
         if (existing.length) {
           existing.data(element.data || {});
           existing.classes(classes);
@@ -777,7 +789,8 @@ export default function GraphCanvas({
       graphEdges.forEach((edge) => {
         if (!cy.getElementById(edge.source).length || !cy.getElementById(edge.target).length) return;
         const existing = cy.getElementById(edge.id);
-        const element = edgeElement(edge, runningNodeId);
+        const faded = highlightType !== "all" && typeById.get(edge.source) !== highlightType && typeById.get(edge.target) !== highlightType;
+        const element = edgeElement(edge, runningNodeId, faded);
         if (existing.length) {
           existing.data(element.data || {});
           existing.classes(String(element.classes || ""));
@@ -793,7 +806,7 @@ export default function GraphCanvas({
       runLayout(layoutMode, true);
       hasFitRef.current = true;
     }
-  }, [graphEdges, graphNodes, layoutMode, runLayout, runningNodeId]);
+  }, [graphEdges, graphNodes, highlightType, layoutMode, runLayout, runningNodeId]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -833,6 +846,17 @@ export default function GraphCanvas({
     };
   }, []);
 
+
+  useEffect(() => {
+    const handleOracleCommand = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if (detail.type === "highlight_type" && detail.nodeType) setHighlightType(String(detail.nodeType));
+      if (detail.type === "clear_highlight") setHighlightType("all");
+    };
+    window.addEventListener("nexus:oracle-command", handleOracleCommand);
+    return () => window.removeEventListener("nexus:oracle-command", handleOracleCommand);
+  }, []);
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
@@ -866,6 +890,20 @@ export default function GraphCanvas({
 
         <div className="entity-pipeline" aria-label="Entity palette">
           {PALETTE_TYPES.map((kind) => <EntityPaletteItem kind={kind} key={kind} />)}
+        </div>
+
+        <div className="graph-smart-selector">
+          <span>Highlight</span>
+          <select value={highlightType} onChange={(event) => setHighlightType(event.target.value)}>
+            <option value="all">All entities</option>
+            <option value="username">Username</option>
+            <option value="email">Email</option>
+            <option value="domain">Domain</option>
+            <option value="ip">IP address</option>
+            <option value="phone">Phone</option>
+            <option value="profile">Profile</option>
+            <option value="platform">Platform</option>
+          </select>
         </div>
 
         <div className="layout-switcher" aria-label="Graph layout modes">
@@ -949,6 +987,24 @@ export default function GraphCanvas({
               <span>{contextMenu.node.nodeType} / {String(contextMenu.node.nodeProperties.confidence || "medium")}</span>
             </div>
           </div>
+
+          {onOracleNode && (
+            <button
+              className="context-oracle"
+              type="button"
+              onClick={() => {
+                const apiNode = apiNodesRef.current.get(contextMenu.node.id) || apiNodeFromStrict(contextMenu.node);
+                setContextMenu(null);
+                onOracleNode(apiNode);
+              }}
+            >
+              <Network size={14} />
+              <span>
+                <strong>Ask Oracle</strong>
+                <small>Analyze this node and suggest the next OSINT transform</small>
+              </span>
+            </button>
+          )}
           <div className="context-tabs">
             <button className={contextTab === "transforms" ? "active" : ""} type="button" onClick={() => setContextTab("transforms")}>Transforms</button>
             <button className={contextTab === "playbooks" ? "active" : ""} type="button" onClick={() => setContextTab("playbooks")}>Playbooks</button>

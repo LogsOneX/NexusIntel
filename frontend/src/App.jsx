@@ -1,5 +1,5 @@
-import Dashboard from "./components/Dashboard.tsx";
+import CommandCenter from "./components/CommandCenter.tsx";
 
 export default function App() {
-  return <Dashboard />;
+  return <CommandCenter />;
 }

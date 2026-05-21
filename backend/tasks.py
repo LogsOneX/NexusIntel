@@ -161,6 +161,19 @@ def fingerprint(kind: str, value: str) -> str:
     return f"{kind}:{value.strip().lower()}"[:768]
 
 
+def confidence_level(confidence: str | None, data: dict[str, Any] | None = None) -> int:
+    if data and isinstance(data.get("confidence_level"), (int, float)):
+        return max(0, min(100, int(data["confidence_level"])))
+    raw = str(confidence or "medium").lower()
+    if raw in {"confirmed", "exact", "high", "success"}:
+        return 90
+    if raw in {"medium", "observed", "probable"}:
+        return 60
+    if raw in {"low", "candidate", "weak"}:
+        return 30
+    return 50
+
+
 def upsert_entity(
     db: Session,
     investigation_id: str,
@@ -209,6 +222,7 @@ def upsert_relationship(
     confidence: str = "medium",
     data: dict[str, Any] | None = None,
 ) -> Relationship:
+    relationship_data = {**(data or {}), "confidence_level": confidence_level(confidence, data or {})}
     existing = db.execute(
         select(Relationship).where(
             Relationship.investigation_id == investigation_id,
@@ -219,7 +233,7 @@ def upsert_relationship(
     ).scalar_one_or_none()
     if existing:
         existing.confidence = confidence or existing.confidence
-        existing.data = {**(existing.data or {}), **(data or {})}
+        existing.data = {**(existing.data or {}), **relationship_data}
         return existing
     edge = Relationship(
         id=str(uuid.uuid4()),
@@ -229,7 +243,7 @@ def upsert_relationship(
         type=type_,
         source=source,
         confidence=confidence,
-        data=data or {},
+        data=relationship_data,
     )
     db.add(edge)
     db.flush()
@@ -521,6 +535,27 @@ def run_nexusrecon_task(
                 source="nexusrecon",
                 confidence="medium",
             )
+            profile_host = domain_from_target(profile)
+            if profile_host and "." in profile_host:
+                host_node = upsert_entity(
+                    db,
+                    investigation_id,
+                    type_="domain",
+                    label=profile_host,
+                    value=profile_host,
+                    source="cascade_correlation",
+                    confidence="medium",
+                    data={"stage": "profile_host_extraction", "profile_url": profile},
+                )
+                upsert_relationship(
+                    db,
+                    investigation_id,
+                    source_id=profile_node.id,
+                    target_id=host_node.id,
+                    type_="HOSTED_BY_DOMAIN",
+                    source="cascade_correlation",
+                    confidence="medium",
+                )
             found_count += 1
 
         result = {
@@ -1137,6 +1172,27 @@ def run_full_identity_pipeline_task(
                     source="macro_nexusrecon",
                     confidence="medium",
                 )
+                profile_host = domain_from_target(profile)
+                if profile_host and "." in profile_host:
+                    host_node = upsert_entity(
+                        db,
+                        investigation_id,
+                        type_="domain",
+                        label=profile_host,
+                        value=profile_host,
+                        source="macro_cascade",
+                        confidence="medium",
+                        data={"stage": "profile_host_extraction", "profile_url": profile},
+                    )
+                    upsert_relationship(
+                        db,
+                        investigation_id,
+                        source_id=profile_node.id,
+                        target_id=host_node.id,
+                        type_="HOSTED_BY_DOMAIN",
+                        source="macro_cascade",
+                        confidence="medium",
+                    )
                 profile_total += 1
 
         elif kind == "phone":

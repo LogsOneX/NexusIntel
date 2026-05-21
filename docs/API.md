@@ -20,6 +20,52 @@ GET /api/v1/health
 
 Returns API status and timestamp.
 
+## Auth
+
+```text
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
+```
+
+Login body:
+
+```json
+{
+  "username": "admin",
+  "password": "nexusintel"
+}
+```
+
+Protected management/oracle endpoints expect:
+
+```text
+Authorization: Bearer <token>
+```
+
+## Cases, Settings, and Oracle
+
+```text
+GET   /api/v1/cases
+PATCH /api/v1/cases/{investigation_id}
+GET   /api/v1/settings
+PUT   /api/v1/settings
+POST  /api/v1/oracle/chat
+POST  /api/v1/oracle/briefing
+```
+
+Oracle chat body:
+
+```json
+{
+  "prompt": "Show high-confidence IPs",
+  "investigation_id": "uuid",
+  "graph_state": { "nodes": [], "edges": [] },
+  "node": null
+}
+```
+
+Oracle responses include `reply`, `commands`, and `metrics`. UI commands currently include `highlight_type` and `clear_highlight`.
+
 ## Investigations
 
 ```text
@@ -121,6 +167,10 @@ Supported transform families:
 - `e164_phone`
 - `carrier_lookup`
 - `numbering_plan`
+- `full_identity_pipeline`
+- `identity_macro`
+- `email_macro`
+- `autonomous_identity_pipeline`
 
 Transform routing:
 
@@ -129,7 +179,7 @@ Transform routing:
 - domain/IP/network transforms route to `run_domain_task`.
 - phone transforms route to `run_phone_task`.
 
-All transform workers call `backend/recon_validators.py` before returning graph updates.
+All transform workers call `backend/recon_validators.py` before returning graph updates. Relationships now include numeric `confidence_level` (0-100) for UI edge thickness and filtering.
 
 ## Tasks
 

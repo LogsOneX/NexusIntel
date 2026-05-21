@@ -40,6 +40,16 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
       ALLOWED_ORIGINS: "*"
+      NEXUS_ADMIN_USER: ${NEXUS_ADMIN_USER:-admin}
+      NEXUS_ADMIN_PASSWORD: ${NEXUS_ADMIN_PASSWORD:-nexusintel}
+      NEXUS_AUTH_SECRET: ${NEXUS_AUTH_SECRET:-change-this-local-secret}
+      NEXUS_LLM_PROVIDER: ${NEXUS_LLM_PROVIDER:-local}
+      NEXUS_LLM_ENDPOINT: ${NEXUS_LLM_ENDPOINT:-http://localhost:11434}
+      NEXUS_LLM_MODEL: ${NEXUS_LLM_MODEL:-llama3.1}
+      NEXUS_LLM_API_KEY: ${NEXUS_LLM_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      INTELX_API_KEY: ${INTELX_API_KEY:-}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
