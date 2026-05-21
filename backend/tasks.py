@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -394,7 +395,17 @@ def normalize_nexus_result(raw: Any) -> list[dict[str, Any]]:
 
 
 async def run_legacy_nexus(username: str, mode: str) -> Any:
-    from nexusrecon.main import NexusRecon
+    try:
+        from nexusrecon.main import NexusRecon
+    except ModuleNotFoundError:
+        module_path = os.path.join(os.getcwd(), "nexusrecon", "main.py")
+        spec = importlib.util.spec_from_file_location("nexusrecon.main", module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Unable to load NexusRecon from {module_path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault("nexusrecon.main", module)
+        spec.loader.exec_module(module)
+        NexusRecon = module.NexusRecon
 
     recon = NexusRecon()
     if hasattr(recon, "scan_username"):

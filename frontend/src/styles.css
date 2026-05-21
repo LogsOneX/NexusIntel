@@ -2257,3 +2257,52 @@ select:focus {
     right: 8px;
   }
 }
+
+/* Trinity polish pass: non-overlapping control rail and focus-safe quick add */
+.nx-floating-controls {
+  top: 88px !important;
+  right: auto !important;
+  left: 326px !important;
+  flex-direction: column;
+  border-color: #333333;
+  background: #000000;
+}
+
+.nx-shell.left-collapsed .nx-floating-controls,
+.nx-shell.focus-mode .nx-floating-controls {
+  left: 12px !important;
+}
+
+.nx-control-button {
+  flex: 0 0 auto;
+}
+
+.nx-shell.focus-mode .nx-floating-controls {
+  top: 12px !important;
+}
+
+.nx-shell.focus-mode .tactical-graph-toolbar {
+  padding-left: 58px;
+}
+
+.nx-shell:not(.right-collapsed):not(.focus-mode) .nx-drawer {
+  box-shadow: -1px 0 0 #333333 !important;
+}
+
+.nx-terminal.closed .nx-terminal-lines,
+.nx-terminal.closed header {
+  pointer-events: none;
+}
+
+@media (max-width: 920px) {
+  .nx-floating-controls,
+  .nx-shell.left-collapsed .nx-floating-controls,
+  .nx-shell.focus-mode .nx-floating-controls {
+    left: 8px !important;
+    top: 8px !important;
+  }
+
+  .nx-shell.focus-mode .tactical-graph-toolbar {
+    padding-left: 54px;
+  }
+}

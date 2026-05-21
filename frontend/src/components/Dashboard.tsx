@@ -309,6 +309,36 @@ export default function Dashboard() {
     }
   };
 
+  const quickAddEntity = async () => {
+    if (!activeInvestigationId) {
+      setError("Create or select an investigation before adding an entity.");
+      return;
+    }
+    const rawType = window.prompt("Entity type: username, email, domain, ip, phone, profile, service", "username");
+    const type = rawType?.trim().toLowerCase();
+    const allowed = new Set(["username", "email", "domain", "ip", "phone", "profile", "service"]);
+    if (!type || !allowed.has(type)) return;
+    const value = window.prompt(`Value for ${type}`);
+    if (!value?.trim()) return;
+    try {
+      const payload = await apiJson("/api/v1/entities", {
+        method: "POST",
+        body: JSON.stringify({
+          investigation_id: activeInvestigationId,
+          type,
+          label: value.trim(),
+          value: value.trim(),
+          source_id: selectedNode?.id || null,
+          relationship_type: selectedNode ? "quick_pivot" : "quick_seed",
+          data: { created_from: "floating_quick_add", parent: selectedNode?.id || null },
+        }),
+      });
+      setGraph(payload.data.graph);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to quick-add entity");
+    }
+  };
+
   const handleTaskStart = (taskId: string, transform: string, node: GraphNode) => {
     setCurrentTaskId(taskId);
     setTaskLabel(`${transform.replaceAll("_", " ")} / ${node.label}`);
@@ -323,6 +353,9 @@ export default function Dashboard() {
         </button>
         <button className={isSidebarOpen ? "nx-control-button active" : "nx-control-button"} type="button" onClick={toggleSidebar} title="Toggle deep data panel (Ctrl+B)">
           <PanelRight size={16} />
+        </button>
+        <button className="nx-control-button" type="button" onClick={quickAddEntity} title="Quick add entity">
+          <Plus size={16} />
         </button>
         <button className={isTerminalOpen ? "nx-control-button active" : "nx-control-button"} type="button" onClick={toggleTerminal} title="Toggle terminal HUD (Ctrl+J)">
           <PanelBottom size={16} />
