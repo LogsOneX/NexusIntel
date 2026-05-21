@@ -463,16 +463,57 @@ def graph_metrics(graph_state: dict[str, Any]) -> dict[str, Any]:
     nodes = graph_state.get("nodes") or []
     edges = graph_state.get("edges") or []
     by_type: dict[str, int] = {}
-    high_conf_ips = []
+    by_confidence: dict[str, int] = {}
+    edge_types: dict[str, int] = {}
+    high_conf_ips: list[str] = []
+    high_conf_domains: list[str] = []
+    weak_nodes: list[dict[str, Any]] = []
+    for edge in edges:
+        if isinstance(edge, dict):
+            edge_type = str(edge.get("type") or edge.get("label") or "RELATED_TO").upper()
+            edge_types[edge_type] = edge_types.get(edge_type, 0) + 1
     for node in nodes:
         if not isinstance(node, dict):
             continue
         node_type = str(node.get("type") or node.get("nodeType") or "unknown")
+        label = str(node.get("label") or node.get("nodeLabel") or node.get("value") or "unknown")
+        value = str(node.get("value") or label)
+        node_data = node.get("data") if isinstance(node.get("data"), dict) else node.get("nodeProperties", {}) if isinstance(node.get("nodeProperties"), dict) else {}
+        confidence = str(node.get("confidence") or node_data.get("confidence") or "medium").lower()
         by_type[node_type] = by_type.get(node_type, 0) + 1
-        confidence = str(node.get("confidence") or node.get("nodeProperties", {}).get("confidence") or "medium").lower()
+        by_confidence[confidence] = by_confidence.get(confidence, 0) + 1
         if node_type == "ip" and confidence in {"confirmed", "high"}:
-            high_conf_ips.append(node.get("value") or node.get("nodeLabel"))
-    return {"nodes": len(nodes), "edges": len(edges), "by_type": by_type, "high_conf_ips": high_conf_ips[:25]}
+            high_conf_ips.append(value)
+        if node_type == "domain" and confidence in {"confirmed", "high"}:
+            high_conf_domains.append(value)
+        if confidence in {"low", "candidate", "weak"}:
+            weak_nodes.append({"id": node.get("id"), "type": node_type, "label": label, "value": value, "confidence": confidence})
+    return {
+        "nodes": len(nodes),
+        "edges": len(edges),
+        "by_type": by_type,
+        "by_confidence": by_confidence,
+        "edge_types": edge_types,
+        "high_conf_ips": high_conf_ips[:25],
+        "high_conf_domains": high_conf_domains[:25],
+        "weak_nodes": weak_nodes[:25],
+    }
+
+
+def recommended_transforms_for_node(node: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not node:
+        return [{"type": "suggest_transform", "transform": "full_identity_pipeline", "reason": "No active node; run a broad identity machine from the primary target."}]
+    node_type = str(node.get("type") or node.get("nodeType") or "unknown").lower()
+    mapping = {
+        "username": [("maigret_username", "Enumerate public profile presence"), ("full_identity_pipeline", "Cascade handle to profiles and infrastructure")],
+        "name": [("full_identity_pipeline", "Generate identity pivots from the name")],
+        "email": [("email_footprint", "Resolve mailbox domain, MX, DMARC and avatar pivots"), ("full_identity_pipeline", "Cascade mailbox to username and domain pivots")],
+        "domain": [("domain_recon", "Resolve DNS/RDAP/certificate pivots"), ("workspace_recon", "Map public mail/workspace posture")],
+        "ip": [("ip_recon", "Collect reverse DNS and RDAP allocation"), ("reverse_dns", "Pivot from IP to hostnames")],
+        "phone": [("phone_recon", "Validate E.164 and public numbering-plan hints")],
+        "profile": [("maigret_username", "Re-check extracted handle across public surfaces"), ("full_identity_pipeline", "Cascade profile to identity machine")],
+    }
+    return [{"type": "suggest_transform", "transform": transform, "reason": reason} for transform, reason in mapping.get(node_type, [("network_recon", "Run a conservative public infrastructure pivot")])]
 
 
 def fallback_oracle(prompt: str, graph_state: dict[str, Any], node: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -481,26 +522,44 @@ def fallback_oracle(prompt: str, graph_state: dict[str, Any], node: dict[str, An
     commands: list[dict[str, Any]] = []
     if "clear" in lowered and "highlight" in lowered:
         commands.append({"type": "clear_highlight"})
-    elif "ip" in lowered:
+    elif "ip" in lowered or "infrastructure" in lowered:
         commands.append({"type": "highlight_type", "nodeType": "ip", "minConfidence": 80 if "high" in lowered else 0})
-    elif "email" in lowered:
+    elif "email" in lowered or "mail" in lowered:
         commands.append({"type": "highlight_type", "nodeType": "email"})
     elif "domain" in lowered or "dns" in lowered:
         commands.append({"type": "highlight_type", "nodeType": "domain"})
-    elif "profile" in lowered or "social" in lowered or "username" in lowered:
+    elif "profile" in lowered or "social" in lowered or "username" in lowered or "identity" in lowered:
         commands.append({"type": "highlight_type", "nodeType": "profile" if "profile" in lowered else "username"})
 
-    node_hint = ""
+    if any(term in lowered for term in ["next", "transform", "pivot", "what should", "lanjut", "berikut"]):
+        commands.extend(recommended_transforms_for_node(node))
+
+    node_label = ""
     if node:
-        node_hint = f" Active node {node.get('label') or node.get('value')} is a {node.get('type')} pivot. Recommended next transform: full_identity_pipeline for identities, domain_recon for domains, email_footprint for emails."
+        node_label = f" Active node: {node.get('label') or node.get('value')} ({node.get('type')})."
+
+    gaps = []
+    by_type = metrics["by_type"]
+    if by_type.get("domain", 0) and not by_type.get("ip", 0):
+        gaps.append("domain nodes exist but no IP resolution is present")
+    if by_type.get("email", 0) and not by_type.get("service", 0):
+        gaps.append("email nodes exist but workspace/service posture is thin")
+    if by_type.get("username", 0) and not by_type.get("profile", 0):
+        gaps.append("username nodes exist but public profile confirmation is thin")
+    if metrics["weak_nodes"]:
+        gaps.append(f"{len(metrics['weak_nodes'])} low-confidence nodes need verification")
+
+    recommended = recommended_transforms_for_node(node)
     reply = (
-        f"Graph contains {metrics['nodes']} entities and {metrics['edges']} relationships. "
-        f"Type distribution: {metrics['by_type']}. "
-        f"High-confidence IP candidates: {metrics['high_conf_ips'] or 'none observed'}." + node_hint
+        f"Investigation posture: {metrics['nodes']} entities, {metrics['edges']} relationships. "
+        f"Entity distribution: {metrics['by_type']}. Confidence distribution: {metrics['by_confidence']}."
+        f" High-confidence IPs: {metrics['high_conf_ips'] or 'none'}. High-confidence domains: {metrics['high_conf_domains'] or 'none'}."
+        f"{node_label} Recommended next transforms: {[item['transform'] for item in recommended]}."
+        f" Collection gaps: {gaps or ['no obvious structural gaps from current graph']}."
     )
     if commands:
-        reply += " I queued a UI command to focus the relevant entity type."
-    return {"reply": reply, "commands": commands, "metrics": metrics, "provider": "local_rules"}
+        reply += " UI command(s) emitted for graph focus or next-action hints."
+    return {"reply": reply, "commands": commands, "metrics": metrics, "provider": "local_investigation_rules"}
 
 
 async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[str, Any], node: dict[str, Any] | None) -> dict[str, Any]:
@@ -509,10 +568,15 @@ async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[st
         return fallback_oracle(prompt, graph_state, node)
 
     system = (
-        "You are NexusIntel Oracle. Return concise JSON with keys reply and commands. "
-        "Commands may include {type:'highlight_type', nodeType:'ip|domain|email|username|profile'} or {type:'clear_highlight'}."
+        "You are NexusIntel Oracle, a senior OSINT investigation copilot. "
+        "Analyze only the supplied graph JSON and active node. Be concise, operational, and evidence-aware. "
+        "Return strict JSON with keys reply and commands. "
+        "Commands may include {type:'highlight_type', nodeType:'ip|domain|email|username|profile', minConfidence?:number}, "
+        "{type:'clear_highlight'}, or {type:'suggest_transform', transform:'domain_recon|email_footprint|maigret_username|phone_recon|full_identity_pipeline', reason:string}. "
+        "Do not invent findings; distinguish confirmed, weak, and missing evidence."
     )
-    compact_graph = {"metrics": graph_metrics(graph_state), "active_node": node}
+    metrics = graph_metrics(graph_state)
+    compact_graph = {"metrics": metrics, "active_node": node}
     user_prompt = f"Prompt: {prompt}\nGraph: {json.dumps(compact_graph, default=str)[:12000]}"
     endpoint = str((settings.get("llm") or {}).get("endpoint") or "").rstrip("/")
     model = str((settings.get("llm") or {}).get("model") or "llama3.1")
@@ -538,11 +602,12 @@ async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[st
             parsed = json.loads(content)
             if isinstance(parsed, dict) and "reply" in parsed:
                 parsed.setdefault("commands", [])
+                parsed.setdefault("metrics", metrics)
                 parsed.setdefault("provider", provider)
                 return parsed
         except Exception:
             pass
-        return {"reply": content or "Oracle returned an empty response.", "commands": [], "provider": provider}
+        return {"reply": content or "Oracle returned an empty response.", "commands": [], "metrics": metrics, "provider": provider}
     except Exception as exc:
         fallback = fallback_oracle(prompt, graph_state, node)
         fallback["reply"] = f"Configured LLM failed ({exc}). " + fallback["reply"]

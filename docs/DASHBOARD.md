@@ -116,4 +116,4 @@ Mode ini hanya untuk fallback manual. UI enterprise terbaru berjalan lewat Compo
 
 ## AI Oracle
 
-Oracle panel tersedia di `/graph`, `/workspace`, dan `/oracle`. Prompt natural language dikirim ke `/api/v1/oracle/chat` bersama JSON graph state. Jika LLM belum dikonfigurasi, backend memakai local rule-based Oracle untuk highlight entity type, summary, dan transform suggestion.
+Oracle panel tersedia di `/graph`, `/workspace`, dan `/oracle`. Prompt natural language dikirim ke `/api/v1/oracle/chat` bersama JSON graph state dan active node. Jika LLM belum dikonfigurasi, backend memakai local NexusIntel investigation brain untuk summary, confidence posture, high-confidence IP/domain pivots, highlight entity type, clear highlight, transform suggestion, dan collection-gap analysis. Quick prompts di panel Oracle mempercepat triage tanpa harus mengetik prompt panjang.

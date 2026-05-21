@@ -64,7 +64,13 @@ Oracle chat body:
 }
 ```
 
-Oracle responses include `reply`, `commands`, and `metrics`. UI commands currently include `highlight_type` and `clear_highlight`.
+Oracle responses include `reply`, `commands`, `metrics`, and provider metadata. UI commands include:
+
+- `highlight_type`: fade graph to a specific entity type, optionally with `minConfidence`.
+- `clear_highlight`: restore normal graph opacity.
+- `suggest_transform`: return a recommended next transform such as `maigret_username`, `email_footprint`, `domain_recon`, `phone_recon`, or `full_identity_pipeline`.
+
+When no LLM is configured, `/api/v1/oracle/chat` falls back to the local NexusIntel investigation brain. It does not invent findings; it only reasons from the submitted graph state, active node, and stored investigation graph.
 
 ## Investigations
 

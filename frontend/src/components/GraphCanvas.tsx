@@ -78,16 +78,16 @@ type GraphCanvasProps = {
   onError: (message: string) => void;
   onSystemLog?: (message: string) => void;
   onOracleNode?: (node: ApiGraphNode) => void;
-  searchTarget: string;
-  setSearchTarget: Dispatch<SetStateAction<string>>;
-  reconMode: "passive" | "standard" | "aggressive";
-  setReconMode: Dispatch<SetStateAction<"passive" | "standard" | "aggressive">>;
-  onLaunch: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
-  isLaunching: boolean;
-  terminalOpen: boolean;
-  setTerminalOpen: Dispatch<SetStateAction<boolean>>;
-  dataPanelOpen: boolean;
-  setDataPanelOpen: Dispatch<SetStateAction<boolean>>;
+  searchTarget?: string;
+  setSearchTarget?: Dispatch<SetStateAction<string>>;
+  reconMode?: "passive" | "standard" | "aggressive";
+  setReconMode?: Dispatch<SetStateAction<"passive" | "standard" | "aggressive">>;
+  onLaunch?: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+  isLaunching?: boolean;
+  terminalOpen?: boolean;
+  setTerminalOpen?: Dispatch<SetStateAction<boolean>>;
+  dataPanelOpen?: boolean;
+  setDataPanelOpen?: Dispatch<SetStateAction<boolean>>;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
@@ -138,6 +138,7 @@ function apiNodeFromStrict(node: GraphNode): ApiGraphNode {
     value: String(node.nodeProperties.value || node.nodeLabel),
     source: String(node.nodeProperties.source || "graph"),
     confidence: String(node.nodeProperties.confidence || "medium"),
+    confidence_level: typeof node.nodeProperties.confidence_level === "number" ? node.nodeProperties.confidence_level : confidenceScore(String(node.nodeProperties.confidence || "medium")),
     data: node.nodeProperties,
     created_at: String(node.nodeProperties.created_at || new Date().toISOString()),
   };
@@ -160,6 +161,7 @@ function strictNodeFromApi(
         value: node.value,
         source: node.source || "graph",
         confidence: node.confidence || "medium",
+        confidence_level: typeof node.confidence_level === "number" ? node.confidence_level : typeof node.data?.confidence_level === "number" ? node.data.confidence_level : previous.nodeProperties.confidence_level,
         created_at: node.created_at || previous.nodeProperties.created_at || new Date().toISOString(),
       },
       nodeIcon: iconForApiNode(node),
@@ -187,6 +189,7 @@ function strictNodeFromApi(
       value: node.value,
       source: node.source || "graph",
       confidence: node.confidence || "medium",
+      confidence_level: typeof node.confidence_level === "number" ? node.confidence_level : typeof node.data?.confidence_level === "number" ? node.data.confidence_level : confidenceScore(node.confidence),
       created_at: node.created_at || new Date().toISOString(),
     },
     nodeShape: shapeFor(node.type),
@@ -353,6 +356,12 @@ function reportHtml(nodes: GraphNode[], edges: GraphEdge[], imageData: string, i
 </html>`;
 }
 
+function confidenceLevelForNode(node: GraphNode): number {
+  const numeric = Number(node.nodeProperties.confidence_level);
+  if (Number.isFinite(numeric)) return numeric;
+  return confidenceScore(String(node.nodeProperties.confidence || "medium")) || 50;
+}
+
 function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
   const confidence = String(node.nodeProperties.confidence || "medium");
   return {
@@ -425,14 +434,27 @@ export default function GraphCanvas({
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("force");
+  const [localSearchTarget, setLocalSearchTarget] = useState("");
+  const [localReconMode, setLocalReconMode] = useState<"passive" | "standard" | "aggressive">("standard");
+  const [localTerminalOpen, setLocalTerminalOpen] = useState(true);
+  const [localDataPanelOpen, setLocalDataPanelOpen] = useState(true);
   const [timelineMode, setTimelineMode] = useState(false);
   const [highlightType, setHighlightType] = useState("all");
+  const [highlightMinConfidence, setHighlightMinConfidence] = useState(0);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [contextTab, setContextTab] = useState<ContextTab>("transforms");
   const [runningTask, setRunningTask] = useState<string | null>(null);
   const [runningNodeId, setRunningNodeId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState(false);
 
+  const effectiveSearchTarget = searchTarget ?? localSearchTarget;
+  const effectiveSetSearchTarget = setSearchTarget ?? setLocalSearchTarget;
+  const effectiveReconMode = reconMode ?? localReconMode;
+  const effectiveSetReconMode = setReconMode ?? setLocalReconMode;
+  const effectiveTerminalOpen = terminalOpen ?? localTerminalOpen;
+  const effectiveSetTerminalOpen = setTerminalOpen ?? setLocalTerminalOpen;
+  const effectiveDataPanelOpen = dataPanelOpen ?? localDataPanelOpen;
+  const effectiveSetDataPanelOpen = setDataPanelOpen ?? setLocalDataPanelOpen;
   const selectedStrictNode = useMemo(() => graphNodes.find((node) => node.id === selectedNode?.id) || null, [graphNodes, selectedNode?.id]);
 
   const resizeGraph = useCallback((fit = false) => {
@@ -529,9 +551,9 @@ export default function GraphCanvas({
         return;
       }
       onSelectNode(apiNodesRef.current.get(node.id) || apiNodeFromStrict(node));
-      setDataPanelOpen(true);
+      effectiveSetDataPanelOpen(true);
     },
-    [onSelectNode, setDataPanelOpen],
+    [effectiveSetDataPanelOpen, onSelectNode],
   );
 
   const runLayout = useCallback((mode: LayoutMode = layoutMode, fit = true) => {
@@ -588,7 +610,7 @@ export default function GraphCanvas({
       try {
         const payload = await apiJson("/api/v1/transforms", {
           method: "POST",
-          body: JSON.stringify({ investigation_id: investigationId, node_id: node.id, transform, mode: reconMode }),
+          body: JSON.stringify({ investigation_id: investigationId, node_id: node.id, transform, mode: effectiveReconMode }),
         });
         setRunningTask(payload.data.task_id);
         onTaskStart(payload.data.task_id, transform, apiNodesRef.current.get(node.id) || apiNodeFromStrict(node));
@@ -599,7 +621,7 @@ export default function GraphCanvas({
         onError(error instanceof Error ? error.message : "Transform failed");
       }
     },
-    [investigationId, onError, onTaskStart, pollGraphUntilComplete, reconMode],
+    [effectiveReconMode, investigationId, onError, onTaskStart, pollGraphUntilComplete],
   );
 
   const deleteNode = useCallback(
@@ -685,7 +707,7 @@ export default function GraphCanvas({
       minZoom: 0.18,
       maxZoom: 2.8,
       pixelRatio: "auto",
-      style: [
+      style: ([
         {
           selector: "node",
           style: {
@@ -766,7 +788,7 @@ export default function GraphCanvas({
             width: 1.4,
           },
         },
-      ],
+      ] as unknown as cytoscape.StylesheetCSS[]),
       layout: { name: "preset", fit: false },
     });
 
@@ -818,7 +840,7 @@ export default function GraphCanvas({
     resizeGraph(false);
     const timer = window.setTimeout(() => resizeGraph(false), 340);
     return () => window.clearTimeout(timer);
-  }, [dataPanelOpen, resizeGraph, terminalOpen, timelineMode]);
+  }, [effectiveDataPanelOpen, effectiveTerminalOpen, resizeGraph, timelineMode]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -839,7 +861,7 @@ export default function GraphCanvas({
       graphNodes.forEach((node) => {
         const existing = cy.getElementById(node.id);
         const element = nodeElement(node);
-        const faded = highlightType !== "all" && node.nodeType !== highlightType;
+        const faded = highlightType !== "all" && (node.nodeType !== highlightType || confidenceLevelForNode(node) < highlightMinConfidence);
         const classes = `${element.classes || ""} ${node.id === runningNodeId ? "processing" : ""} ${faded ? "faded" : ""}`.trim();
         if (existing.length) {
           existing.data(element.data || {});
@@ -856,7 +878,8 @@ export default function GraphCanvas({
       graphEdges.forEach((edge) => {
         if (!cy.getElementById(edge.source).length || !cy.getElementById(edge.target).length) return;
         const existing = cy.getElementById(edge.id);
-        const faded = highlightType !== "all" && typeById.get(edge.source) !== highlightType && typeById.get(edge.target) !== highlightType;
+        const edgeConfidence = edge.confidence_level || 60;
+        const faded = highlightType !== "all" && ((typeById.get(edge.source) !== highlightType && typeById.get(edge.target) !== highlightType) || edgeConfidence < highlightMinConfidence);
         const element = edgeElement(edge, runningNodeId, faded);
         if (existing.length) {
           existing.data(element.data || {});
@@ -875,7 +898,7 @@ export default function GraphCanvas({
     } else {
       resizeGraph(false);
     }
-  }, [graphEdges, graphNodes, highlightType, layoutMode, resizeGraph, runLayout, runningNodeId]);
+  }, [graphEdges, graphNodes, highlightMinConfidence, highlightType, layoutMode, resizeGraph, runLayout, runningNodeId]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -919,12 +942,23 @@ export default function GraphCanvas({
   useEffect(() => {
     const handleOracleCommand = (event: Event) => {
       const detail = (event as CustomEvent).detail || {};
-      if (detail.type === "highlight_type" && detail.nodeType) setHighlightType(String(detail.nodeType));
-      if (detail.type === "clear_highlight") setHighlightType("all");
+      if (detail.type === "highlight_type" && detail.nodeType) {
+        setHighlightType(String(detail.nodeType));
+        setHighlightMinConfidence(Number(detail.minConfidence || 0));
+        onSystemLog?.(`[ORACLE] Highlighting ${detail.nodeType}${detail.minConfidence ? ` above ${detail.minConfidence}% confidence` : ""}.`);
+      }
+      if (detail.type === "clear_highlight") {
+        setHighlightType("all");
+        setHighlightMinConfidence(0);
+        onSystemLog?.("[ORACLE] Graph highlight cleared.");
+      }
+      if (detail.type === "suggest_transform" && detail.transform) {
+        onSystemLog?.(`[ORACLE] Suggested transform ${detail.transform}${detail.reason ? `: ${detail.reason}` : ""}`);
+      }
     };
     window.addEventListener("nexus:oracle-command", handleOracleCommand);
     return () => window.removeEventListener("nexus:oracle-command", handleOracleCommand);
-  }, []);
+  }, [onSystemLog]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -957,15 +991,15 @@ export default function GraphCanvas({
           <span>{graphEdges.length} relationships</span>
         </div>
 
-        <form className="graph-launcher" onSubmit={onLaunch}>
+        <form className="graph-launcher" onSubmit={onLaunch || ((event) => { event.preventDefault(); onError("Use the Command Center graph route to launch investigations."); })}>
           <Search size={15} />
-          <input value={searchTarget} onChange={(event) => setSearchTarget(event.target.value)} placeholder="username, email, domain, IP, phone" />
-          <select value={reconMode} onChange={(event) => setReconMode(event.target.value as "passive" | "standard" | "aggressive")}>
+          <input value={effectiveSearchTarget} onChange={(event) => effectiveSetSearchTarget(event.target.value)} placeholder="username, email, domain, IP, phone" />
+          <select value={effectiveReconMode} onChange={(event) => effectiveSetReconMode(event.target.value as "passive" | "standard" | "aggressive")}>
             <option value="passive">Passive</option>
             <option value="standard">Standard</option>
             <option value="aggressive">Aggressive</option>
           </select>
-          <button className="graph-launch-button" type="submit" disabled={isLaunching}>
+          <button className="graph-launch-button" type="submit" disabled={Boolean(isLaunching)}>
             <Radio size={14} />
             <span>{isLaunching ? "Running" : "Launch"}</span>
           </button>
@@ -981,7 +1015,7 @@ export default function GraphCanvas({
         <div className="graph-toolbar-controls">
           <div className="graph-smart-selector">
             <span>Highlight</span>
-            <select value={highlightType} onChange={(event) => setHighlightType(event.target.value)}>
+            <select value={highlightType} onChange={(event) => { setHighlightType(event.target.value); setHighlightMinConfidence(0); }}>
               <option value="all">All entities</option>
               <option value="username">Username</option>
               <option value="email">Email</option>
@@ -1021,10 +1055,10 @@ export default function GraphCanvas({
             <button className="icon-button" type="button" onClick={() => cyRef.current?.fit(undefined, 90)} title="Fit graph">
               <Crosshair size={16} />
             </button>
-            <button className={dataPanelOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => setDataPanelOpen((open) => !open)} title="Toggle entity data panel">
+            <button className={effectiveDataPanelOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => effectiveSetDataPanelOpen((open) => !open)} title="Toggle entity data panel">
               <PanelRight size={16} />
             </button>
-            <button className={terminalOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => setTerminalOpen((open) => !open)} title="Toggle terminal HUD">
+            <button className={effectiveTerminalOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => effectiveSetTerminalOpen((open) => !open)} title="Toggle terminal HUD">
               <PanelBottom size={16} />
             </button>
             <button className="graph-report-button" type="button" onClick={exportReport} title="Export Intelligence report">

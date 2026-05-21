@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { AtSign, Crosshair, Fingerprint, Globe2, Hash, Network, Phone, ShieldAlert, UserRound } from "lucide-react";
 
 export type EntityKind = "username" | "email" | "domain" | "ip" | "phone" | "profile" | "platform" | "service" | "signal" | "guardrail" | "target";
@@ -10,7 +11,7 @@ type CustomNodeProps = {
   confidence?: string;
 };
 
-export const ENTITY_KIND_META: Record<string, { label: string; icon: JSX.Element; description: string }> = {
+export const ENTITY_KIND_META: Record<string, { label: string; icon: ReactElement; description: string }> = {
   username: { label: "Username", icon: <UserRound size={15} />, description: "public identity pivot" },
   email: { label: "Email", icon: <AtSign size={15} />, description: "mail and workspace pivot" },
   domain: { label: "Domain", icon: <Globe2 size={15} />, description: "DNS and RDAP pivot" },

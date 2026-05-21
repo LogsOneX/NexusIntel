@@ -3450,3 +3450,103 @@ select:focus {
     height: min(420px, 70vh);
   }
 }
+
+
+/* Oracle investigation assistant polish */
+.oracle-panel {
+  background: #050505 !important;
+  border: 1px solid #333333;
+}
+
+.oracle-panel header > div,
+.oracle-metrics,
+.oracle-context,
+.oracle-quick-actions,
+.oracle-command-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.oracle-metrics {
+  min-height: 34px;
+  border-bottom: 1px solid #333333;
+  padding: 0 10px;
+  color: #888888;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.oracle-metrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.oracle-quick-actions {
+  align-items: stretch;
+  gap: 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid #333333;
+  padding: 8px;
+  scrollbar-width: none;
+}
+
+.oracle-quick-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.oracle-quick-actions button {
+  flex: 0 0 auto;
+  max-width: 220px;
+  min-height: 30px;
+  border: 1px solid #333333 !important;
+  background: #000000 !important;
+  color: #888888 !important;
+  padding: 0 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), color 220ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.oracle-quick-actions button:hover {
+  border-color: #ffffff !important;
+  color: #ffffff !important;
+  transform: translate3d(0, -1px, 0);
+}
+
+.oracle-message.user {
+  border-color: #555555;
+  background: #111111;
+}
+
+.oracle-message.oracle {
+  border-color: #ffffff;
+}
+
+.oracle-command-chips {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.oracle-command-chips code {
+  border: 1px solid #333333;
+  background: #000000;
+  color: #ffffff;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+
+.spin {
+  animation: nx-spin 900ms linear infinite;
+}
+
+@keyframes nx-spin {
+  to { transform: rotate(360deg); }
+}

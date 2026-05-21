@@ -342,7 +342,9 @@ Lihat [LICENSE](LICENSE) untuk teks lisensi lengkap.
 
 ## AI Oracle dan BYOK
 
-NexusIntel sekarang punya `/oracle` dan Oracle panel di `/graph` serta `/workspace`. Tanpa LLM eksternal, Oracle memakai local rule-based engine untuk highlight entity dan briefing dasar. Untuk LLM lokal/remote, buka Settings atau set env:
+NexusIntel sekarang punya `/oracle` dan Oracle panel kontekstual di `/graph` serta `/workspace`. Tanpa LLM eksternal, Oracle memakai local investigation brain berbasis aturan untuk membaca JSON graph state, menghitung posture kasus, mengurutkan pivot kuat, memberi rekomendasi transform berikutnya, highlight entity type, clear highlight, dan flag collection gap. Panel Oracle juga punya quick prompts untuk summary, next transform, high-confidence infrastructure, dan gap analysis.
+
+Untuk LLM lokal/remote, buka Settings atau set env:
 
 ```bash
 NEXUS_LLM_PROVIDER=ollama
