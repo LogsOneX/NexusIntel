@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bot,
@@ -12,9 +12,11 @@ import {
   KeyRound,
   LogOut,
   Network,
+  Plus,
   Settings,
   Shield,
   Terminal,
+  Trash2,
   UserCircle,
 } from "lucide-react";
 import GraphCanvas from "./GraphCanvas";
@@ -53,6 +55,17 @@ type Investigation = {
   created_at: string;
   updated_at: string;
   meta?: Record<string, unknown>;
+};
+
+type CaseHealth = {
+  score: number;
+  status: string;
+  node_count: number;
+  edge_count: number;
+  coverage: Record<string, number>;
+  weak_nodes: Array<Record<string, unknown>>;
+  isolated_nodes: Array<Record<string, unknown>>;
+  recommendations: Array<{ priority: string; action: string; reason: string }>;
 };
 
 type TerminalLine = {
@@ -208,15 +221,63 @@ function DashboardHome({ token, navigate }: PageProps) {
     <section className="page-grid">
       <header className="page-header"><div><span className="micro-label">Master Dashboard</span><h1>Case Management Hub</h1></div><button className="nx-secondary" type="button" onClick={() => navigate("/graph")}><Network size={15} />Open Graph</button></header>
       {error && <div className="nx-alert">{error}</div>}
-      <div className="command-card wide"><h2>Recent Investigations</h2><div className="intel-table"><div className="intel-row head"><span>Target</span><span>Type</span><span>Status</span><span>Updated</span></div>{cases.map((item) => <button className="intel-row" key={item.id} type="button" onClick={() => navigate("/graph")}><span>{item.meta?.case_name as string || item.target}</span><span>{item.target_type}</span><span>{item.status}</span><span>{new Date(item.updated_at).toLocaleString()}</span></button>)}</div></div>
-      <div className="folder-grid">{cases.slice(0, 6).map((item) => <button className="case-folder" key={item.id} type="button" onClick={() => navigate("/workspace")}><FolderOpen size={20} /><strong>{item.meta?.case_name as string || item.target}</strong><span>{item.target_type} / {item.status}</span></button>)}{!cases.length && <div className="command-card"><strong>No folders yet</strong><span>Launch a graph investigation to create the first case folder.</span></div>}</div>
+      <div className="command-card wide"><h2>Recent Investigations</h2><div className="intel-table"><div className="intel-row head"><span>Target</span><span>Type</span><span>Status</span><span>Updated</span></div>{cases.map((item) => <button className="intel-row" key={item.id} type="button" onClick={() => navigate(`/graph?case=${item.id}`)}><span>{item.meta?.case_name as string || item.target}</span><span>{item.target_type}</span><span>{item.status}</span><span>{new Date(item.updated_at).toLocaleString()}</span></button>)}</div></div>
+      <div className="folder-grid">{cases.slice(0, 6).map((item) => <button className="case-folder" key={item.id} type="button" onClick={() => navigate(`/workspace?case=${item.id}`)}><FolderOpen size={20} /><strong>{item.meta?.case_name as string || item.target}</strong><span>{item.target_type} / {item.status}</span></button>)}{!cases.length && <div className="command-card"><strong>No folders yet</strong><span>Launch a graph investigation to create the first case folder.</span></div>}</div>
       <div className="command-card"><h2>Global Timeline</h2><p>Open Network Graph and press Ctrl+T for temporal graph analysis.</p></div>
       <div className="command-card"><h2>Reports</h2><p>Use Export Intelligence in the graph toolbar to generate printable monochrome reports.</p></div>
     </section>
   );
 }
 
-function GraphHub({ token }: PageProps) {
+function caseTitle(item: Investigation): string {
+  return String(item.meta?.case_name || item.target || "Untitled Investigation");
+}
+
+function CaseDock({
+  investigations,
+  activeCase,
+  health,
+  onSelect,
+  onCreateBlank,
+  onDeleteActive,
+  onClearActive,
+  loading,
+}: {
+  investigations: Investigation[];
+  activeCase: Investigation | null;
+  health: CaseHealth | null;
+  onSelect: (id: string) => void;
+  onCreateBlank: () => void;
+  onDeleteActive: () => void;
+  onClearActive: () => void;
+  loading: boolean;
+}) {
+  const topRecommendation = health?.recommendations?.[0];
+  return (
+    <aside className="graph-case-dock" aria-label="Investigation lifecycle controls">
+      <header>
+        <div><FolderOpen size={14} /><strong>Investigation</strong></div>
+        <span>{activeCase ? activeCase.status : "detached"}</span>
+      </header>
+      <select value={activeCase?.id || ""} onChange={(event) => onSelect(event.target.value)} disabled={loading}>
+        <option value="">No case selected</option>
+        {investigations.map((item) => <option value={item.id} key={item.id}>{caseTitle(item)} / {item.target_type}</option>)}
+      </select>
+      <div className="case-dock-actions">
+        <button type="button" onClick={onCreateBlank} disabled={loading} title="Create a blank investigation from the toolbar target"><Plus size={13} />New</button>
+        <button type="button" onClick={onClearActive} disabled={!activeCase || loading} title="Detach graph without deleting"><Database size={13} />Clear</button>
+        <button className="danger" type="button" onClick={onDeleteActive} disabled={!activeCase || loading} title="Delete this investigation and its graph"><Trash2 size={13} />Delete</button>
+      </div>
+      <div className="case-health-strip">
+        <span><Activity size={13} />Health {health ? `${health.score}%` : "--"}</span>
+        <code>{health?.status || "no graph"}</code>
+      </div>
+      {topRecommendation && <p>{topRecommendation.action}: {topRecommendation.reason}</p>}
+    </aside>
+  );
+}
+
+function GraphHub({ token, navigate }: PageProps) {
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
   const [activeInvestigationId, setActiveInvestigationId] = useState<string | null>(null);
   const [graph, setGraph] = useState<GraphPayload>({ nodes: [], edges: [] });
@@ -224,6 +285,7 @@ function GraphHub({ token }: PageProps) {
   const [oracleNode, setOracleNode] = useState<ApiNode | null>(null);
   const [target, setTarget] = useState("");
   const [mode, setMode] = useState<"passive" | "standard" | "aggressive">("standard");
+  const [caseHealth, setCaseHealth] = useState<CaseHealth | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [taskLabel, setTaskLabel] = useState("idle");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
@@ -231,6 +293,7 @@ function GraphHub({ token }: PageProps) {
   const [dataPanelOpen, setDataPanelOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const initialCaseLoadedRef = useRef(false);
 
   const loadInvestigations = useCallback(async () => {
     const payload = await apiJson("/api/v1/investigations", undefined, token);
@@ -239,20 +302,69 @@ function GraphHub({ token }: PageProps) {
     return items as Investigation[];
   }, [token]);
 
+  const loadCaseHealth = useCallback(async (id: string) => {
+    try {
+      const payload = await apiJson(`/api/v1/investigations/${id}/health`, undefined, token);
+      setCaseHealth(payload.data.health || null);
+    } catch (caught) {
+      setCaseHealth(null);
+      setError(caught instanceof Error ? caught.message : "Failed to load case health");
+    }
+  }, [token]);
+
   const loadGraph = useCallback(async (id: string) => {
     const payload = await apiJson(`/api/v1/investigations/${id}/graph`, undefined, token);
     setActiveInvestigationId(id);
     setGraph(payload.data);
     setSelectedNode(null);
-  }, [token]);
+    setOracleNode(null);
+    await loadCaseHealth(id);
+  }, [loadCaseHealth, token]);
+
+  const clearActiveInvestigation = useCallback(() => {
+    setActiveInvestigationId(null);
+    setGraph({ nodes: [], edges: [] });
+    setSelectedNode(null);
+    setOracleNode(null);
+    setCaseHealth(null);
+    setCurrentTaskId(null);
+    setTaskLabel("idle");
+    navigate("/graph");
+  }, [navigate]);
+
+  const selectInvestigation = useCallback((id: string) => {
+    if (!id) {
+      clearActiveInvestigation();
+      return;
+    }
+    setError(null);
+    void loadGraph(id)
+      .then(() => {
+        navigate(`/graph?case=${id}`);
+        setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Loaded investigation ${id}`, time: new Date().toISOString() }]);
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load investigation"));
+  }, [clearActiveInvestigation, loadGraph, navigate]);
 
   useEffect(() => {
     loadInvestigations()
       .then((items) => {
-        if (!activeInvestigationId && items[0]?.id) void loadGraph(items[0].id).catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load latest graph"));
+        if (initialCaseLoadedRef.current) return;
+        initialCaseLoadedRef.current = true;
+        const requestedCase = new URLSearchParams(window.location.search).get("case");
+        if (requestedCase && items.some((item) => item.id === requestedCase)) selectInvestigation(requestedCase);
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load investigations"));
-  }, [activeInvestigationId, loadGraph, loadInvestigations]);
+  }, [loadInvestigations, selectInvestigation]);
+
+  useEffect(() => {
+    if (!activeInvestigationId) {
+      setCaseHealth(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => void loadCaseHealth(activeInvestigationId), 350);
+    return () => window.clearTimeout(timer);
+  }, [activeInvestigationId, graph.edges.length, graph.nodes.length, loadCaseHealth]);
 
   useEffect(() => {
     if (!currentTaskId) return undefined;
@@ -265,6 +377,45 @@ function GraphHub({ token }: PageProps) {
     return () => socket.close();
   }, [currentTaskId]);
 
+  const createBlankInvestigation = async () => {
+    const seed = target.trim() || `Untitled Investigation ${new Date().toLocaleString()}`;
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await apiJson("/api/v1/investigations", { method: "POST", body: JSON.stringify({ target: seed, mode, target_type: target.trim() ? undefined : "case" }) }, token);
+      const id = payload.data.investigation_id || payload.data.investigation;
+      await loadInvestigations();
+      await loadGraph(id);
+      navigate(`/graph?case=${id}`);
+      setTaskLabel(`blank case / ${seed}`);
+      setTerminalLines([{ level: "system", message: `New blank investigation created: ${seed}`, time: new Date().toISOString() }]);
+      setDataPanelOpen(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to create investigation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteActiveInvestigation = async () => {
+    const active = investigations.find((item) => item.id === activeInvestigationId) || null;
+    if (!active) return;
+    const confirmed = window.confirm(`Delete investigation "${caseTitle(active)}" and all graph data?`);
+    if (!confirmed) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await apiJson(`/api/v1/investigations/${active.id}`, { method: "DELETE" }, token);
+      await loadInvestigations();
+      clearActiveInvestigation();
+      setTerminalLines([{ level: "system", message: `Deleted investigation ${caseTitle(active)}`, time: new Date().toISOString() }]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to delete investigation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const startInvestigation = async (event: FormEvent) => {
     event.preventDefault();
     if (!target.trim()) return;
@@ -272,23 +423,25 @@ function GraphHub({ token }: PageProps) {
     setError(null);
     try {
       const payload = await apiJson("/api/v1/scans/nexusrecon", { method: "POST", body: JSON.stringify({ target: target.trim(), mode }) }, token);
-      setActiveInvestigationId(payload.data.investigation_id);
+      const id = payload.data.investigation_id;
+      setActiveInvestigationId(id);
       setGraph(payload.data.graph || { nodes: [], edges: [] });
       setCurrentTaskId(payload.data.task_id);
       setTaskLabel(`pipeline / ${target.trim()}`);
       setSelectedNode(null);
+      setOracleNode(null);
       setTerminalLines([]);
       setTerminalOpen(true);
       setDataPanelOpen(true);
+      navigate(`/graph?case=${id}`);
       await loadInvestigations();
+      await loadCaseHealth(id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to start investigation");
     } finally {
       setLoading(false);
     }
   };
-
-
 
   const rows = useMemo(() => {
     if (!selectedNode) return [];
@@ -332,7 +485,20 @@ function GraphHub({ token }: PageProps) {
           dataPanelOpen={dataPanelOpen}
           setDataPanelOpen={setDataPanelOpen}
         />
-        <aside className={dataPanelOpen ? "entity-spec" : "entity-spec closed"}><div className="nx-panel-title"><FileJson size={15} />Entity Data</div>{selectedNode ? <><h2>{selectedNode.label}</h2><code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code><div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div></> : <><h2>{activeCase?.target || "No active entity"}</h2><code>{activeCase ? `${activeCase.target_type} / ${activeCase.status}` : "no investigation loaded"}</code><p>Select a node to inspect structured intelligence. Latest investigation auto-loads when available.</p></>}</aside>
+        <CaseDock
+          investigations={investigations}
+          activeCase={activeCase}
+          health={caseHealth}
+          onSelect={selectInvestigation}
+          onCreateBlank={createBlankInvestigation}
+          onDeleteActive={deleteActiveInvestigation}
+          onClearActive={clearActiveInvestigation}
+          loading={loading}
+        />
+        <aside className={dataPanelOpen ? "entity-spec" : "entity-spec closed"}>
+          <div className="nx-panel-title"><FileJson size={15} />Entity Data</div>
+          {selectedNode ? <><h2>{selectedNode.label}</h2><code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code><div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div></> : <><h2>{activeCase?.target || "No active entity"}</h2><code>{activeCase ? `${activeCase.target_type} / ${activeCase.status}` : "no investigation loaded"}</code><p>Select a case from the investigation dock, create a blank investigation, or launch a new target scan from the toolbar.</p></>}
+        </aside>
         <section className={terminalOpen ? "graph-terminal" : "graph-terminal closed"}><header><Terminal size={15} /><strong>Live Terminal</strong><span>{taskLabel}</span></header><div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Waiting for telemetry...</code></p>}</div></section>
         {oracleNode && <div className="graph-oracle-popover"><button type="button" onClick={() => setOracleNode(null)}>Close Oracle</button><OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode} title="Node Oracle" /></div>}
       </div>
@@ -340,7 +506,7 @@ function GraphHub({ token }: PageProps) {
   );
 }
 
-function WorkspacePage({ token }: PageProps) {
+function WorkspacePage({ token, navigate }: PageProps) {
   const [cases, setCases] = useState<Investigation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [caseName, setCaseName] = useState("");
@@ -348,26 +514,60 @@ function WorkspacePage({ token }: PageProps) {
   const [notes, setNotes] = useState("");
   const [brief, setBrief] = useState<string | null>(null);
   const [graph, setGraph] = useState<GraphPayload>({ nodes: [], edges: [] });
+  const [error, setError] = useState<string | null>(null);
+  const initialCaseLoadedRef = useRef(false);
 
   const loadCases = useCallback(async () => {
     const payload = await apiJson("/api/v1/cases", undefined, token);
-    setCases(payload.data.items || []);
+    const items = payload.data.items || [];
+    setCases(items);
+    return items as Investigation[];
   }, [token]);
-  useEffect(() => { loadCases(); }, [loadCases]);
 
-  const selectCase = async (item: Investigation) => {
+  const selectCase = useCallback(async (item: Investigation) => {
     setActiveId(item.id);
     setCaseName(String(item.meta?.case_name || item.target));
     setOperator(String(item.meta?.assigned_operator || ""));
     setNotes(String(item.meta?.notes || ""));
+    setBrief(null);
     const payload = await apiJson(`/api/v1/investigations/${item.id}/graph`, undefined, token);
     setGraph(payload.data);
-  };
+    navigate(`/workspace?case=${item.id}`);
+  }, [navigate, token]);
+
+  useEffect(() => {
+    loadCases()
+      .then((items) => {
+        if (initialCaseLoadedRef.current) return;
+        initialCaseLoadedRef.current = true;
+        const requestedCase = new URLSearchParams(window.location.search).get("case");
+        const selected = requestedCase ? items.find((item) => item.id === requestedCase) : null;
+        if (selected) void selectCase(selected);
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load cases"));
+  }, [loadCases, selectCase]);
 
   const saveCase = async () => {
     if (!activeId) return;
     await apiJson(`/api/v1/cases/${activeId}`, { method: "PATCH", body: JSON.stringify({ case_name: caseName, assigned_operator: operator, notes }) }, token);
     await loadCases();
+  };
+
+  const deleteCase = async (item: Investigation) => {
+    const confirmed = window.confirm(`Delete investigation "${caseTitle(item)}" and all graph data?`);
+    if (!confirmed) return;
+    await apiJson(`/api/v1/investigations/${item.id}`, { method: "DELETE" }, token);
+    const items = await loadCases();
+    if (activeId === item.id) {
+      setActiveId(null);
+      setCaseName("");
+      setOperator("");
+      setNotes("");
+      setBrief(null);
+      setGraph({ nodes: [], edges: [] });
+      navigate("/workspace");
+    }
+    if (!items.length) setError(null);
   };
 
   const autoBrief = async () => {
@@ -376,7 +576,17 @@ function WorkspacePage({ token }: PageProps) {
     setBrief(`${payload.data.executive_summary}\n\nThreat Assessment:\n${payload.data.threat_assessment}`);
   };
 
-  return <section className="workspace-page"><header className="page-header"><div><span className="micro-label">Workspace</span><h1>Case Management</h1></div><button className="nx-secondary" type="button" onClick={autoBrief} disabled={!activeId}><Bot size={15} />AI Auto-Briefing</button></header><div className="workspace-grid"><aside className="case-strip large">{cases.map((item) => <button className={item.id === activeId ? "active" : ""} key={item.id} type="button" onClick={() => selectCase(item)}>{item.meta?.case_name as string || item.target}<span>{item.target_type} / {item.status}</span></button>)}</aside><section className="case-editor"><label>Case Name<input value={caseName} onChange={(event) => setCaseName(event.target.value)} /></label><label>Assigned Operator<input value={operator} onChange={(event) => setOperator(event.target.value)} /></label><label>Investigation Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Markdown notes" /></label><button className="nx-primary" type="button" onClick={saveCase} disabled={!activeId}>Save Case</button>{brief && <pre className="brief-box">{brief}</pre>}</section><OraclePanel token={token} investigationId={activeId} graph={graph} title="Workspace Oracle" /></div></section>;
+  return (
+    <section className="workspace-page">
+      <header className="page-header"><div><span className="micro-label">Workspace</span><h1>Case Management</h1></div><div className="page-actions"><button className="nx-secondary" type="button" onClick={() => navigate("/graph")}><Plus size={15} />New Investigation</button><button className="nx-secondary" type="button" onClick={autoBrief} disabled={!activeId}><Bot size={15} />AI Auto-Briefing</button></div></header>
+      {error && <div className="nx-alert">{error}</div>}
+      <div className="workspace-grid">
+        <aside className="case-strip large"><strong>Case Folders</strong>{cases.map((item) => <div className={item.id === activeId ? "case-list-item active" : "case-list-item"} key={item.id}><button type="button" onClick={() => void selectCase(item)}>{caseTitle(item)}<span>{item.target_type} / {item.status}</span></button><button className="case-delete-button" type="button" onClick={() => void deleteCase(item)} title="Delete investigation"><Trash2 size={13} /></button></div>)}{!cases.length && <span>No cases yet. Create one from Network Graph.</span>}</aside>
+        <section className="case-editor"><label>Case Name<input value={caseName} onChange={(event) => setCaseName(event.target.value)} /></label><label>Assigned Operator<input value={operator} onChange={(event) => setOperator(event.target.value)} /></label><label>Investigation Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Markdown notes" /></label><button className="nx-primary" type="button" onClick={saveCase} disabled={!activeId}>Save Case</button>{brief && <pre className="brief-box">{brief}</pre>}</section>
+        <OraclePanel token={token} investigationId={activeId} graph={graph} title="Workspace Oracle" />
+      </div>
+    </section>
+  );
 }
 
 function SettingsPage({ token }: PageProps) {
@@ -396,18 +606,27 @@ function AccountPage({ user }: PageProps) {
   return <section className="account-page"><header className="page-header"><div><span className="micro-label">Account</span><h1>Operator Profile</h1></div></header><div className="command-card"><UserCircle size={24} /><h2>{user}</h2><p>Local operator session. Logout clears the browser token and returns to the terminal login screen.</p></div></section>;
 }
 
+function routeFromLocation(): string {
+  return window.location.pathname === "/" ? "/dashboard" : window.location.pathname;
+}
+
+function routeFromPath(path: string): string {
+  const clean = path.split("?")[0] || "/dashboard";
+  return clean === "/" ? "/dashboard" : clean;
+}
+
 export default function CommandCenter() {
   const [session, setSession] = useState<SessionState>(() => readSession());
-  const [route, setRoute] = useState(() => window.location.pathname === "/" ? "/dashboard" : window.location.pathname);
+  const [route, setRoute] = useState(() => routeFromLocation());
   const [collapsed, setCollapsed] = useState(false);
 
   const navigate = useCallback((path: string) => {
     window.history.pushState({}, "", path);
-    setRoute(path);
+    setRoute(routeFromPath(path));
   }, []);
 
   useEffect(() => {
-    const onPop = () => setRoute(window.location.pathname === "/" ? "/dashboard" : window.location.pathname);
+    const onPop = () => setRoute(routeFromLocation());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);

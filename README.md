@@ -216,15 +216,17 @@ Folder `data/` di-ignore dari git.
 
 ## Command Center Flow
 
-UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan edge-to-edge tactical canvas, unified master toolbar, integrated launch form, drag-and-drop entity palette, right-click Logic Flow, Playbooks, Smart Selector, collapsible data drawer, collapsible terminal HUD, Timeline Mode, dan Export Intelligence report.
+UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan edge-to-edge tactical canvas, unified master toolbar, integrated launch form, drag-and-drop entity palette, right-click Logic Flow, Playbooks, Smart Selector, collapsible data drawer, collapsible terminal HUD, Timeline Mode, Export Intelligence report, dan explicit investigation lifecycle dock untuk select/new/clear/delete case tanpa auto-load case lama.
 
-1. Submit target username/email/domain/IP/phone.
-2. API mengklasifikasi target dan membuat investigation + root entity.
-3. Worker Celery menjalankan pipeline OSINT public-source sesuai tipe target.
-4. `backend/recon_validators.py` memvalidasi, memecah, dan menormalisasi artifact menjadi schema graph.
-5. Worker menulis node/edge ke PostgreSQL dan menyiarkan log real-time ke Redis.
-6. UI menerima WebSocket telemetry di terminal HUD.
-7. Graph refresh otomatis dan investigator bisa klik/right-click/drag-drop entity untuk transform lanjutan.
+1. Buka Network Graph; canvas mulai detached kecuali URL berisi `?case=<id>`.
+2. Pilih investigation dari lifecycle dock, buat blank investigation, atau submit target username/email/domain/IP/phone.
+3. API mengklasifikasi target dan membuat investigation + root entity.
+4. Worker Celery menjalankan pipeline OSINT public-source sesuai tipe target.
+5. `backend/recon_validators.py` memvalidasi, memecah, dan menormalisasi artifact menjadi schema graph.
+6. Worker menulis node/edge ke PostgreSQL dan menyiarkan log real-time ke Redis.
+7. UI menerima WebSocket telemetry di terminal HUD.
+8. Case Hygiene module menghitung health score, weak nodes, isolated nodes, coverage gaps, dan rekomendasi transform.
+9. Graph refresh otomatis dan investigator bisa klik/right-click/drag-drop entity untuk transform lanjutan.
 
 Transform utama:
 
@@ -234,6 +236,7 @@ Transform utama:
 - IP recon: reverse DNS, RDAP allocation, dan GeoIP/ASN hint dari sumber gratis.
 - Phone recon: E.164 validation, country calling code, dan offline public numbering-plan hint.
 - Manual entity builder + drag-and-drop entity pipeline: tambah entity dan link langsung ke selected node.
+- Case Hygiene: health score, coverage, weak/isolated entity detection, dan next-action recommendation untuk menjaga kualitas investigation.
 
 ## Deep Recon Validator
 

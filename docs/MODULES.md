@@ -31,6 +31,10 @@ Email posture resolver yang memvalidasi format, mendeteksi disposable domain, me
 
 Phone posture resolver: normalisasi E.164, parsing `phonenumbers`, carrier/geolocation/timezone jika library tersedia, fallback numbering-plan lokal, public deep-link DOM/OpenGraph metadata, dan deep-link candidate artifacts tanpa klaim registrasi messenger.
 
+### `backend/modules/case_hygiene.py`
+
+Investigation quality module untuk menghitung health score, coverage entity, weak-confidence nodes, isolated nodes, edge distribution, dan rekomendasi next action. Modul ini dipakai oleh endpoint `/api/v1/investigations/{investigation_id}/health` dan lifecycle dock di Network Graph supaya operator tahu apakah case sudah matang, masih tipis, atau perlu transform lanjutan.
+
 ## Runtime Transform Validators
 
 ### `analyze_identity_target`

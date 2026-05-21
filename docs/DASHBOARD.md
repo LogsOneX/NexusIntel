@@ -31,22 +31,24 @@ docker compose down
 - Persistent sidebar: Dashboard, Workspace, Network Graph, AI Oracle, Settings, Account.
 - Dashboard: recent investigations, case folders, timeline/report quick links.
 - Workspace: case name, assigned operator, markdown notes, AI auto-briefing.
-- Network Graph: edge-to-edge tactical canvas, unified master toolbar, integrated launch form, entity palette, Smart Selector, Playbooks, Ask Oracle from node context menu, collapsible data panel, and collapsible terminal HUD.
+- Network Graph: edge-to-edge tactical canvas, explicit investigation lifecycle dock (select/new/clear/delete), unified master toolbar, integrated launch form, entity palette, Smart Selector, Playbooks, Ask Oracle from node context menu, collapsible data panel, and collapsible terminal HUD.
 - Settings: BYOK API keys and LLM provider configuration.
 
 ## Tactical Canvas
 
-Network Graph sekarang memakai layout Maltego-purity: canvas memenuhi seluruh area kerja, tanpa case strip dan tanpa command bar terpisah. Data panel kanan dan terminal bawah berada sebagai overlay absolute yang bisa disembunyikan, sehingga investigator bisa fokus 100% pada visual link analysis. Semua kontrol utama berada di `tactical-graph-toolbar`: stats, launch form, entity palette, smart selector, layout switcher, timeline, fit, export, dan toggle panel. Oracle tidak lagi permanen di bawah graph; panel Oracle hanya muncul sebagai overlay saat dipanggil dari context menu node.
+Network Graph sekarang memakai layout Maltego-purity: canvas memenuhi seluruh area kerja, tanpa case strip besar dan tanpa command bar terpisah. Graph tidak auto-load investigation lama; user memilih case eksplisit dari lifecycle dock atau membuka URL `/graph?case=<id>`. Data panel kanan dan terminal bawah berada sebagai overlay absolute yang bisa disembunyikan, sehingga investigator bisa fokus 100% pada visual link analysis. Semua kontrol utama berada di `tactical-graph-toolbar`: stats, launch form, entity palette, smart selector, layout switcher, timeline, fit, export, dan toggle panel. Oracle tidak lagi permanen di bawah graph; panel Oracle hanya muncul sebagai overlay saat dipanggil dari context menu node.
 
 ## Graph Workflow
 
-1. Submit target dari integrated launcher di master toolbar.
-2. Worker membuat node root dan entity hasil recon.
+1. Pilih case dari lifecycle dock, klik New untuk blank investigation, atau submit target dari integrated launcher di master toolbar.
+2. Worker membuat node root dan entity hasil recon jika launch scan dipakai.
 3. Klik node untuk inspect data di collapsible data panel.
 4. Right-click node untuk menjalankan transform atau Ask Oracle.
 5. Drag username/email/domain/IP/phone dari entity palette untuk menambah pivot manual.
 6. Terminal HUD tetap menerima telemetry meskipun panel disembunyikan.
 7. Graph refresh otomatis saat task berjalan tanpa mereset pan/zoom.
+8. Delete investigation tersedia di Graph lifecycle dock dan Workspace case folders; delete menghapus case beserta graph data lewat API.
+9. Health strip menampilkan Case Hygiene score dan rekomendasi next action.
 
 ## Context Transforms
 

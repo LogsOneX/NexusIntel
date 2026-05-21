@@ -75,9 +75,12 @@ When no LLM is configured, `/api/v1/oracle/chat` falls back to the local NexusIn
 ## Investigations
 
 ```text
-POST /api/v1/investigations
-GET  /api/v1/investigations
-GET  /api/v1/investigations/{investigation_id}/graph
+POST   /api/v1/investigations
+GET    /api/v1/investigations
+GET    /api/v1/investigations/{investigation_id}/graph
+GET    /api/v1/investigations/{investigation_id}/health
+DELETE /api/v1/investigations/{investigation_id}
+DELETE /api/v1/cases/{investigation_id}
 ```
 
 Create body:
@@ -90,7 +93,7 @@ Create body:
 }
 ```
 
-`target_type` is optional. The backend can classify username, email, domain, IP, and phone-like targets.
+`target_type` is optional. The backend can classify username, email, domain, IP, and phone-like targets. `POST /api/v1/investigations` creates a blank/ready case with a root node. `POST /api/v1/scans/nexusrecon` creates a case and immediately queues the recon worker. The health endpoint returns Case Hygiene score, coverage, weak nodes, isolated nodes, and recommendations.
 
 ## Quick Scan
 

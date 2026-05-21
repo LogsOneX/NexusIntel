@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
 from tasks import run_domain_task, run_email_google_task, run_full_identity_pipeline_task, run_nexusrecon_task, run_phone_task
+from backend.modules.case_hygiene import build_case_hygiene_report
 
 
 DATABASE_URL = os.getenv(
@@ -708,7 +709,7 @@ async def create_investigation(payload: InvestigationCreate, db: Session = Depen
         data={"role": "root", "created_at": now_iso()},
     )
     db.commit()
-    return ApiResponse(ok=True, data={"investigation": investigation.id, "root_node": serialize_entity(root)})
+    return ApiResponse(ok=True, data={"investigation": investigation.id, "investigation_id": investigation.id, "root_node": serialize_entity(root), "graph": graph_payload(db, investigation.id)})
 
 
 @app.get("/api/v1/investigations", response_model=ApiResponse)
@@ -740,6 +741,30 @@ def get_graph(investigation_id: str, db: Session = Depends(get_db)) -> ApiRespon
     if not investigation:
         raise HTTPException(status_code=404, detail="Investigation not found")
     return ApiResponse(ok=True, data=graph_payload(db, investigation_id))
+
+
+@app.get("/api/v1/investigations/{investigation_id}/health", response_model=ApiResponse)
+def investigation_health(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    report = build_case_hygiene_report(graph_payload(db, investigation_id))
+    return ApiResponse(ok=True, data={"investigation_id": investigation_id, "health": report})
+
+
+@app.delete("/api/v1/investigations/{investigation_id}", response_model=ApiResponse)
+def delete_investigation(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    db.delete(investigation)
+    db.commit()
+    return ApiResponse(ok=True, data={"deleted": investigation_id})
+
+
+@app.delete("/api/v1/cases/{investigation_id}", response_model=ApiResponse)
+def delete_case(investigation_id: str, db: Session = Depends(get_db), operator: str = Depends(current_operator)) -> ApiResponse:
+    return delete_investigation(investigation_id, db, operator)
 
 
 @app.post("/api/v1/scans/nexusrecon", response_model=ApiResponse)
