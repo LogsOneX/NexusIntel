@@ -9,6 +9,7 @@ import os
 import socket
 import sys
 import uuid
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import Any
 
@@ -20,7 +21,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstra
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from recon_validators import analyze_email_target, analyze_identity_target, analyze_network_target, analyze_phone_target
+from recon_validators import analyze_email_target, analyze_identity_target, analyze_network_target, analyze_phone_target, normalize_username
 
 
 DATABASE_URL = os.getenv(
@@ -351,17 +352,28 @@ def platform_icon(hostname: str) -> str:
 
 
 def normalize_nexus_result(raw: Any) -> list[dict[str, Any]]:
-    if isinstance(raw, dict) and "results" in raw and isinstance(raw["results"], list):
-        items = raw["results"]
-    elif isinstance(raw, list):
-        items = raw
-    elif isinstance(raw, dict):
-        items = [raw]
+    def object_to_dict(value: Any) -> Any:
+        if is_dataclass(value):
+            return asdict(value)
+        if isinstance(value, dict):
+            return value
+        if hasattr(value, "__dict__"):
+            return {key: item for key, item in vars(value).items() if not key.startswith("_")}
+        return value
+
+    payload = object_to_dict(raw)
+    if isinstance(payload, dict) and "results" in payload and isinstance(payload["results"], list):
+        items = payload["results"]
+    elif isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        items = [payload]
     else:
         items = []
 
     normalized: list[dict[str, Any]] = []
-    for item in items:
+    for raw_item in items:
+        item = object_to_dict(raw_item)
         if not isinstance(item, dict):
             continue
         status = str(item.get("status") or item.get("state") or "").lower()
@@ -412,7 +424,16 @@ def run_nexusrecon_task(
         mark_task(db, task_id, "running")
         mark_investigation(db, investigation_id, "running")
         db.commit()
-        emit(task_id, "info", f"Starting standalone NexusRecon username sweep: {target}", {"mode": mode}, investigation_id)
+        username = normalize_username(target)
+        if not username:
+            raise ValueError("Username target is empty after normalization")
+        emit(
+            task_id,
+            "info",
+            f"Starting standalone NexusRecon username sweep: {username}",
+            {"mode": mode, "raw_target": target, "normalized_username": username},
+            investigation_id,
+        )
 
         parent = db.get(Entity, parent_node_id) if parent_node_id else None
         if not parent:
@@ -420,34 +441,34 @@ def run_nexusrecon_task(
                 db,
                 investigation_id,
                 type_="username",
-                label=target,
-                value=target,
+                label=username,
+                value=username,
                 source="nexusrecon",
                 confidence="confirmed",
-                data={"role": "pivot", "mode": mode},
+                data={"role": "pivot", "mode": mode, "raw_input": target},
             )
             db.commit()
 
-        identity_analysis = asyncio.run(analyze_identity_target(target, mode))
+        identity_analysis = asyncio.run(analyze_identity_target(username, mode))
         identity_nodes = persist_artifacts(db, investigation_id, parent, identity_analysis["artifacts"], "identity_recon")
         db.commit()
         emit(
             task_id,
             "tool",
-            f"Identity parser normalized {len(identity_nodes)} public-source pivots",
-            {"kind": identity_analysis["kind"], "guardrails": identity_analysis["guardrails"]},
+            f"Identity parser normalized {len(identity_nodes)} public-source pivots for {username}",
+            {"kind": identity_analysis["kind"], "target": identity_analysis["target"], "guardrails": identity_analysis["guardrails"]},
             investigation_id,
         )
 
         writer = RedisLineWriter(task_id, investigation_id)
         with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
-            raw = asyncio.run(run_legacy_nexus(target, mode))
+            raw = asyncio.run(run_legacy_nexus(username, mode))
         writer.flush()
 
         results = normalize_nexus_result(raw)
         found_count = 0
         for item in results:
-            if not item.get("found") and mode == "passive":
+            if not item.get("found") and mode != "aggressive":
                 continue
             platform = item["site"]
             profile = item["url"]
@@ -465,7 +486,7 @@ def run_nexusrecon_task(
                 db,
                 investigation_id,
                 type_="profile",
-                label=f"{target} @ {platform}",
+                label=f"{username} @ {platform}",
                 value=profile,
                 source="nexusrecon",
                 confidence="high" if item.get("found") else "low",
@@ -492,7 +513,8 @@ def run_nexusrecon_task(
             found_count += 1
 
         result = {
-            "target": target,
+            "target": username,
+            "raw_target": target,
             "mode": mode,
             "profiles": found_count,
             "raw_count": len(results),
@@ -501,7 +523,11 @@ def run_nexusrecon_task(
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
         db.commit()
-        emit(task_id, "success", f"NexusRecon sweep completed: {found_count} profile signals normalized", result, investigation_id)
+        level = "success" if found_count else "warning"
+        message = f"NexusRecon sweep completed: {found_count} confirmed profile signals normalized"
+        if not found_count:
+            message += "; no confirmed public profiles matched this handle"
+        emit(task_id, level, message, result, investigation_id)
         return result
     except Exception as exc:
         db.rollback()

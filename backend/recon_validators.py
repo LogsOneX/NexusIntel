@@ -105,6 +105,17 @@ def normalize_domain(value: str) -> str:
     return raw.split("/")[0].split(":")[0].strip(".")
 
 
+def normalize_username(value: str) -> str:
+    raw = value.strip()
+    if raw.startswith("@"):
+        raw = raw[1:]
+    if "/" in raw:
+        raw = raw.rstrip("/").split("/")[-1]
+        if raw.startswith("@"):
+            raw = raw[1:]
+    return re.sub(r"[^A-Za-z0-9._-]", "", raw)
+
+
 def target_kind(value: str) -> str:
     candidate = value.strip()
     if EMAIL_RE.match(candidate):
@@ -462,17 +473,18 @@ def analyze_phone_target(value: str, mode: str = "standard") -> dict[str, Any]:
 
 async def analyze_identity_target(value: str, mode: str = "standard") -> dict[str, Any]:
     raw = value.strip()
-    is_username = bool(USERNAME_RE.match(raw))
+    username = normalize_username(raw)
+    is_username = bool(USERNAME_RE.match(username))
     parts = [part for part in re.split(r"\s+", raw) if part]
     artifacts: list[ReconArtifact] = []
     if is_username:
-        artifacts.append(ReconArtifact("username", raw, raw, "identity_recon", "confirmed", "is_target", {"valid_username_shape": True}))
+        artifacts.append(ReconArtifact("username", username, username, "identity_recon", "confirmed", "is_target", {"valid_username_shape": True, "raw_input": raw}))
         for name, template, category in PUBLIC_PLATFORM_TEMPLATES:
             artifacts.append(
                 ReconArtifact(
                     "profile_candidate",
-                    f"{raw} @ {name}",
-                    template.format(username=raw),
+                    f"{username} @ {name}",
+                    template.format(username=username),
                     "identity_recon",
                     "low",
                     "candidate_profile",
@@ -497,7 +509,8 @@ async def analyze_identity_target(value: str, mode: str = "standard") -> dict[st
         )
     )
     return {
-        "target": raw,
+        "target": username if is_username else raw,
+        "raw_input": raw,
         "kind": "username" if is_username else "name",
         "valid_username_shape": is_username,
         "name_parts": parts,
