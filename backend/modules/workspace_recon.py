@@ -5,7 +5,7 @@ from typing import Any
 
 import dns.resolver
 
-from .common import AsyncHttpClient, EmitCallback, ReconFinding, md5_lower, maybe_emit, normalize_domain
+from .common import AsyncHttpClient, EmitCallback, ReconFinding, md5_lower, maybe_emit, normalize_domain, public_metadata
 
 try:
     import aiodns  # type: ignore
@@ -92,8 +92,10 @@ class WorkspaceResolver:
                 )
         if "spf1" in joined_txt:
             findings.append(ReconFinding("email_security", "SPF Policy", f"{domain}:spf", "ghost_workspace", "medium", "HAS_EMAIL_SECURITY", {"policy": "SPF"}))
-        if any("dmarc" in record.lower() for record in txt):
+        if any("dmarc" in record.lower() or "v=dmarc1" in record.lower() for record in txt):
             findings.append(ReconFinding("email_security", "DMARC Policy", f"{domain}:dmarc", "ghost_workspace", "medium", "HAS_EMAIL_SECURITY", {"policy": "DMARC"}))
+        if any("v=bimi1" in record.lower() for record in txt):
+            findings.append(ReconFinding("email_security", "BIMI Policy", f"{domain}:bimi", "ghost_workspace", "medium", "HAS_EMAIL_SECURITY", {"policy": "BIMI"}))
         return findings
 
     async def microsoft_tenant_hint(self, client: AsyncHttpClient, domain: str) -> ReconFinding | None:
@@ -102,6 +104,24 @@ class WorkspaceResolver:
         if int(result.get("status") or 0) == 200 and "authorization_endpoint" in str(result.get("text") or ""):
             return ReconFinding("tenant", "Microsoft tenant discovery", f"microsoft:{domain}", "ghost_workspace", "medium", "HAS_TENANT_HINT", {"endpoint": url, "status_code": 200})
         return None
+
+    async def public_document_hint(self, client: AsyncHttpClient, label: str, url: str, marker: str | None = None) -> ReconFinding | None:
+        result = await client.request_text("GET", url, retries=1, max_bytes=180_000)
+        status = int(result.get("status") or 0)
+        text = str(result.get("text") or "")
+        if status >= 400 or not text:
+            return None
+        if marker and marker.lower() not in text[:80_000].lower():
+            return None
+        return ReconFinding(
+            "public_workspace_document",
+            label,
+            url,
+            "ghost_workspace",
+            "medium",
+            "EXPOSES_PUBLIC_WORKSPACE_DOCUMENT",
+            {"status_code": status, "final_url": result.get("url"), "metadata": public_metadata(text), "sample": text[:600]},
+        )
 
     async def gravatar(self, client: AsyncHttpClient, email: str) -> ReconFinding:
         digest = md5_lower(email)
@@ -121,23 +141,33 @@ class WorkspaceResolver:
     async def resolve(self, target: str, *, emit: EmitCallback | None = None) -> dict[str, Any]:
         email = target.strip().lower()
         domain = normalize_domain(email.rsplit("@", 1)[-1] if "@" in email else email)
-        mx_task = self.dns.resolve(domain, "MX")
-        txt_task = self.dns.resolve(domain, "TXT")
-        dmarc_task = self.dns.resolve(f"_dmarc.{domain}", "TXT")
-        bimi_task = self.dns.resolve(f"default._bimi.{domain}", "TXT")
-        mx, txt, dmarc, bimi = await asyncio.gather(mx_task, txt_task, dmarc_task, bimi_task)
+        tasks = {
+            "MX": self.dns.resolve(domain, "MX"),
+            "TXT": self.dns.resolve(domain, "TXT"),
+            "DMARC": self.dns.resolve(f"_dmarc.{domain}", "TXT"),
+            "BIMI": self.dns.resolve(f"default._bimi.{domain}", "TXT"),
+            "MTA_STS_TXT": self.dns.resolve(f"_mta-sts.{domain}", "TXT"),
+        }
+        mx, txt, dmarc, bimi, mta_sts_txt = await asyncio.gather(*tasks.values())
+        record_map = {"MX": mx, "TXT": txt, "DMARC": dmarc, "BIMI": bimi, "MTA_STS_TXT": mta_sts_txt}
         findings: list[ReconFinding] = []
-        for record_type, values in {"MX": mx, "TXT": txt, "DMARC": dmarc, "BIMI": bimi}.items():
-            for value in values[:30]:
+        for record_type, values in record_map.items():
+            for value in values[:40]:
                 finding = ReconFinding("dns_record", f"{record_type} {value[:100]}", f"{record_type}:{domain}:{value}", "ghost_workspace", "high", "HAS_DNS_RECORD", {"record_type": record_type, "record": value})
                 findings.append(finding)
                 await maybe_emit(emit, f"Workspace DNS {record_type}: {value[:120]}", finding.as_artifact())
-        for finding in self.infer_services(domain, mx, txt + dmarc):
+        for finding in self.infer_services(domain, mx, txt + dmarc + bimi):
             findings.append(finding)
             await maybe_emit(emit, f"Workspace provider signal: {finding.label}", finding.as_artifact())
-        async with AsyncHttpClient(concurrency=8, timeout=self.timeout) as client:
-            tenant, avatar = await asyncio.gather(self.microsoft_tenant_hint(client, domain), self.gravatar(client, email) if "@" in email else asyncio.sleep(0, result=None))
-            for finding in [tenant, avatar]:
+        async with AsyncHttpClient(concurrency=10, timeout=self.timeout) as client:
+            document_tasks = [
+                self.microsoft_tenant_hint(client, domain),
+                self.gravatar(client, email) if "@" in email else asyncio.sleep(0, result=None),
+                self.public_document_hint(client, "MTA-STS policy", f"https://mta-sts.{domain}/.well-known/mta-sts.txt", "version: STSv1"),
+                self.public_document_hint(client, "Autoconfig mail profile", f"https://autoconfig.{domain}/mail/config-v1.1.xml"),
+                self.public_document_hint(client, "Autodiscover endpoint", f"https://autodiscover.{domain}/autodiscover/autodiscover.xml"),
+            ]
+            for finding in await asyncio.gather(*document_tasks):
                 if finding:
                     findings.append(finding)
                     await maybe_emit(emit, f"Workspace public signal: {finding.label}", finding.as_artifact())

@@ -13,23 +13,23 @@ Layer ini dipanggil oleh Celery sebelum hasil recon ditulis sebagai graph node/e
 
 ## Ghost Engine Backend Modules
 
-Folder `backend/modules/` adalah runtime OSINT async untuk dashboard/Celery. Modul ini berbeda dari folder legacy `modules/` di root. Semua modul memakai public-source/read-only signals dan menghindari signup, forgot-password, credential, contact-sync, SMTP VRFY, dan SMTP RCPT account-enumeration probes.
+Folder `backend/modules/` adalah runtime OSINT async untuk dashboard/Celery. Modul ini berbeda dari folder legacy `modules/` di root. Semua modul memakai public-source/read-only signals: HTTP status, public DOM/OpenGraph metadata, DNS, RDAP, dan public web documents. Modul tidak mengirim password reset/OTP, tidak membuat akun, tidak contact-sync, tidak SMTP VRFY/RCPT, dan tidak mengubah state layanan pihak ketiga.
 
 ### `backend/modules/identity_recon.py`
 
-Async username resolver dengan `aiohttp`, concurrency tinggi, 100+ platform profile URL, false-positive filtering, negative marker parsing, title extraction, dan confidence scoring. Hasil langsung di-stream ke WebSocket melalui callback Celery.
+Async username resolver dengan `aiohttp`, concurrency tinggi, curated public profile URLs, optional `NEXUS_PLATFORM_CATALOG` untuk registry internal 500+ surface, false-positive filtering, negative marker parsing, title/DOM metadata extraction, dan confidence scoring. Hasil langsung di-stream ke WebSocket melalui callback Celery.
 
 ### `backend/modules/workspace_recon.py`
 
-Workspace/cloud posture resolver: MX/TXT/DMARC/BIMI, Google/Microsoft/Proton/Zoho/Fastmail/Yandex/Amazon SES/Mailgun/SendGrid provider hints, Microsoft tenant discovery, dan Gravatar hash. DNS berjalan non-blocking via `asyncio.to_thread(dnspython)` agar stabil di Python 3.13.
+Workspace/cloud posture resolver: MX/TXT/DMARC/BIMI/MTA-STS, Google/Microsoft/Proton/Zoho/Fastmail/Yandex/Amazon SES/Mailgun/SendGrid provider hints, Microsoft tenant discovery, public workspace documents, dan Gravatar hash. DNS berjalan non-blocking via `asyncio.to_thread(dnspython)` agar stabil di Python 3.13.
 
 ### `backend/modules/email_recon.py`
 
-Email posture resolver yang memvalidasi format, mendeteksi disposable domain, memecah local-part/domain, menjalankan workspace resolver, dan melakukan public username pivot dari local-part. Tidak melakukan pre-registration check, password reset, SMTP VRFY, SMTP RCPT, atau contact-sync.
+Email posture resolver yang memvalidasi format, mendeteksi disposable domain, memecah local-part/domain, menjalankan workspace resolver, melakukan public username pivot dari local-part, dan mengambil GET-only public sign-up document signatures. Target email tidak dikirim ke form registrasi; tidak ada password reset, OTP, SMTP VRFY, SMTP RCPT, atau contact-sync.
 
 ### `backend/modules/phone_recon.py`
 
-Phone posture resolver: normalisasi E.164, parsing `phonenumbers`, carrier/geolocation/timezone jika library tersedia, fallback numbering-plan lokal, dan deep-link candidate artifacts tanpa fetch atau klaim registrasi messenger.
+Phone posture resolver: normalisasi E.164, parsing `phonenumbers`, carrier/geolocation/timezone jika library tersedia, fallback numbering-plan lokal, public deep-link DOM/OpenGraph metadata, dan deep-link candidate artifacts tanpa klaim registrasi messenger.
 
 ## Runtime Transform Validators
 
@@ -41,7 +41,7 @@ Target: `username`, `name`
 
 ### `analyze_email_target`
 
-Validasi format email, split local-part/domain, DNS MX/TXT/DMARC/BIMI, disposable-domain hint, mail exchanger posture, dan guardrail untuk breach/register probing.
+Validasi format email, split local-part/domain, DNS MX/TXT/DMARC/BIMI, disposable-domain hint, mail exchanger posture, public sign-up document signatures, dan guardrail untuk state-changing probes.
 
 Target: `email`, `domain-like email pivot`
 
@@ -53,7 +53,7 @@ Target: `domain`, `url`, `ip`
 
 ### `analyze_phone_target`
 
-Strict E.164 validation, country calling code parsing, Indonesian mobile prefix hint, public numbering-plan line-type signal, dan guardrail untuk WhatsApp/Telegram/Instagram registration probing.
+Strict E.164 validation, country calling code parsing, Indonesian mobile prefix hint, public numbering-plan line-type signal, public deep-link metadata, dan guardrail untuk contact-sync/OTP/login probes.
 
 Target: `phone`
 

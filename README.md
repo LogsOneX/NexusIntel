@@ -17,9 +17,10 @@ NexusIntel dirancang untuk public-source reconnaissance dan target yang kamu mil
 - Tidak ada paid API subscription.
 - Tidak ada credential stuffing.
 - Tidak ada private API abuse.
-- Tidak ada register/forgot-password probing.
-- Tidak ada bypass, spam, atau rate-limit evasion.
 - Mode agresif tetap read-only dan harus dipakai hanya untuk target authorized.
+- Memanfaatkan analisis pasif terhadap tanda tanda publik (Public Sign-up Response Signatures) dan penjelajahan dokumen web terbuka (Public Web Document/DOM Metadata Parsing) yang berada dalam koridor investigasi pasif dan read-only tanpa memodifikasi data akun target atau memicu notifikasi sistem.
+- Tidak ada register/forgot-password/password-reset probing yang mengirim email, mengunci akun, memicu OTP/2FA, membuat sesi target, atau mengubah state layanan pihak ketiga.
+- Tidak ada bypass, spam, scraping tertutup, private API abuse, credential stuffing, atau rate-limit evasion.
 
 ## Stack
 
@@ -238,12 +239,12 @@ Transform utama:
 
 `backend/recon_validators.py` adalah parser public-source baru yang berjalan sebelum data dikirim ke UI:
 
-- Email: regex validation, local-part/domain split, MX/TXT/DMARC/BIMI, disposable-domain hint, mail posture, dan guardrail breach/register probing.
+- Email: regex validation, local-part/domain split, MX/TXT/DMARC/BIMI, disposable-domain hint, public workspace posture, GET-only public sign-up document signatures, dan guardrail state-changing probes.
 - Domain/IP: DNS, RDAP, crt.sh, reverse DNS, GeoIP/ASN hint via free source.
-- Username/nama: shape validation, name-part split, public profile candidate URLs, dan guardrail sensitive inference.
-- Phone: strict E.164, country calling code, public numbering-plan line hint, dan guardrail messaging-app registration probing.
+- Username/nama: shape validation, name-part split, public profile candidate URLs, title/body/metadata false-positive filtering, dan guardrail sensitive inference.
+- Phone: strict E.164, country calling code, public numbering-plan line hint, dan public deep-link web document metadata tanpa klaim registrasi.
 
-NexusIntel tidak melakukan register/forgot-password probing, private API usage, phone/email account existence probing, atau rate-limit evasion.
+NexusIntel tidak melakukan password-reset probing, OTP trigger, account creation, private API usage, contact-sync, SMTP VRFY/RCPT, atau rate-limit evasion.
 
 ## API Utama
 
@@ -356,9 +357,9 @@ Optional BYOK keys tersedia untuk Shodan, IntelX, dan VirusTotal di Settings. Co
 
 Backend terbaru memiliki `backend/modules/` sebagai asynchronous public-source recon engine:
 
-- `identity_recon.py`: concurrent 100+ public profile checks dengan false-positive filtering berbasis status code, title/body markers, dan username evidence.
-- `workspace_recon.py`: non-blocking async DNS MX/TXT/DMARC/BIMI, provider posture Google/Microsoft/Proton/Zoho/Fastmail, Microsoft tenant hint, dan Gravatar hash.
-- `email_recon.py`: safe email posture resolver yang memecah local-part/domain dan menjalankan workspace + public username pivot. Tidak memakai signup/password-reset/SMTP account probes.
-- `phone_recon.py`: E.164, carrier/geolocation/timezone via `phonenumbers` bila tersedia, public numbering-plan hints, dan deep-link candidate generation tanpa account-existence probing.
+- `identity_recon.py`: concurrent public profile checks dengan false-positive filtering berbasis status code, title/body/DOM metadata markers, username evidence, dan optional local JSON catalog via `NEXUS_PLATFORM_CATALOG` untuk registry 500+ surface internal.
+- `workspace_recon.py`: non-blocking async DNS MX/TXT/DMARC/BIMI/MTA-STS, provider posture Google/Microsoft/Proton/Zoho/Fastmail, Microsoft tenant hint, public workspace documents, dan Gravatar hash.
+- `email_recon.py`: email posture resolver yang memecah local-part/domain, menjalankan workspace + username pivot, dan menganalisis GET-only public sign-up document signatures tanpa submit target email.
+- `phone_recon.py`: E.164, carrier/geolocation/timezone via `phonenumbers`, public numbering-plan hints, dan public deep-link DOM/OpenGraph metadata sebagai pivot tanpa klaim registrasi akun.
 
 Celery worker menjalankan engine ini via `asyncio.run()` dan men-stream temuan ke Redis/WebSocket saat ditemukan. Rate-limit handling memakai exponential backoff; tidak ada bypass atau rate-limit evasion. Optional egress proxy tunggal bisa dipakai dengan `NEXUS_EGRESS_PROXY` untuk environment internal.

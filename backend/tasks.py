@@ -1036,7 +1036,7 @@ def run_phone_task(
                 data={"role": "pivot", "valid_e164": analysis["valid_e164"]},
             )
 
-        ghost_phone = asyncio.run(PhoneResolver().resolve(target, emit=make_task_emitter(task_id, investigation_id)))
+        ghost_phone = asyncio.run(PhoneResolver(timeout=10).resolve(target, emit=make_task_emitter(task_id, investigation_id)))
         ghost_phone_nodes = persist_artifacts(db, investigation_id, parent, ghost_phone["artifacts"], "ghost_phone")
         db.commit()
         emit(
@@ -1140,10 +1140,14 @@ def run_full_identity_pipeline_task(
             emit(
                 task_id,
                 "tool",
-                f"Macro email stage normalized {len(created)} artifacts; domain={domain}",
+                f"Macro email stage normalized {len(created)} validator artifacts; domain={domain}",
                 {"valid": email_analysis["valid"], "has_mx": email_analysis["has_mx"], "disposable": email_analysis["disposable"]},
                 investigation_id,
             )
+            ghost_email = asyncio.run(EmailPresenceResolver(timeout=10, identity_limit=24 if mode == "passive" else 64).resolve(target, emit=make_task_emitter(task_id, investigation_id)))
+            ghost_created = persist_artifacts(db, investigation_id, parent, ghost_email["artifacts"], "macro_ghost_email")
+            created_total += len(ghost_created)
+            emit(task_id, "tool", f"Macro Ghost email stage streamed {len(ghost_created)} async public signals", {"domain": ghost_email.get("domain"), "valid": ghost_email.get("valid")}, investigation_id)
             if local:
                 username_node = upsert_entity(
                     db,
@@ -1171,6 +1175,11 @@ def run_full_identity_pipeline_task(
             created = persist_artifacts(db, investigation_id, parent, identity_analysis["artifacts"], "macro_identity_recon")
             created_total += len(created)
             emit(task_id, "tool", f"Macro identity stage normalized {len(created)} passive pivots", identity_analysis.get("guardrails", {}), investigation_id)
+
+            ghost_identity = asyncio.run(IdentityResolver(concurrency=72, timeout=10).resolve(username, emit=make_task_emitter(task_id, investigation_id), limit=None if mode in {"standard", "aggressive"} else 48))
+            ghost_created = persist_artifacts(db, investigation_id, parent, ghost_identity["artifacts"], "macro_ghost_identity")
+            created_total += len(ghost_created)
+            emit(task_id, "tool", f"Macro Ghost identity stage checked {ghost_identity['checked']} surfaces and streamed {len(ghost_created)} public profile signals", {"found": ghost_identity.get("found")}, investigation_id)
 
             writer = RedisLineWriter(task_id, investigation_id)
             with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
@@ -1247,6 +1256,10 @@ def run_full_identity_pipeline_task(
             created = persist_artifacts(db, investigation_id, parent, analysis["artifacts"], "macro_phone_recon")
             created_total += len(created)
             emit(task_id, "tool", f"Macro phone stage normalized {len(created)} numbering-plan pivots", analysis.get("guardrails", {}), investigation_id)
+            ghost_phone = asyncio.run(PhoneResolver(timeout=10).resolve(target, emit=make_task_emitter(task_id, investigation_id)))
+            ghost_created = persist_artifacts(db, investigation_id, parent, ghost_phone["artifacts"], "macro_ghost_phone")
+            created_total += len(ghost_created)
+            emit(task_id, "tool", f"Macro Ghost phone stage streamed {len(ghost_created)} public metadata signals", {"valid_e164": ghost_phone.get("valid_e164")}, investigation_id)
 
         else:
             domains.add(domain_from_target(target))

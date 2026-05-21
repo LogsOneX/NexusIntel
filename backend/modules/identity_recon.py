@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 from typing import Any
 
-from .common import AsyncHttpClient, EmitCallback, ReconFinding, html_title, looks_like_not_found, maybe_emit, normalize_username, text_contains_username
+from .common import AsyncHttpClient, EmitCallback, ReconFinding, html_title, looks_like_not_found, maybe_emit, normalize_username, public_metadata, text_contains_username, title_is_generic
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +138,44 @@ PLATFORMS: tuple[PlatformProfile, ...] = tuple(
 )
 
 
+def _load_external_platforms() -> tuple[PlatformProfile, ...]:
+    """Load an optional local platform catalog without coupling runtime to third-party repos.
+
+    NEXUS_PLATFORM_CATALOG may point to a JSON file containing rows like:
+    [{"name":"Example","url":"https://example.com/{username}","category":"social","username_required_in_body":true}]
+    This lets operators ship a 500+ surface catalog internally while keeping the default repo curated and readable.
+    """
+    catalog_path = os.getenv("NEXUS_PLATFORM_CATALOG")
+    if not catalog_path:
+        return ()
+    try:
+        rows = json.loads(open(catalog_path, "r", encoding="utf-8").read())
+    except Exception:
+        return ()
+    loaded: list[PlatformProfile] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        url = str(row.get("url") or "").strip()
+        if not name or "{username}" not in url or not url.startswith("https://"):
+            continue
+        loaded.append(
+            PlatformProfile(
+                name=name,
+                url=url,
+                category=str(row.get("category") or "external"),
+                expected_status=tuple(int(code) for code in row.get("expected_status", [200])),
+                username_required_in_body=bool(row.get("username_required_in_body", True)),
+                not_found_terms=tuple(str(term).lower() for term in row.get("not_found_terms", [])),
+            )
+        )
+    return tuple(loaded)
+
+
+PLATFORMS = tuple(dict.fromkeys(PLATFORMS + _load_external_platforms()))
+
+
 class IdentityResolver:
     def __init__(self, *, concurrency: int = 64, timeout: float = 10.0):
         self.concurrency = concurrency
@@ -148,6 +187,8 @@ class IdentityResolver:
         status = int(result.get("status") or 0)
         text = str(result.get("text") or "")
         title = html_title(text)
+        metadata = public_metadata(text) if text else {"title": title, "meta": {}, "links": {}, "data": {}}
+        username_seen = text_contains_username(text, username) or text_contains_username(json.dumps(metadata, default=str), username)
         if status in {401, 403}:
             return ReconFinding(
                 "profile_candidate",
@@ -156,15 +197,18 @@ class IdentityResolver:
                 "ghost_identity",
                 "low",
                 "OBSERVED_ON",
-                {"platform": platform.name, "category": platform.category, "status_code": status, "title": title, "reason": "restricted_or_auth_wall"},
+                {"platform": platform.name, "category": platform.category, "status_code": status, "title": title, "reason": "restricted_or_auth_wall", "metadata": metadata},
             )
         if status not in platform.expected_status:
             return None
-        if looks_like_not_found(text) or any(term.lower() in text.lower() for term in platform.not_found_terms):
+        lowered = text.lower()
+        if looks_like_not_found(text) or any(term.lower() in lowered for term in platform.not_found_terms):
             return None
-        if platform.username_required_in_body and not text_contains_username(text, username):
+        if platform.username_required_in_body and not username_seen:
             return None
-        confidence = "high" if platform.username_required_in_body else "medium"
+        if not platform.username_required_in_body and title_is_generic(title) and not username_seen:
+            return None
+        confidence = "high" if username_seen else "medium"
         return ReconFinding(
             "profile",
             f"{username} @ {platform.name}",
@@ -172,7 +216,7 @@ class IdentityResolver:
             "ghost_identity",
             confidence,
             "REGISTERED_ON",
-            {"platform": platform.name, "category": platform.category, "status_code": status, "final_url": result.get("url"), "title": title},
+            {"platform": platform.name, "category": platform.category, "status_code": status, "final_url": result.get("url"), "title": title, "metadata": metadata},
         )
 
     async def resolve(self, username: str, *, emit: EmitCallback | None = None, limit: int | None = None) -> dict[str, Any]:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import re
+from dataclasses import dataclass
 from typing import Any
 
-from .common import EmitCallback, ReconFinding, maybe_emit
+from .common import AsyncHttpClient, EmitCallback, ReconFinding, maybe_emit, public_metadata, title_is_generic
 
 try:
     import phonenumbers  # type: ignore
@@ -36,15 +38,31 @@ INDONESIA_MOBILE_PREFIXES = {
 }
 
 
-class PhoneResolver:
-    """Public phone validation and numbering-plan posture resolver.
+@dataclass(frozen=True, slots=True)
+class PublicDeepLink:
+    name: str
+    url_template: str
+    generic_terms: tuple[str, ...]
 
-    This module does not perform WhatsApp/Telegram/Instagram/Facebook account-existence or contact-sync checks.
-    It emits safe deep-link candidates as investigation pivots only, without fetching or claiming registration.
+
+PUBLIC_DEEPLINKS: tuple[PublicDeepLink, ...] = (
+    PublicDeepLink("WhatsApp wa.me public document", "https://wa.me/{digits}", ("whatsapp", "share on whatsapp")),
+    PublicDeepLink("Telegram public phone deep-link", "https://t.me/+{digits}", ("telegram", "tgme_page")),
+)
+
+
+class PhoneResolver:
+    """Public phone validation, numbering-plan posture, and public deep-link metadata resolver.
+
+    Public deep-link pages are fetched as web documents only. Results are stored as metadata pivots,
+    not as account-existence claims, because many messenger pages return generic landing pages.
     """
 
+    def __init__(self, *, timeout: float = 10.0):
+        self.timeout = timeout
+
     def normalize(self, value: str) -> str:
-        raw = value.strip().replace(" ", "").replace("-", "")
+        raw = value.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
         if raw.startswith("00"):
             raw = "+" + raw[2:]
         return raw
@@ -61,6 +79,34 @@ class PhoneResolver:
                     line_type = "mobile_candidate"
                 return {"calling_code": code, "region": meta["region"], "plan_type": meta["type"], "subscriber": subscriber, "line_type": line_type}
         return {"calling_code": None, "region": "unknown", "plan_type": "unknown", "subscriber": digits, "line_type": "unknown"}
+
+    async def fetch_deeplink_metadata(self, client: AsyncHttpClient, e164: str, link: PublicDeepLink) -> ReconFinding | None:
+        digits = e164.lstrip("+")
+        url = link.url_template.format(digits=digits, e164=e164)
+        result = await client.request_text("GET", url, retries=1, max_bytes=180_000)
+        status = int(result.get("status") or 0)
+        text = str(result.get("text") or "")
+        if status >= 400 or not text:
+            return None
+        metadata = public_metadata(text)
+        title = str(metadata.get("title") or "")
+        generic = title_is_generic(title) or any(term in text[:120_000].lower() for term in link.generic_terms)
+        return ReconFinding(
+            "public_deeplink_metadata",
+            link.name,
+            url,
+            "ghost_phone",
+            "low" if generic else "medium",
+            "HAS_PUBLIC_DEEPLINK_METADATA",
+            {
+                "status_code": status,
+                "final_url": result.get("url"),
+                "metadata": metadata,
+                "generic_landing_page": generic,
+                "registration_claim": False,
+                "state_changing_request": False,
+            },
+        )
 
     async def resolve(self, phone: str, *, emit: EmitCallback | None = None) -> dict[str, Any]:
         e164 = self.normalize(phone)
@@ -94,13 +140,30 @@ class PhoneResolver:
         findings.append(plan_finding)
         await maybe_emit(emit, f"Phone numbering plan resolved: {parsed_data.get('region') or parsed_data.get('region_code') or 'unknown'}", plan_finding.as_artifact())
 
+        if valid_regex:
+            async with AsyncHttpClient(concurrency=4, timeout=self.timeout) as client:
+                for future in asyncio.as_completed([self.fetch_deeplink_metadata(client, e164, link) for link in PUBLIC_DEEPLINKS]):
+                    finding = await future
+                    if finding:
+                        findings.append(finding)
+                        await maybe_emit(emit, f"Public deep-link metadata parsed: {finding.label}", finding.as_artifact())
+
         for name, url in {
             "WhatsApp public deep-link candidate": f"https://wa.me/{e164.lstrip('+')}",
-            "Telegram public username/phone link candidate": f"https://t.me/+{e164.lstrip('+')}",
+            "Telegram public phone deep-link candidate": f"https://t.me/+{e164.lstrip('+')}",
             "Viber public add-contact link candidate": f"viber://chat?number={e164}",
         }.items():
-            finding = ReconFinding("deeplink_candidate", name, url, "ghost_phone", "low", "HAS_PUBLIC_DEEPLINK_CANDIDATE", {"queried": False, "registration_claim": False, "reason": "no account-existence probing"})
+            finding = ReconFinding("deeplink_candidate", name, url, "ghost_phone", "low", "HAS_PUBLIC_DEEPLINK_CANDIDATE", {"registration_claim": False, "reason": "pivot candidate only"})
             findings.append(finding)
-        guardrail = ReconFinding("guardrail", "Messenger account-existence probes skipped", f"phone:{e164}:guardrail", "ghost_phone", "confirmed", "HAS_GUARDRAIL", {"skipped": ["whatsapp_fetch", "telegram_fetch", "instagram_contact_sync", "facebook_contact_sync"], "reason": "public-source-only policy"})
+
+        guardrail = ReconFinding(
+            "guardrail",
+            "Read-only phone analysis boundary",
+            f"phone:{e164}:guardrail",
+            "ghost_phone",
+            "confirmed",
+            "HAS_GUARDRAIL",
+            {"allowed": ["e164_parse", "numbering_plan", "public_deeplink_document_get"], "skipped": ["contact_sync", "otp_trigger", "login_probe"], "registration_claim": False},
+        )
         findings.append(guardrail)
         return {"target": e164, "valid_e164": valid_regex, "plan": parsed_data, "artifacts": [finding.as_artifact() for finding in findings]}
