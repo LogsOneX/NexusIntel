@@ -31,18 +31,22 @@ docker compose down
 - Persistent sidebar: Dashboard, Workspace, Network Graph, AI Oracle, Settings, Account.
 - Dashboard: recent investigations, case folders, timeline/report quick links.
 - Workspace: case name, assigned operator, markdown notes, AI auto-briefing.
-- Network Graph: tactical canvas, intelligence toolbar, Smart Selector, Playbooks, Ask Oracle, terminal HUD.
+- Network Graph: edge-to-edge tactical canvas, unified master toolbar, integrated launch form, entity palette, Smart Selector, Playbooks, Ask Oracle from node context menu, collapsible data panel, and collapsible terminal HUD.
 - Settings: BYOK API keys and LLM provider configuration.
+
+## Tactical Canvas
+
+Network Graph sekarang memakai layout Maltego-purity: canvas memenuhi seluruh area kerja, tanpa case strip dan tanpa command bar terpisah. Data panel kanan dan terminal bawah berada sebagai overlay absolute yang bisa disembunyikan, sehingga investigator bisa fokus 100% pada visual link analysis. Semua kontrol utama berada di `tactical-graph-toolbar`: stats, launch form, entity palette, smart selector, layout switcher, timeline, fit, export, dan toggle panel. Oracle tidak lagi permanen di bawah graph; panel Oracle hanya muncul sebagai overlay saat dipanggil dari context menu node.
 
 ## Graph Workflow
 
-1. Buat investigation dari target awal.
+1. Submit target dari integrated launcher di master toolbar.
 2. Worker membuat node root dan entity hasil recon.
-3. Klik node untuk inspect data.
-4. Right-click node untuk menjalankan transform.
+3. Klik node untuk inspect data di collapsible data panel.
+4. Right-click node untuk menjalankan transform atau Ask Oracle.
 5. Drag username/email/domain/IP/phone dari entity palette untuk menambah pivot manual.
-6. Terminal HUD menampilkan output task live.
-7. Graph refresh otomatis saat task berjalan.
+6. Terminal HUD tetap menerima telemetry meskipun panel disembunyikan.
+7. Graph refresh otomatis saat task berjalan tanpa mereset pan/zoom.
 
 ## Context Transforms
 

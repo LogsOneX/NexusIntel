@@ -216,7 +216,7 @@ Folder `data/` di-ignore dari git.
 
 ## Command Center Flow
 
-UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan drag-and-drop entity pipeline, right-click Logic Flow, Playbooks, Smart Selector, data drawer, terminal HUD, Timeline Mode, dan Export Intelligence report.
+UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan edge-to-edge tactical canvas, unified master toolbar, integrated launch form, drag-and-drop entity palette, right-click Logic Flow, Playbooks, Smart Selector, collapsible data drawer, collapsible terminal HUD, Timeline Mode, dan Export Intelligence report.
 
 1. Submit target username/email/domain/IP/phone.
 2. API mengklasifikasi target dan membuat investigation + root entity.

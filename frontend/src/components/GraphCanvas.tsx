@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
-import { Clock3, Crosshair, Download, GitBranch, Network, Play, Plus, RotateCcw, Trash2, Undo2 } from "lucide-react";
+import { Clock3, Crosshair, Download, GitBranch, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2 } from "lucide-react";
 import { EntityPaletteItem, platformMark } from "./CustomNode";
 import TimelineView from "./TimelineView";
 
@@ -76,6 +76,16 @@ type GraphCanvasProps = {
   onError: (message: string) => void;
   onSystemLog?: (message: string) => void;
   onOracleNode?: (node: ApiGraphNode) => void;
+  searchTarget: string;
+  setSearchTarget: Dispatch<SetStateAction<string>>;
+  reconMode: "passive" | "standard" | "aggressive";
+  setReconMode: Dispatch<SetStateAction<"passive" | "standard" | "aggressive">>;
+  onLaunch: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+  isLaunching: boolean;
+  terminalOpen: boolean;
+  setTerminalOpen: Dispatch<SetStateAction<boolean>>;
+  dataPanelOpen: boolean;
+  setDataPanelOpen: Dispatch<SetStateAction<boolean>>;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
@@ -379,6 +389,16 @@ export default function GraphCanvas({
   onError,
   onSystemLog,
   onOracleNode,
+  searchTarget,
+  setSearchTarget,
+  reconMode,
+  setReconMode,
+  onLaunch,
+  isLaunching,
+  terminalOpen,
+  setTerminalOpen,
+  dataPanelOpen,
+  setDataPanelOpen,
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
@@ -546,7 +566,7 @@ export default function GraphCanvas({
       try {
         const payload = await apiJson("/api/v1/transforms", {
           method: "POST",
-          body: JSON.stringify({ investigation_id: investigationId, node_id: node.id, transform, mode: "standard" }),
+          body: JSON.stringify({ investigation_id: investigationId, node_id: node.id, transform, mode: reconMode }),
         });
         setRunningTask(payload.data.task_id);
         onTaskStart(payload.data.task_id, transform, apiNodesRef.current.get(node.id) || apiNodeFromStrict(node));
@@ -557,7 +577,7 @@ export default function GraphCanvas({
         onError(error instanceof Error ? error.message : "Transform failed");
       }
     },
-    [investigationId, onError, onTaskStart, pollGraphUntilComplete],
+    [investigationId, onError, onTaskStart, pollGraphUntilComplete, reconMode],
   );
 
   const deleteNode = useCallback(
@@ -609,6 +629,16 @@ export default function GraphCanvas({
     },
     [investigationId, onError, onGraphUpdate, pushHistory, selectedNode?.id],
   );
+
+  const addEntityFromToolbar = useCallback(() => {
+    const kind = window.prompt("Entity type", "username")?.trim().toLowerCase();
+    if (!kind) return;
+    const pan = cyRef.current?.pan() || { x: 0, y: 0 };
+    const zoom = cyRef.current?.zoom() || 1;
+    const rect = containerRef.current?.getBoundingClientRect();
+    const renderedCenter = { x: (rect?.width || 900) / 2, y: (rect?.height || 560) / 2 };
+    addEntityFromDrop(kind, { x: (renderedCenter.x - pan.x) / zoom, y: (renderedCenter.y - pan.y) / zoom });
+  }, [addEntityFromDrop]);
 
   const exportReport = useCallback(() => {
     const image = cyRef.current?.png({ full: true, scale: 2, bg: "#000000" }) || "";
@@ -882,62 +912,87 @@ export default function GraphCanvas({
   return (
     <section className={dropHint ? "tactical-graph-shell drop-active" : "tactical-graph-shell"}>
       <header className="tactical-graph-toolbar">
-        <div>
+        <div className="graph-toolbar-stats">
           <span className="micro-label">Visual Link Analysis</span>
           <strong>{graphNodes.length} entities</strong>
           <span>{graphEdges.length} relationships</span>
         </div>
 
+        <form className="graph-launcher" onSubmit={onLaunch}>
+          <Search size={15} />
+          <input value={searchTarget} onChange={(event) => setSearchTarget(event.target.value)} placeholder="username, email, domain, IP, phone" />
+          <select value={reconMode} onChange={(event) => setReconMode(event.target.value as "passive" | "standard" | "aggressive")}>
+            <option value="passive">Passive</option>
+            <option value="standard">Standard</option>
+            <option value="aggressive">Aggressive</option>
+          </select>
+          <button className="graph-launch-button" type="submit" disabled={isLaunching}>
+            <Radio size={14} />
+            <span>{isLaunching ? "Running" : "Launch"}</span>
+          </button>
+        </form>
+
         <div className="entity-pipeline" aria-label="Entity palette">
+          <button className="icon-button" type="button" onClick={addEntityFromToolbar} title="Add entity at canvas center">
+            <Plus size={16} />
+          </button>
           {PALETTE_TYPES.map((kind) => <EntityPaletteItem kind={kind} key={kind} />)}
         </div>
 
-        <div className="graph-smart-selector">
-          <span>Highlight</span>
-          <select value={highlightType} onChange={(event) => setHighlightType(event.target.value)}>
-            <option value="all">All entities</option>
-            <option value="username">Username</option>
-            <option value="email">Email</option>
-            <option value="domain">Domain</option>
-            <option value="ip">IP address</option>
-            <option value="phone">Phone</option>
-            <option value="profile">Profile</option>
-            <option value="platform">Platform</option>
-          </select>
-        </div>
+        <div className="graph-toolbar-controls">
+          <div className="graph-smart-selector">
+            <span>Highlight</span>
+            <select value={highlightType} onChange={(event) => setHighlightType(event.target.value)}>
+              <option value="all">All entities</option>
+              <option value="username">Username</option>
+              <option value="email">Email</option>
+              <option value="domain">Domain</option>
+              <option value="ip">IP address</option>
+              <option value="phone">Phone</option>
+              <option value="profile">Profile</option>
+              <option value="platform">Platform</option>
+            </select>
+          </div>
 
-        <div className="layout-switcher" aria-label="Graph layout modes">
-          <button className={layoutMode === "tree" ? "active" : ""} type="button" onClick={() => setLayoutMode("tree")} title="Tree layout">
-            <GitBranch size={14} />
-            <span>Tree</span>
-          </button>
-          <button className={layoutMode === "circular" ? "active" : ""} type="button" onClick={() => setLayoutMode("circular")} title="Circular layout">
-            <Crosshair size={14} />
-            <span>Orbit</span>
-          </button>
-          <button className={layoutMode === "force" ? "active" : ""} type="button" onClick={() => setLayoutMode("force")} title="Force layout">
-            <Network size={14} />
-            <span>Force</span>
-          </button>
-        </div>
+          <div className="layout-switcher" aria-label="Graph layout modes">
+            <button className={layoutMode === "tree" ? "active" : ""} type="button" onClick={() => setLayoutMode("tree")} title="Tree layout">
+              <GitBranch size={14} />
+              <span>Tree</span>
+            </button>
+            <button className={layoutMode === "circular" ? "active" : ""} type="button" onClick={() => setLayoutMode("circular")} title="Circular layout">
+              <Crosshair size={14} />
+              <span>Orbit</span>
+            </button>
+            <button className={layoutMode === "force" ? "active" : ""} type="button" onClick={() => setLayoutMode("force")} title="Force layout">
+              <Network size={14} />
+              <span>Force</span>
+            </button>
+          </div>
 
-        <div className="tactical-graph-actions">
-          <button className={timelineMode ? "icon-button active" : "icon-button"} type="button" onClick={() => setTimelineMode((open) => !open)} title="Timeline mode (Ctrl+T)">
-            <Clock3 size={16} />
-          </button>
-          <button className="icon-button" type="button" onClick={undoGraph} title="Undo graph state (Ctrl+Z)">
-            <Undo2 size={16} />
-          </button>
-          <button className="icon-button" type="button" onClick={() => runLayout(layoutMode, true)} title="Re-layout current graph">
-            <RotateCcw size={16} />
-          </button>
-          <button className="icon-button" type="button" onClick={() => cyRef.current?.fit(undefined, 90)} title="Fit graph">
-            <Crosshair size={16} />
-          </button>
-          <button className="graph-report-button" type="button" onClick={exportReport} title="Export Intelligence report">
-            <Download size={15} />
-            <span>Export</span>
-          </button>
+          <div className="tactical-graph-actions">
+            <button className={timelineMode ? "icon-button active" : "icon-button"} type="button" onClick={() => setTimelineMode((open) => !open)} title="Timeline mode (Ctrl+T)">
+              <Clock3 size={16} />
+            </button>
+            <button className="icon-button" type="button" onClick={undoGraph} title="Undo graph state (Ctrl+Z)">
+              <Undo2 size={16} />
+            </button>
+            <button className="icon-button" type="button" onClick={() => runLayout(layoutMode, true)} title="Re-layout current graph">
+              <RotateCcw size={16} />
+            </button>
+            <button className="icon-button" type="button" onClick={() => cyRef.current?.fit(undefined, 90)} title="Fit graph">
+              <Crosshair size={16} />
+            </button>
+            <button className={dataPanelOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => setDataPanelOpen((open) => !open)} title="Toggle entity data panel">
+              <PanelRight size={16} />
+            </button>
+            <button className={terminalOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => setTerminalOpen((open) => !open)} title="Toggle terminal HUD">
+              <PanelBottom size={16} />
+            </button>
+            <button className="graph-report-button" type="button" onClick={exportReport} title="Export Intelligence report">
+              <Download size={15} />
+              <span>Export</span>
+            </button>
+          </div>
         </div>
       </header>
 

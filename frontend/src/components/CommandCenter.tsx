@@ -12,10 +12,6 @@ import {
   KeyRound,
   LogOut,
   Network,
-  PanelBottom,
-  Plus,
-  Radio,
-  Search,
   Settings,
   Shield,
   Terminal,
@@ -221,7 +217,7 @@ function DashboardHome({ token, navigate }: PageProps) {
 }
 
 function GraphHub({ token }: PageProps) {
-  const [investigations, setInvestigations] = useState<Investigation[]>([]);
+  const [, setInvestigations] = useState<Investigation[]>([]);
   const [activeInvestigationId, setActiveInvestigationId] = useState<string | null>(null);
   const [graph, setGraph] = useState<GraphPayload>({ nodes: [], edges: [] });
   const [selectedNode, setSelectedNode] = useState<ApiNode | null>(null);
@@ -232,6 +228,7 @@ function GraphHub({ token }: PageProps) {
   const [taskLabel, setTaskLabel] = useState("idle");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(true);
+  const [dataPanelOpen, setDataPanelOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -281,32 +278,40 @@ function GraphHub({ token }: PageProps) {
     }
   };
 
-  const quickAddEntity = async () => {
-    if (!activeInvestigationId) { setError("Create or select an investigation before adding an entity."); return; }
-    const type = window.prompt("Entity type", "username")?.trim().toLowerCase();
-    const value = window.prompt("Entity value")?.trim();
-    if (!type || !value) return;
-    const payload = await apiJson("/api/v1/entities", { method: "POST", body: JSON.stringify({ investigation_id: activeInvestigationId, type, label: value, value, source_id: selectedNode?.id || null, relationship_type: selectedNode ? "manual_pivot" : "manual_seed", data: { created_from: "graph_toolbar" } }) }, token);
-    setGraph(payload.data.graph);
-  };
+
 
   const rows = useMemo(() => flattenData(selectedNode?.data || {}), [selectedNode]);
 
   return (
     <section className="graph-page">
-      <header className="graph-command-bar">
-        <form onSubmit={startInvestigation}><Search size={15} /><input value={target} onChange={(event) => setTarget(event.target.value)} placeholder="username, email, domain, IP, phone" /><select value={mode} onChange={(event) => setMode(event.target.value as "passive" | "standard" | "aggressive")}><option value="passive">Passive</option><option value="standard">Standard</option><option value="aggressive">Aggressive</option></select><button className="nx-primary" type="submit" disabled={loading}><Radio size={15} />Launch</button></form>
-        <button className="nx-secondary" type="button" onClick={() => setTerminalOpen((open) => !open)}><PanelBottom size={15} />Toggle Terminal</button>
-        <button className="nx-secondary" type="button" onClick={quickAddEntity}><Plus size={15} />Add Entity</button>
-      </header>
-      {error && <div className="nx-alert">{error}</div>}
-      <div className={terminalOpen ? "graph-operational-grid" : "graph-operational-grid terminal-hidden"}>
-        <aside className="case-strip"><strong>Cases</strong>{investigations.map((item) => <button className={item.id === activeInvestigationId ? "active" : ""} key={item.id} type="button" onClick={() => loadGraph(item.id)}>{item.target}<span>{item.status}</span></button>)}</aside>
-        <GraphCanvas investigationId={activeInvestigationId} nodes={graph.nodes} edges={graph.edges} selectedNode={selectedNode} onSelectNode={setSelectedNode} onGraphUpdate={setGraph} onTaskStart={(taskId, transform, node) => { setCurrentTaskId(taskId); setTaskLabel(`${transform} / ${node.label}`); setTerminalLines([]); setTerminalOpen(true); }} onError={setError} onSystemLog={(message) => setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message, time: new Date().toISOString() }])} onOracleNode={setOracleNode} />
-        <aside className="entity-spec"><div className="nx-panel-title"><FileJson size={15} />Entity Data</div>{selectedNode ? <><h2>{selectedNode.label}</h2><code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code><div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div></> : <p>Select a node to inspect structured intelligence.</p>}</aside>
-        {terminalOpen && <section className="graph-terminal"><header><Terminal size={15} /><strong>Live Terminal</strong><span>{taskLabel}</span></header><div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Waiting for telemetry...</code></p>}</div></section>}
+      {error && <div className="nx-alert graph-alert">{error}</div>}
+      <div className="graph-operational-grid">
+        <GraphCanvas
+          investigationId={activeInvestigationId}
+          nodes={graph.nodes}
+          edges={graph.edges}
+          selectedNode={selectedNode}
+          onSelectNode={setSelectedNode}
+          onGraphUpdate={setGraph}
+          onTaskStart={(taskId, transform, node) => { setCurrentTaskId(taskId); setTaskLabel(`${transform} / ${node.label}`); setTerminalLines([]); setTerminalOpen(true); }}
+          onError={setError}
+          onSystemLog={(message) => setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message, time: new Date().toISOString() }])}
+          onOracleNode={setOracleNode}
+          searchTarget={target}
+          setSearchTarget={setTarget}
+          reconMode={mode}
+          setReconMode={setMode}
+          onLaunch={startInvestigation}
+          isLaunching={loading}
+          terminalOpen={terminalOpen}
+          setTerminalOpen={setTerminalOpen}
+          dataPanelOpen={dataPanelOpen}
+          setDataPanelOpen={setDataPanelOpen}
+        />
+        <aside className={dataPanelOpen ? "entity-spec" : "entity-spec closed"}><div className="nx-panel-title"><FileJson size={15} />Entity Data</div>{selectedNode ? <><h2>{selectedNode.label}</h2><code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code><div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div></> : <p>Select a node to inspect structured intelligence.</p>}</aside>
+        <section className={terminalOpen ? "graph-terminal" : "graph-terminal closed"}><header><Terminal size={15} /><strong>Live Terminal</strong><span>{taskLabel}</span></header><div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Waiting for telemetry...</code></p>}</div></section>
+        {oracleNode && <div className="graph-oracle-popover"><button type="button" onClick={() => setOracleNode(null)}>Close Oracle</button><OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode} title="Node Oracle" /></div>}
       </div>
-      <OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode || selectedNode} title="Graph Oracle" />
     </section>
   );
 }
