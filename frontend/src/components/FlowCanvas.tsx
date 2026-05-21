@@ -140,6 +140,7 @@ export default function FlowCanvas({
   const dashAnimation = useRef<number | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [runningTask, setRunningTask] = useState<string | null>(null);
+  const [runningNodeId, setRunningNodeId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState(false);
 
   useEffect(() => {
@@ -162,7 +163,7 @@ export default function FlowCanvas({
             border: style.border,
             text: style.text,
           },
-          classes: `entity ${node.type} ${node.confidence === "low" ? "low-confidence" : ""}`,
+          classes: `entity ${node.type} ${node.confidence === "low" ? "low-confidence" : ""} ${node.id === runningNodeId ? "processing" : ""}`,
         };
       }),
       ...edges.map((edge) => ({
@@ -176,7 +177,7 @@ export default function FlowCanvas({
         classes: `edge ${edge.confidence === "low" ? "low-confidence" : ""} ${runningTask ? "running-flow" : ""}`,
       })),
     ],
-    [edges, nodes, runningTask],
+    [edges, nodes, runningNodeId, runningTask],
   );
 
   const pollGraphUntilComplete = useCallback(
@@ -191,11 +192,13 @@ export default function FlowCanvas({
             window.clearInterval(pollers.current[taskId]);
             delete pollers.current[taskId];
             setRunningTask(null);
+            setRunningNodeId(null);
           }
         } catch (error) {
           window.clearInterval(pollers.current[taskId]);
           delete pollers.current[taskId];
           setRunningTask(null);
+          setRunningNodeId(null);
           onError(error instanceof Error ? error.message : "Graph polling failed");
         }
       }, 1800);
@@ -210,6 +213,7 @@ export default function FlowCanvas({
         return;
       }
       setContextMenu(null);
+      setRunningNodeId(node.id);
       try {
         const payload = await apiJson("/api/v1/transforms", {
           method: "POST",
@@ -225,6 +229,7 @@ export default function FlowCanvas({
         pollGraphUntilComplete(payload.data.task_id);
       } catch (error) {
         setRunningTask(null);
+        setRunningNodeId(null);
         onError(error instanceof Error ? error.message : "Transform failed");
       }
     },
@@ -309,6 +314,18 @@ export default function FlowCanvas({
             "border-width": 2,
             "border-color": "#ffffff",
             "background-color": "#111111",
+          },
+        },
+        {
+          selector: "node.processing",
+          style: {
+            "border-width": 2,
+            "border-color": "#ffffff",
+            "shadow-blur": 12,
+            "shadow-color": "#ffffff",
+            "shadow-opacity": 0.28,
+            "shadow-offset-x": 0,
+            "shadow-offset-y": 0,
           },
         },
         {
@@ -425,6 +442,27 @@ export default function FlowCanvas({
     cy.nodes().unselect();
     if (selectedNode) cy.getElementById(selectedNode.id).select();
   }, [selectedNode]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return undefined;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const cy = cyRef.current;
+        if (!cy) return;
+        cy.resize();
+        cy.fit(undefined, 96);
+      });
+    });
+    observer.observe(container);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
 
   useEffect(() => {
     const cy = cyRef.current;

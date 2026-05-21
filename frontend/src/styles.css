@@ -2006,3 +2006,254 @@ select:focus {
     right: 12px;
   }
 }
+
+/* NexusIntel V2 Trinity Workspace: adaptive fluid command center */
+.nx-shell {
+  position: relative !important;
+  grid-template-columns: 314px minmax(0, 1fr) !important;
+  grid-template-rows: 100vh !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.nx-shell.left-collapsed,
+.nx-shell.focus-mode {
+  grid-template-columns: 0 minmax(0, 1fr) !important;
+}
+
+.nx-left {
+  width: 314px;
+  min-width: 0;
+  overflow: auto;
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+  will-change: transform, opacity;
+}
+
+.nx-left.closed,
+.nx-shell.focus-mode .nx-left {
+  transform: translate3d(-100%, 0, 0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nx-center {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) 250px !important;
+  overflow: hidden;
+}
+
+.nx-shell.terminal-collapsed .nx-center {
+  grid-template-rows: auto minmax(0, 1fr) 0 !important;
+}
+
+.nx-shell.focus-mode .nx-center {
+  grid-template-rows: 0 minmax(0, 1fr) 0 !important;
+}
+
+.nx-topbar {
+  min-height: 74px;
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+  will-change: transform, opacity;
+}
+
+.nx-shell.focus-mode .nx-topbar {
+  min-height: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  transform: translate3d(0, -100%, 0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nx-workbench {
+  position: relative;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 388px !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nx-shell.right-collapsed .nx-workbench,
+.nx-shell.focus-mode .nx-workbench {
+  grid-template-columns: minmax(0, 1fr) 0 !important;
+}
+
+.nx-drawer {
+  width: 388px;
+  max-width: 388px;
+  height: 100%;
+  display: block !important;
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+  will-change: transform, opacity;
+  z-index: 6;
+}
+
+.nx-drawer.closed,
+.nx-shell.focus-mode .nx-drawer {
+  transform: translate3d(100%, 0, 0) !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nx-drawer-toggle {
+  position: absolute !important;
+  top: 12px !important;
+  left: -36px !important;
+  width: 34px !important;
+  height: 34px !important;
+  z-index: 12;
+}
+
+.nx-terminal {
+  height: 250px;
+  min-height: 0;
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+  will-change: transform, opacity;
+  z-index: 5;
+}
+
+.nx-terminal.closed,
+.nx-shell.focus-mode .nx-terminal {
+  transform: translate3d(0, 100%, 0) !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nx-terminal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nx-terminal-actions code {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tactical-graph-shell,
+.tactical-graph-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+}
+
+.nx-shell.focus-mode .tactical-graph-toolbar {
+  min-height: 48px;
+}
+
+.nx-floating-controls {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #333333;
+  background: rgba(0, 0, 0, 0.92);
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+}
+
+.nx-control-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #333333 !important;
+  background: #111111 !important;
+  color: #888888 !important;
+  padding: 0;
+}
+
+.nx-control-button svg,
+.icon-button svg,
+.entity-palette-item svg,
+.nx-brand-mark svg,
+.context-actions svg {
+  width: 16px;
+  height: 16px;
+  shape-rendering: geometricPrecision;
+  vector-effect: non-scaling-stroke;
+}
+
+.nx-control-button.active,
+.nx-control-button:hover {
+  border-color: #ffffff !important;
+  color: #ffffff !important;
+  background: #000000 !important;
+}
+
+.tactical-graph-shell .tactical-graph-canvas canvas {
+  image-rendering: auto;
+}
+
+@media (max-width: 920px) {
+  .nx-shell,
+  .nx-shell.left-collapsed,
+  .nx-shell.focus-mode {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 100vh !important;
+  }
+
+  .nx-left {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(86vw, 314px);
+    z-index: 70;
+  }
+
+  .nx-left.closed,
+  .nx-shell.focus-mode .nx-left {
+    transform: translate3d(-100%, 0, 0);
+  }
+
+  .nx-workbench,
+  .nx-shell.right-collapsed .nx-workbench,
+  .nx-shell.focus-mode .nx-workbench {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+  }
+
+  .nx-drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(88vw, 388px);
+    max-width: min(88vw, 388px);
+    z-index: 75;
+    border-left: 1px solid #333333 !important;
+    border-top: 0 !important;
+  }
+
+  .nx-drawer.closed,
+  .nx-shell.focus-mode .nx-drawer {
+    transform: translate3d(100%, 0, 0) !important;
+  }
+
+  .nx-drawer-toggle {
+    left: -36px !important;
+    right: auto !important;
+  }
+
+  .nx-floating-controls {
+    top: 8px;
+    right: 8px;
+  }
+}

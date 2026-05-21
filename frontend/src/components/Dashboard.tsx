@@ -5,9 +5,13 @@ import {
   Braces,
   ChevronLeft,
   ChevronRight,
-  Database,
   FileJson,
   Layers3,
+  Maximize2,
+  Minimize2,
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
   Plus,
   Radio,
   Search,
@@ -115,7 +119,7 @@ function graphStats(graph: GraphPayload) {
 }
 
 function terminalPrefix(level: string): string {
-  if (["tool", "info", "success"].includes(level)) return "[OSINT]";
+  if (["tool", "info", "success", "warning"].includes(level)) return "[OSINT]";
   if (level === "error") return "[ALERT]";
   return "[SYS]";
 }
@@ -132,7 +136,10 @@ export default function Dashboard() {
   const [taskLabel, setTaskLabel] = useState("idle");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [isCommandOpen, setIsCommandOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(true);
+  const [isFocusMode, setIsFocusMode] = useState(false);
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -144,6 +151,55 @@ export default function Dashboard() {
     const needle = filter.toLowerCase();
     return rows.filter(([key, value]) => key.toLowerCase().includes(needle) || value.toLowerCase().includes(needle));
   }, [filter, selectedNode]);
+
+  const shellClass = useMemo(
+    () =>
+      [
+        "nx-shell",
+        !isCommandOpen ? "left-collapsed" : "",
+        !isSidebarOpen ? "right-collapsed" : "",
+        !isTerminalOpen ? "terminal-collapsed" : "",
+        isFocusMode ? "focus-mode" : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    [isCommandOpen, isFocusMode, isSidebarOpen, isTerminalOpen],
+  );
+
+  const exitFocusMode = useCallback(() => {
+    if (isFocusMode) setIsFocusMode(false);
+  }, [isFocusMode]);
+
+  const toggleCommand = useCallback(() => {
+    exitFocusMode();
+    setIsCommandOpen((open) => !open);
+  }, [exitFocusMode]);
+
+  const toggleSidebar = useCallback(() => {
+    exitFocusMode();
+    setIsSidebarOpen((open) => !open);
+  }, [exitFocusMode]);
+
+  const toggleTerminal = useCallback(() => {
+    exitFocusMode();
+    setIsTerminalOpen((open) => !open);
+  }, [exitFocusMode]);
+
+  const toggleFocusMode = useCallback(() => {
+    setIsFocusMode((open) => {
+      const next = !open;
+      if (next) {
+        setIsCommandOpen(false);
+        setIsSidebarOpen(false);
+        setIsTerminalOpen(false);
+      } else {
+        setIsCommandOpen(true);
+        setIsSidebarOpen(true);
+        setIsTerminalOpen(true);
+      }
+      return next;
+    });
+  }, []);
 
   const loadInvestigations = useCallback(async () => {
     try {
@@ -170,19 +226,33 @@ export default function Dashboard() {
   }, [loadInvestigations]);
 
   useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (!["b", "j", "f"].includes(key)) return;
+      event.preventDefault();
+      if (key === "b") toggleSidebar();
+      if (key === "j") toggleTerminal();
+      if (key === "f") toggleFocusMode();
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [toggleFocusMode, toggleSidebar, toggleTerminal]);
+
+  useEffect(() => {
     if (!currentTaskId) return undefined;
     const socket = new WebSocket(wsUrl(currentTaskId));
     socket.onmessage = (event) => {
       try {
         const line = JSON.parse(event.data) as TerminalLine;
-        setTerminalLines((previous) => [...previous.slice(-220), line]);
+        setTerminalLines((previous) => [...previous.slice(-260), line]);
       } catch {
-        setTerminalLines((previous) => [...previous.slice(-220), { level: "tool", message: event.data }]);
+        setTerminalLines((previous) => [...previous.slice(-260), { level: "tool", message: event.data }]);
       }
     };
     socket.onerror = () => {
       setTerminalLines((previous) => [
-        ...previous.slice(-220),
+        ...previous.slice(-260),
         { level: "error", message: "WebSocket telemetry connection failed", time: new Date().toISOString() },
       ]);
     };
@@ -205,6 +275,8 @@ export default function Dashboard() {
       setCurrentTaskId(payload.data.task_id);
       setTaskLabel(`nexusrecon / ${target.trim()}`);
       setTerminalLines([]);
+      setIsFocusMode(false);
+      setIsTerminalOpen(true);
       await loadInvestigations();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to start investigation");
@@ -244,8 +316,23 @@ export default function Dashboard() {
   };
 
   return (
-    <main className="nx-shell">
-      <aside className="nx-left">
+    <main className={shellClass}>
+      <div className="nx-floating-controls" aria-label="Workspace controls">
+        <button className={isCommandOpen ? "nx-control-button active" : "nx-control-button"} type="button" onClick={toggleCommand} title="Toggle command rail">
+          <PanelLeft size={16} />
+        </button>
+        <button className={isSidebarOpen ? "nx-control-button active" : "nx-control-button"} type="button" onClick={toggleSidebar} title="Toggle deep data panel (Ctrl+B)">
+          <PanelRight size={16} />
+        </button>
+        <button className={isTerminalOpen ? "nx-control-button active" : "nx-control-button"} type="button" onClick={toggleTerminal} title="Toggle terminal HUD (Ctrl+J)">
+          <PanelBottom size={16} />
+        </button>
+        <button className={isFocusMode ? "nx-control-button active" : "nx-control-button"} type="button" onClick={toggleFocusMode} title="Fullscreen graph focus (Ctrl+F)">
+          {isFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
+      </div>
+
+      <aside className={isCommandOpen ? "nx-left" : "nx-left closed"}>
         <div className="nx-brand">
           <div className="nx-brand-mark"><Shield size={20} /></div>
           <div>
@@ -321,7 +408,7 @@ export default function Dashboard() {
         </section>
       </aside>
 
-      <section className={drawerOpen ? "nx-center" : "nx-center drawer-collapsed"}>
+      <section className="nx-center">
         <header className="nx-topbar">
           <div>
             <div className="nx-eyebrow">
@@ -358,9 +445,9 @@ export default function Dashboard() {
             onError={setError}
           />
 
-          <aside className={drawerOpen ? "nx-drawer" : "nx-drawer closed"}>
-            <button className="nx-drawer-toggle" type="button" onClick={() => setDrawerOpen((open) => !open)}>
-              {drawerOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          <aside className={isSidebarOpen ? "nx-drawer" : "nx-drawer closed"} aria-hidden={!isSidebarOpen}>
+            <button className="nx-drawer-toggle" type="button" onClick={toggleSidebar} title="Toggle deep data panel">
+              {isSidebarOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
             <div className="nx-drawer-inner">
               <div className="nx-panel-title">
@@ -409,14 +496,19 @@ export default function Dashboard() {
           </aside>
         </div>
 
-        <section className="nx-terminal">
+        <section className={isTerminalOpen ? "nx-terminal" : "nx-terminal closed"} aria-hidden={!isTerminalOpen}>
           <header>
             <div>
               <Terminal size={15} />
               <strong>Live terminal HUD</strong>
               <span>{taskLabel}</span>
             </div>
-            <code>{currentTaskId || "no-active-task"}</code>
+            <div className="nx-terminal-actions">
+              <code>{currentTaskId || "no-active-task"}</code>
+              <button className="icon-button" type="button" onClick={toggleTerminal} title="Hide terminal HUD">
+                <PanelBottom size={15} />
+              </button>
+            </div>
           </header>
           <div className="nx-terminal-lines">
             {terminalLines.map((line, index) => (
