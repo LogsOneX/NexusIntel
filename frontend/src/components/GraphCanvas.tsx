@@ -31,6 +31,7 @@ type ApiGraphNode = {
   value: string;
   source?: string;
   confidence?: string;
+  confidence_level?: number;
   data?: Record<string, unknown>;
   created_at?: string;
 };
@@ -41,6 +42,7 @@ type ApiGraphEdge = {
   target: string;
   type: string;
   confidence?: string;
+  confidence_level?: number;
   data?: Record<string, unknown>;
   created_at?: string;
 };
@@ -201,7 +203,15 @@ function strictEdgeFromApi(edge: ApiGraphEdge): GraphEdge {
     source: edge.source,
     target: edge.target,
     label: upperSnake(edge.type),
-    confidence_level: confidenceScore(edge.confidence),
+    confidence_level: typeof edge.confidence_level === "number" ? edge.confidence_level : typeof edge.data?.confidence_level === "number" ? edge.data.confidence_level : confidenceScore(edge.confidence),
+  };
+}
+
+function normalizeGraphPayload(payload: unknown): ApiGraphPayload {
+  const raw = (payload || {}) as Partial<ApiGraphPayload>;
+  return {
+    nodes: Array.isArray(raw.nodes) ? raw.nodes : [],
+    edges: Array.isArray(raw.edges) ? raw.edges : [],
   };
 }
 
@@ -425,6 +435,15 @@ export default function GraphCanvas({
 
   const selectedStrictNode = useMemo(() => graphNodes.find((node) => node.id === selectedNode?.id) || null, [graphNodes, selectedNode?.id]);
 
+  const resizeGraph = useCallback((fit = false) => {
+    window.requestAnimationFrame(() => {
+      const cy = cyRef.current;
+      if (!cy) return;
+      cy.resize();
+      if (fit && cy.nodes().length) cy.fit(undefined, 96);
+    });
+  }, []);
+
   const pushHistory = useCallback((snapshot?: { nodes: GraphNode[]; edges: GraphEdge[] }) => {
     const cloned = snapshot || cloneState(graphNodesRef.current, graphEdgesRef.current);
     if (!cloned.nodes.length && !cloned.edges.length) return;
@@ -510,8 +529,9 @@ export default function GraphCanvas({
         return;
       }
       onSelectNode(apiNodesRef.current.get(node.id) || apiNodeFromStrict(node));
+      setDataPanelOpen(true);
     },
-    [onSelectNode],
+    [onSelectNode, setDataPanelOpen],
   );
 
   const runLayout = useCallback((mode: LayoutMode = layoutMode, fit = true) => {
@@ -532,10 +552,10 @@ export default function GraphCanvas({
   const pollGraphUntilComplete = useCallback(
     (taskId: string) => {
       if (pollers.current[taskId]) window.clearInterval(pollers.current[taskId]);
-      pollers.current[taskId] = window.setInterval(async () => {
+      const refresh = async () => {
         try {
           const graphPayload = await apiJson(`/api/v1/tasks/${taskId}/graph`);
-          onGraphUpdate(graphPayload.data);
+          onGraphUpdate(normalizeGraphPayload(graphPayload.data));
           const taskPayload = await apiJson(`/api/v1/tasks/${taskId}`);
           if (["completed", "failed"].includes(taskPayload.data.status)) {
             window.clearInterval(pollers.current[taskId]);
@@ -550,7 +570,9 @@ export default function GraphCanvas({
           setRunningNodeId(null);
           onError(error instanceof Error ? error.message : "Graph polling failed");
         }
-      }, 1800);
+      };
+      void refresh();
+      pollers.current[taskId] = window.setInterval(refresh, 1500);
     },
     [onError, onGraphUpdate],
   );
@@ -592,7 +614,7 @@ export default function GraphCanvas({
       suppressNextPropHistory.current = true;
       try {
         const payload = await apiJson(`/api/v1/investigations/${investigationId}/entities/${node.id}`, { method: "DELETE" });
-        onGraphUpdate(payload.data.graph);
+        onGraphUpdate(normalizeGraphPayload(payload.data.graph));
       } catch (error) {
         onError(error instanceof Error ? error.message : "Delete failed");
       }
@@ -622,7 +644,7 @@ export default function GraphCanvas({
             data: { created_from: "graph_drag_drop", x: point.x, y: point.y, parent: selectedNode?.id || null },
           }),
         });
-        onGraphUpdate(payload.data.graph);
+        onGraphUpdate(normalizeGraphPayload(payload.data.graph));
       } catch (error) {
         onError(error instanceof Error ? error.message : "Failed to add dropped entity");
       }
@@ -785,8 +807,23 @@ export default function GraphCanvas({
   }, [selectStrictNode]);
 
   useEffect(() => {
+    const element = containerRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => resizeGraph(false));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [resizeGraph]);
+
+  useEffect(() => {
+    resizeGraph(false);
+    const timer = window.setTimeout(() => resizeGraph(false), 340);
+    return () => window.clearTimeout(timer);
+  }, [dataPanelOpen, resizeGraph, terminalOpen, timelineMode]);
+
+  useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
+    cy.resize();
     const nodeMap = new Map(graphNodes.map((node) => [node.id, node]));
     const edgeMap = new Map(graphEdges.map((edge) => [edge.id, edge]));
     const typeById = new Map(graphNodes.map((node) => [node.id, node.nodeType]));
@@ -835,8 +872,10 @@ export default function GraphCanvas({
     if (!hasFitRef.current && graphNodes.length) {
       runLayout(layoutMode, true);
       hasFitRef.current = true;
+    } else {
+      resizeGraph(false);
     }
-  }, [graphEdges, graphNodes, highlightType, layoutMode, runLayout, runningNodeId]);
+  }, [graphEdges, graphNodes, highlightType, layoutMode, resizeGraph, runLayout, runningNodeId]);
 
   useEffect(() => {
     const cy = cyRef.current;

@@ -217,7 +217,7 @@ function DashboardHome({ token, navigate }: PageProps) {
 }
 
 function GraphHub({ token }: PageProps) {
-  const [, setInvestigations] = useState<Investigation[]>([]);
+  const [investigations, setInvestigations] = useState<Investigation[]>([]);
   const [activeInvestigationId, setActiveInvestigationId] = useState<string | null>(null);
   const [graph, setGraph] = useState<GraphPayload>({ nodes: [], edges: [] });
   const [selectedNode, setSelectedNode] = useState<ApiNode | null>(null);
@@ -234,7 +234,9 @@ function GraphHub({ token }: PageProps) {
 
   const loadInvestigations = useCallback(async () => {
     const payload = await apiJson("/api/v1/investigations", undefined, token);
-    setInvestigations(payload.data.items || []);
+    const items = payload.data.items || [];
+    setInvestigations(items);
+    return items as Investigation[];
   }, [token]);
 
   const loadGraph = useCallback(async (id: string) => {
@@ -244,7 +246,13 @@ function GraphHub({ token }: PageProps) {
     setSelectedNode(null);
   }, [token]);
 
-  useEffect(() => { loadInvestigations().catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load investigations")); }, [loadInvestigations]);
+  useEffect(() => {
+    loadInvestigations()
+      .then((items) => {
+        if (!activeInvestigationId && items[0]?.id) void loadGraph(items[0].id).catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load latest graph"));
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load investigations"));
+  }, [activeInvestigationId, loadGraph, loadInvestigations]);
 
   useEffect(() => {
     if (!currentTaskId) return undefined;
@@ -265,11 +273,13 @@ function GraphHub({ token }: PageProps) {
     try {
       const payload = await apiJson("/api/v1/scans/nexusrecon", { method: "POST", body: JSON.stringify({ target: target.trim(), mode }) }, token);
       setActiveInvestigationId(payload.data.investigation_id);
-      setGraph(payload.data.graph);
+      setGraph(payload.data.graph || { nodes: [], edges: [] });
       setCurrentTaskId(payload.data.task_id);
       setTaskLabel(`pipeline / ${target.trim()}`);
+      setSelectedNode(null);
       setTerminalLines([]);
       setTerminalOpen(true);
+      setDataPanelOpen(true);
       await loadInvestigations();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to start investigation");
@@ -280,7 +290,21 @@ function GraphHub({ token }: PageProps) {
 
 
 
-  const rows = useMemo(() => flattenData(selectedNode?.data || {}), [selectedNode]);
+  const rows = useMemo(() => {
+    if (!selectedNode) return [];
+    return flattenData({
+      id: selectedNode.id,
+      type: selectedNode.type,
+      label: selectedNode.label,
+      value: selectedNode.value,
+      source: selectedNode.source || "unknown",
+      confidence: selectedNode.confidence || "medium",
+      created_at: selectedNode.created_at || "",
+      data: selectedNode.data || {},
+    });
+  }, [selectedNode]);
+
+  const activeCase = useMemo(() => investigations.find((item) => item.id === activeInvestigationId) || null, [activeInvestigationId, investigations]);
 
   return (
     <section className="graph-page">
@@ -308,7 +332,7 @@ function GraphHub({ token }: PageProps) {
           dataPanelOpen={dataPanelOpen}
           setDataPanelOpen={setDataPanelOpen}
         />
-        <aside className={dataPanelOpen ? "entity-spec" : "entity-spec closed"}><div className="nx-panel-title"><FileJson size={15} />Entity Data</div>{selectedNode ? <><h2>{selectedNode.label}</h2><code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code><div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div></> : <p>Select a node to inspect structured intelligence.</p>}</aside>
+        <aside className={dataPanelOpen ? "entity-spec" : "entity-spec closed"}><div className="nx-panel-title"><FileJson size={15} />Entity Data</div>{selectedNode ? <><h2>{selectedNode.label}</h2><code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code><div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div></> : <><h2>{activeCase?.target || "No active entity"}</h2><code>{activeCase ? `${activeCase.target_type} / ${activeCase.status}` : "no investigation loaded"}</code><p>Select a node to inspect structured intelligence. Latest investigation auto-loads when available.</p></>}</aside>
         <section className={terminalOpen ? "graph-terminal" : "graph-terminal closed"}><header><Terminal size={15} /><strong>Live Terminal</strong><span>{taskLabel}</span></header><div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Waiting for telemetry...</code></p>}</div></section>
         {oracleNode && <div className="graph-oracle-popover"><button type="button" onClick={() => setOracleNode(null)}>Close Oracle</button><OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode} title="Node Oracle" /></div>}
       </div>
