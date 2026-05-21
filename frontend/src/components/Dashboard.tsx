@@ -20,7 +20,7 @@ import {
   Terminal,
   UserSearch,
 } from "lucide-react";
-import FlowCanvas from "./FlowCanvas";
+import GraphCanvas from "./GraphCanvas";
 
 type GraphNode = {
   id: string;
@@ -467,7 +467,7 @@ export default function Dashboard() {
         )}
 
         <div className="nx-workbench">
-          <FlowCanvas
+          <GraphCanvas
             investigationId={activeInvestigationId}
             nodes={graph.nodes}
             edges={graph.edges}
@@ -476,6 +476,12 @@ export default function Dashboard() {
             onGraphUpdate={setGraph}
             onTaskStart={handleTaskStart}
             onError={setError}
+            onSystemLog={(message) =>
+              setTerminalLines((previous) => [
+                ...previous.slice(-260),
+                { level: "system", message, time: new Date().toISOString() },
+              ])
+            }
           />
 
           <aside className={isSidebarOpen ? "nx-drawer" : "nx-drawer closed"} aria-hidden={!isSidebarOpen}>

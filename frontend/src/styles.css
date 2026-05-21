@@ -2306,3 +2306,225 @@ select:focus {
     padding-left: 54px;
   }
 }
+
+/* NexusIntel graph lifecycle and analysis modes */
+.graph-context-menu {
+  z-index: 50 !important;
+  top: 0 !important;
+  left: 0 !important;
+  max-height: min(74vh, 620px);
+  overflow: auto;
+}
+
+.tactical-graph-toolbar {
+  grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.1fr) auto auto !important;
+  overflow: visible;
+}
+
+.layout-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid #333333;
+  background: #333333;
+}
+
+.layout-switcher button,
+.graph-report-button,
+.context-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 0 !important;
+  background: #111111 !important;
+  color: #888888 !important;
+  padding: 0 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.layout-switcher button.active,
+.layout-switcher button:hover,
+.context-tabs button.active,
+.context-tabs button:hover,
+.icon-button.active,
+.graph-report-button:hover {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.graph-report-button {
+  border: 1px solid #333333 !important;
+  min-height: 34px;
+}
+
+.context-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #333333;
+  border-bottom: 1px solid #333333;
+}
+
+.context-danger {
+  background: #150606 !important;
+  color: #ffb4b4 !important;
+}
+
+.context-danger:hover {
+  background: #260909 !important;
+  color: #ffffff !important;
+}
+
+.context-danger strong {
+  color: #ffb4b4 !important;
+}
+
+.timeline-view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: #000000;
+  color: #ffffff;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  border-bottom: 1px solid #333333;
+  padding: 10px 14px;
+}
+
+.timeline-header strong {
+  display: block;
+  margin-top: 3px;
+  color: #ffffff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.timeline-list {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 28px 30px;
+}
+
+.timeline-list::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 39px;
+  width: 1px;
+  background: #333333;
+}
+
+.timeline-entry {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 28px 168px minmax(0, 1fr) 18px;
+  gap: 12px;
+  align-items: start;
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid #333333 !important;
+  background: #050505 !important;
+  color: #ffffff !important;
+  margin-bottom: 10px;
+  padding: 12px;
+  text-align: left;
+}
+
+.timeline-entry:hover {
+  border-color: #ffffff !important;
+  transform: translate3d(0, -1px, 0);
+}
+
+.timeline-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #ffffff;
+  background: #000000;
+}
+
+.timeline-time,
+.timeline-body code,
+.timeline-body small {
+  display: block;
+  color: #888888;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.timeline-body strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #ffffff;
+  font-size: 13px;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.timeline-empty {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  height: 100%;
+  min-height: 300px;
+  color: #888888;
+  text-align: center;
+}
+
+.timeline-empty strong {
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1180px) {
+  .tactical-graph-toolbar {
+    grid-template-columns: minmax(150px, 1fr) auto !important;
+  }
+
+  .layout-switcher,
+  .tactical-graph-actions {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 920px) {
+  .tactical-graph-toolbar {
+    grid-template-columns: 1fr !important;
+  }
+
+  .layout-switcher,
+  .tactical-graph-actions,
+  .entity-pipeline {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .timeline-entry {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .timeline-time,
+  .timeline-entry > svg {
+    display: none;
+  }
+}

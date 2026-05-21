@@ -989,3 +989,233 @@ def run_phone_task(
         raise
     finally:
         db.close()
+
+def macro_target_type(value: str) -> str:
+    target = value.strip()
+    if "@" in target and "." in target.rsplit("@", 1)[-1]:
+        return "email"
+    if target.replace("+", "").replace("-", "").replace(" ", "").isdigit() and len(target) >= 7:
+        return "phone"
+    try:
+        socket.inet_aton(target)
+        return "ip"
+    except OSError:
+        pass
+    if "." in target and " " not in target:
+        return "domain"
+    return "username"
+
+
+@celery_app.task(bind=True, name="nexusintel.full_identity_pipeline")
+def run_full_identity_pipeline_task(
+    self,
+    task_id: str,
+    investigation_id: str,
+    target: str,
+    mode: str = "standard",
+    parent_node_id: str | None = None,
+    transform: str = "full_identity_pipeline",
+) -> dict[str, Any]:
+    db = task_session()
+    try:
+        mark_task(db, task_id, "running")
+        mark_investigation(db, investigation_id, "running")
+        db.commit()
+
+        kind = macro_target_type(target)
+        emit(
+            task_id,
+            "info",
+            f"Starting autonomous identity macro for {target}",
+            {"mode": mode, "transform": transform, "kind": kind},
+            investigation_id,
+        )
+
+        parent = db.get(Entity, parent_node_id) if parent_node_id else None
+        if not parent:
+            parent = upsert_entity(
+                db,
+                investigation_id,
+                type_=kind,
+                label=target,
+                value=target,
+                source="macro_pipeline",
+                confidence="confirmed",
+                data={"role": "macro_root", "mode": mode},
+            )
+            db.commit()
+
+        created_total = 0
+        profile_total = 0
+        domains: set[str] = set()
+
+        if kind == "email":
+            local, domain = split_email(target)
+            domains.add(domain)
+            email_analysis = asyncio.run(analyze_email_target(target, mode))
+            created = persist_artifacts(db, investigation_id, parent, email_analysis["artifacts"], "macro_email_recon")
+            created_total += len(created)
+            emit(
+                task_id,
+                "tool",
+                f"Macro email stage normalized {len(created)} artifacts; domain={domain}",
+                {"valid": email_analysis["valid"], "has_mx": email_analysis["has_mx"], "disposable": email_analysis["disposable"]},
+                investigation_id,
+            )
+            if local:
+                username_node = upsert_entity(
+                    db,
+                    investigation_id,
+                    type_="username",
+                    label=local,
+                    value=local,
+                    source="macro_email_recon",
+                    confidence="medium",
+                    data={"derived_from": target, "stage": "local_part"},
+                )
+                upsert_relationship(
+                    db,
+                    investigation_id,
+                    source_id=parent.id,
+                    target_id=username_node.id,
+                    type_="HAS_LOCAL_PART",
+                    source="macro_email_recon",
+                    confidence="medium",
+                )
+
+        elif kind == "username":
+            username = normalize_username(target)
+            identity_analysis = asyncio.run(analyze_identity_target(username, mode))
+            created = persist_artifacts(db, investigation_id, parent, identity_analysis["artifacts"], "macro_identity_recon")
+            created_total += len(created)
+            emit(task_id, "tool", f"Macro identity stage normalized {len(created)} passive pivots", identity_analysis.get("guardrails", {}), investigation_id)
+
+            writer = RedisLineWriter(task_id, investigation_id)
+            with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+                raw = asyncio.run(run_legacy_nexus(username, mode))
+            writer.flush()
+            for item in normalize_nexus_result(raw):
+                if not item.get("found") and mode != "aggressive":
+                    continue
+                platform = item["site"]
+                profile = item["url"]
+                platform_node = upsert_entity(
+                    db,
+                    investigation_id,
+                    type_="platform",
+                    label=platform,
+                    value=platform.lower(),
+                    source="macro_nexusrecon",
+                    confidence="medium",
+                    data={"icon": platform_icon(platform), "stage": "macro_profile_sweep"},
+                )
+                profile_node = upsert_entity(
+                    db,
+                    investigation_id,
+                    type_="profile",
+                    label=f"{username} @ {platform}",
+                    value=profile,
+                    source="macro_nexusrecon",
+                    confidence="high" if item.get("found") else "low",
+                    data={"platform": platform, "url": profile, "status": item.get("status"), "raw": item.get("raw", {})},
+                )
+                upsert_relationship(
+                    db,
+                    investigation_id,
+                    source_id=parent.id,
+                    target_id=profile_node.id,
+                    type_="REGISTERED_ON" if item.get("found") else "OBSERVED_ON",
+                    source="macro_nexusrecon",
+                    confidence="high" if item.get("found") else "low",
+                )
+                upsert_relationship(
+                    db,
+                    investigation_id,
+                    source_id=profile_node.id,
+                    target_id=platform_node.id,
+                    type_="HOSTED_BY",
+                    source="macro_nexusrecon",
+                    confidence="medium",
+                )
+                profile_total += 1
+
+        elif kind == "phone":
+            analysis = analyze_phone_target(target, mode)
+            created = persist_artifacts(db, investigation_id, parent, analysis["artifacts"], "macro_phone_recon")
+            created_total += len(created)
+            emit(task_id, "tool", f"Macro phone stage normalized {len(created)} numbering-plan pivots", analysis.get("guardrails", {}), investigation_id)
+
+        else:
+            domains.add(domain_from_target(target))
+
+        for domain in sorted(domain for domain in domains if domain):
+            domain_node = upsert_entity(
+                db,
+                investigation_id,
+                type_="domain",
+                label=domain,
+                value=domain,
+                source="macro_network_recon",
+                confidence="high",
+                data={"role": "macro_domain", "stage": "domain_extraction"},
+            )
+            upsert_relationship(
+                db,
+                investigation_id,
+                source_id=parent.id,
+                target_id=domain_node.id,
+                type_="USES_DOMAIN",
+                source="macro_network_recon",
+                confidence="high",
+            )
+            network_analysis = asyncio.run(analyze_network_target(domain, mode))
+            created = persist_artifacts(db, investigation_id, domain_node, network_analysis["artifacts"], "macro_network_recon")
+            created_total += len(created)
+            emit(task_id, "tool", f"Macro network stage normalized {len(created)} public DNS/RDAP pivots for {domain}", {"kind": network_analysis["kind"]}, investigation_id)
+
+            record_sets = {"A": resolve_records(domain, "A"), "AAAA": resolve_records(domain, "AAAA"), "MX": resolve_records(domain, "MX")}
+            for record_type, values in record_sets.items():
+                for value in values[:24]:
+                    node_type = "ip" if record_type in {"A", "AAAA"} else "dns_record"
+                    node = upsert_entity(
+                        db,
+                        investigation_id,
+                        type_=node_type,
+                        label=value if node_type == "ip" else f"{record_type} {value[:90]}",
+                        value=value if node_type == "ip" else f"{record_type}:{domain}:{value}",
+                        source="macro_dns",
+                        confidence="high",
+                        data={"record_type": record_type, "record": value, "stage": "macro_dns_resolution"},
+                    )
+                    upsert_relationship(
+                        db,
+                        investigation_id,
+                        source_id=domain_node.id,
+                        target_id=node.id,
+                        type_="RESOLVES_TO" if node_type == "ip" else "HAS_MX_RECORD",
+                        source="macro_dns",
+                        confidence="high",
+                    )
+
+        result = {
+            "target": target,
+            "kind": kind,
+            "mode": mode,
+            "created_artifacts": created_total,
+            "profiles": profile_total,
+            "domains": sorted(domains),
+        }
+        mark_task(db, task_id, "completed", result=result)
+        mark_investigation(db, investigation_id, "completed")
+        db.commit()
+        emit(task_id, "success", f"Autonomous identity macro completed: {created_total} artifacts, {profile_total} profiles", result, investigation_id)
+        return result
+    except Exception as exc:
+        db.rollback()
+        mark_task(db, task_id, "failed", error=str(exc), result={"target": target, "transform": transform})
+        mark_investigation(db, investigation_id, "failed")
+        db.commit()
+        emit(task_id, "error", f"Autonomous identity macro failed: {exc}", {"target": target, "transform": transform}, investigation_id)
+        raise
+    finally:
+        db.close()

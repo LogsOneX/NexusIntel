@@ -16,7 +16,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstra
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
-from tasks import run_domain_task, run_email_google_task, run_nexusrecon_task, run_phone_task
+from tasks import run_domain_task, run_email_google_task, run_full_identity_pipeline_task, run_nexusrecon_task, run_phone_task
 
 
 DATABASE_URL = os.getenv(
@@ -476,7 +476,9 @@ async def run_transform(payload: TransformRequest, db: Session = Depends(get_db)
     target = node.value
     record = create_task_record(db, payload.investigation_id, transform, target)
 
-    if transform in {"legacy_nexusrecon", "nexusrecon", "maigret_username", "sherlock_username", "username_presence"}:
+    if transform in {"full_identity_pipeline", "identity_macro", "email_macro", "autonomous_identity_pipeline"}:
+        celery = run_full_identity_pipeline_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
+    elif transform in {"legacy_nexusrecon", "nexusrecon", "maigret_username", "sherlock_username", "username_presence"}:
         celery = run_nexusrecon_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id)
     elif transform in {"email_footprint", "holehe_email", "google_osint", "workspace_recon"}:
         celery = run_email_google_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
