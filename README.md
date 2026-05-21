@@ -30,7 +30,7 @@ React + Cytoscape dashboard
   -> Celery worker
   -> Redis broker + WebSocket log bus
   -> PostgreSQL graph database
-  -> NexusRecon/core/modules/recon local OSINT engine
+  -> recon_validators + NexusRecon/core/modules/recon local OSINT engine
 ```
 
 ## Kebutuhan Sistem
@@ -202,22 +202,35 @@ Folder `data/` di-ignore dari git.
 
 ## Dashboard Flow
 
-Dashboard terbaru tidak memakai include/exclude/module picker. Investigator cukup memasukkan target, memilih mode, lalu graph utama menjadi pusat operasi.
+Dashboard terbaru tidak memakai include/exclude/module picker. Investigator cukup memasukkan target, memilih mode, lalu graph utama menjadi pusat operasi. UI sekarang memakai `FlowCanvas` berbasis Cytoscape dengan drag-and-drop entity pipeline, right-click Logic Flow, data drawer, dan terminal HUD.
 
-1. Submit target username/email/domain/phone.
-2. API membuat investigation dan root entity.
-3. Worker Celery menjalankan transform OSINT public-source.
-4. Worker menulis node/edge ke PostgreSQL.
-5. Worker menyiarkan log real-time ke Redis.
+1. Submit target username/email/domain/IP/phone.
+2. API mengklasifikasi target dan membuat investigation + root entity.
+3. Worker Celery menjalankan pipeline OSINT public-source sesuai tipe target.
+4. `backend/recon_validators.py` memvalidasi, memecah, dan menormalisasi artifact menjadi schema graph.
+5. Worker menulis node/edge ke PostgreSQL dan menyiarkan log real-time ke Redis.
 6. UI menerima WebSocket telemetry di terminal HUD.
-7. Graph Cytoscape refresh dan investigator bisa klik/right-click entity untuk transform lanjutan.
+7. Graph refresh otomatis dan investigator bisa klik/right-click/drag-drop entity untuk transform lanjutan.
 
 Transform utama:
 
 - Username sweep: konsep Maigret/Sherlock untuk enumerasi profil publik.
 - Email/workspace recon: konsep Holehe/GHunt yang dibatasi ke DNS, provider hints, Gravatar hash, dan public workspace indicators.
-- Domain/DNS recon: A/AAAA/MX/NS/TXT/CAA, mail posture, service hints, dan candidate subdomain read-only.
-- Manual entity builder: tambah entity dan link langsung ke selected node.
+- Domain/DNS recon: A/AAAA/CNAME/MX/NS/TXT/CAA, RDAP, mail posture, service hints, dan crt.sh subdomain read-only.
+- IP recon: reverse DNS, RDAP allocation, dan GeoIP/ASN hint dari sumber gratis.
+- Phone recon: E.164 validation, country calling code, dan offline public numbering-plan hint.
+- Manual entity builder + drag-and-drop entity pipeline: tambah entity dan link langsung ke selected node.
+
+## Deep Recon Validator
+
+`backend/recon_validators.py` adalah parser public-source baru yang berjalan sebelum data dikirim ke UI:
+
+- Email: regex validation, local-part/domain split, MX/TXT/DMARC/BIMI, disposable-domain hint, mail posture, dan guardrail breach/register probing.
+- Domain/IP: DNS, RDAP, crt.sh, reverse DNS, GeoIP/ASN hint via free source.
+- Username/nama: shape validation, name-part split, public profile candidate URLs, dan guardrail sensitive inference.
+- Phone: strict E.164, country calling code, public numbering-plan line hint, dan guardrail messaging-app registration probing.
+
+NexusIntel tidak melakukan register/forgot-password probing, private API usage, phone/email account existence probing, atau rate-limit evasion.
 
 ## API Utama
 
@@ -243,11 +256,14 @@ WS   /api/v1/ws/logs/{task_id}
 ├── backend/
 │   ├── main.py          # canonical FastAPI gateway
 │   ├── tasks.py         # canonical Celery OSINT workers
+│   ├── recon_validators.py
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/components/Dashboard.tsx
-│   ├── src/components/GraphCanvas.tsx
+│   ├── src/components/FlowCanvas.tsx
+│   ├── src/components/CustomNode.tsx
+│   ├── src/components/GraphCanvas.tsx  # compatibility wrapper
 │   ├── src/App.jsx
 │   └── src/styles.css
 ├── core/                # legacy-compatible local engine, graph, flows, reports

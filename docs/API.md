@@ -38,7 +38,7 @@ Create body:
 }
 ```
 
-`target_type` is optional. The backend can classify username, email, domain, and phone-like targets.
+`target_type` is optional. The backend can classify username, email, domain, IP, and phone-like targets.
 
 ## Quick Scan
 
@@ -46,11 +46,11 @@ Create body:
 POST /api/v1/scans/nexusrecon
 ```
 
-Creates an investigation and immediately queues the NexusRecon identity sweep.
+Creates an investigation and immediately queues the correct OSINT pipeline by target type.
 
 ```json
 {
-  "target": "johndoe",
+  "target": "alice@example.com",
   "mode": "standard"
 }
 ```
@@ -106,6 +106,7 @@ Supported transform families:
 - `maigret_username`
 - `sherlock_username`
 - `legacy_nexusrecon`
+- `username_presence`
 - `email_footprint`
 - `holehe_email`
 - `google_osint`
@@ -113,6 +114,22 @@ Supported transform families:
 - `domain_recon`
 - `dns_recon`
 - `website_recon`
+- `network_recon`
+- `ip_recon`
+- `reverse_dns`
+- `phone_recon`
+- `e164_phone`
+- `carrier_lookup`
+- `numbering_plan`
+
+Transform routing:
+
+- identity transforms route to `run_nexusrecon_task`.
+- email/workspace transforms route to `run_email_google_task`.
+- domain/IP/network transforms route to `run_domain_task`.
+- phone transforms route to `run_phone_task`.
+
+All transform workers call `backend/recon_validators.py` before returning graph updates.
 
 ## Tasks
 

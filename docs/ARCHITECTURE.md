@@ -38,18 +38,42 @@ Model data utama:
 
 `backend/tasks.py` adalah entrypoint Celery canonical. Worker menjalankan transform berikut:
 
-- `run_nexusrecon_task`: bridge ke `nexusrecon.main.NexusRecon`, capture stdout/stderr, lalu normalisasi profil publik menjadi graph.
-- `run_email_google_task`: email/workspace recon public-source: local part, domain, MX/TXT, DMARC, BIMI, provider hints, dan Gravatar hash check.
-- `run_domain_task`: DNS/domain recon: A/AAAA/MX/NS/TXT/CAA dan candidate subdomain read-only untuk mode standard/aggressive.
+- `run_nexusrecon_task`: bridge ke `nexusrecon.main.NexusRecon`, capture stdout/stderr, jalankan identity parser, lalu normalisasi profil publik menjadi graph.
+- `run_email_google_task`: email/workspace recon public-source: regex validation, local part, domain, MX/TXT, DMARC, BIMI, disposable hint, provider hints, dan Gravatar hash check.
+- `run_domain_task`: DNS/domain/IP recon: A/AAAA/CNAME/MX/NS/TXT/CAA, RDAP, reverse DNS, GeoIP/ASN hints, dan crt.sh subdomain read-only.
+- `run_phone_task`: phone recon public-source: E.164 validation, country calling code, numbering-plan hint, dan policy guardrail.
 
 Semua worker menulis entity/relationship ke PostgreSQL dan publish log ke Redis channel `logs:{task_id}`.
+
+## Recon Validator Layer
+
+`backend/recon_validators.py` adalah layer normalisasi sebelum data masuk graph. File ini menjaga semua artifact menjadi schema seragam:
+
+- `type`
+- `label`
+- `value`
+- `source`
+- `confidence`
+- `relationship`
+- `data`
+
+Validator aktif:
+
+- `analyze_email_target`
+- `analyze_network_target`
+- `analyze_identity_target`
+- `analyze_phone_target`
+
+Validator ini bersifat public-source/read-only. Ia tidak menjalankan register/forgot-password probing, private API, credential checks, messaging-app account existence probing, atau rate-limit evasion.
 
 ## Frontend
 
 Frontend canonical:
 
 - `frontend/src/components/Dashboard.tsx`
-- `frontend/src/components/GraphCanvas.tsx`
+- `frontend/src/components/FlowCanvas.tsx`
+- `frontend/src/components/CustomNode.tsx`
+- `frontend/src/components/GraphCanvas.tsx` sebagai compatibility wrapper
 - `frontend/src/App.jsx`
 - `frontend/src/styles.css`
 
@@ -57,6 +81,7 @@ Dashboard menyediakan:
 
 - left console untuk target acquisition, recon mode, manual entity, dan investigation list,
 - central Cytoscape graph canvas sebagai workspace utama,
+- drag-and-drop entity pipeline untuk username, email, domain, IP, dan phone,
 - right deep data drawer untuk structured JSON intelligence,
 - bottom terminal HUD yang subscribe ke WebSocket task log,
 - right-click context menu untuk menjalankan transform dari node.
@@ -77,9 +102,9 @@ Folder berikut tetap dipakai sebagai engine lokal:
 ```text
 Target submit
   -> POST /api/v1/scans/nexusrecon
-  -> FastAPI creates investigation + root node
-  -> Celery task queued
-  -> Worker runs local OSINT method
+  -> FastAPI classifies target + creates investigation + root node
+  -> Celery task queued by target type
+  -> Worker runs validator + local OSINT method
   -> Worker writes normalized entities/edges
   -> Worker publishes Redis log events
   -> UI streams logs through WebSocket

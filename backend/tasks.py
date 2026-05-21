@@ -20,6 +20,8 @@ from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstra
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
+from recon_validators import analyze_email_target, analyze_identity_target, analyze_network_target, analyze_phone_target
+
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -232,6 +234,51 @@ def upsert_relationship(
     return edge
 
 
+def persist_artifacts(
+    db: Session,
+    investigation_id: str,
+    parent: Entity,
+    artifacts: list[dict[str, Any]],
+    default_source: str,
+) -> list[str]:
+    created_ids: list[str] = []
+    for artifact in artifacts:
+        node_type = str(artifact.get("type") or "signal")
+        label = str(artifact.get("label") or artifact.get("value") or node_type)
+        value = str(artifact.get("value") or label)
+        source = str(artifact.get("source") or default_source)
+        confidence = str(artifact.get("confidence") or "medium")
+        artifact_data = dict(artifact.get("data") or {})
+        artifact_data["artifact"] = {
+            "source": source,
+            "relationship": artifact.get("relationship") or "derived_signal",
+            "confidence": confidence,
+        }
+        node = upsert_entity(
+            db,
+            investigation_id,
+            type_=node_type,
+            label=label,
+            value=value,
+            source=source,
+            confidence=confidence,
+            data=artifact_data,
+        )
+        if node.id != parent.id:
+            upsert_relationship(
+                db,
+                investigation_id,
+                source_id=parent.id,
+                target_id=node.id,
+                type_=str(artifact.get("relationship") or "derived_signal"),
+                source=source,
+                confidence=confidence,
+                data={"validator": default_source, "artifact_type": node_type},
+            )
+        created_ids.append(node.id)
+    return created_ids
+
+
 def mark_task(db: Session, task_id: str, status: str, error: str | None = None, result: dict[str, Any] | None = None) -> None:
     record = db.get(TaskRecord, task_id)
     if not record:
@@ -381,6 +428,17 @@ def run_nexusrecon_task(
             )
             db.commit()
 
+        identity_analysis = asyncio.run(analyze_identity_target(target, mode))
+        identity_nodes = persist_artifacts(db, investigation_id, parent, identity_analysis["artifacts"], "identity_recon")
+        db.commit()
+        emit(
+            task_id,
+            "tool",
+            f"Identity parser normalized {len(identity_nodes)} public-source pivots",
+            {"kind": identity_analysis["kind"], "guardrails": identity_analysis["guardrails"]},
+            investigation_id,
+        )
+
         writer = RedisLineWriter(task_id, investigation_id)
         with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
             raw = asyncio.run(run_legacy_nexus(target, mode))
@@ -433,7 +491,13 @@ def run_nexusrecon_task(
             )
             found_count += 1
 
-        result = {"target": target, "mode": mode, "profiles": found_count, "raw_count": len(results)}
+        result = {
+            "target": target,
+            "mode": mode,
+            "profiles": found_count,
+            "raw_count": len(results),
+            "identity_artifacts": len(identity_nodes),
+        }
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
         db.commit()
@@ -453,7 +517,8 @@ def run_nexusrecon_task(
 def split_email(value: str) -> tuple[str, str]:
     email = value.strip().lower()
     if "@" not in email:
-        return email, email.split(".")[-1] if "." in email else ""
+        domain = email.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0].strip(".")
+        return "", domain
     local, domain = email.rsplit("@", 1)
     return local, domain
 
@@ -538,6 +603,21 @@ def run_email_google_task(
                 confidence="confirmed",
                 data={"role": "pivot"},
             )
+
+        email_analysis = asyncio.run(analyze_email_target(target, mode))
+        validator_nodes = persist_artifacts(db, investigation_id, parent, email_analysis["artifacts"], "email_recon")
+        db.commit()
+        emit(
+            task_id,
+            "tool",
+            f"Deep email parser produced {len(validator_nodes)} normalized graph artifacts",
+            {
+                "valid": email_analysis["valid"],
+                "has_mx": email_analysis["has_mx"],
+                "disposable": email_analysis["disposable"],
+            },
+            investigation_id,
+        )
 
         if "@" in target:
             username_node = upsert_entity(
@@ -659,7 +739,16 @@ def run_email_google_task(
                 investigation_id,
             )
 
-        result = {"target": target, "domain": domain, "mx": len(mx), "txt": len(txt), "services": len(services), "gravatar": gravatar}
+        result = {
+            "target": target,
+            "domain": domain,
+            "mx": len(mx),
+            "txt": len(txt),
+            "services": len(services),
+            "gravatar": gravatar,
+            "validator_artifacts": len(validator_nodes),
+            "guardrails": email_analysis["guardrails"],
+        }
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
         db.commit()
@@ -710,6 +799,17 @@ def run_domain_task(
                 source="domain_recon",
                 confidence="confirmed",
             )
+
+        network_analysis = asyncio.run(analyze_network_target(target, mode))
+        validator_nodes = persist_artifacts(db, investigation_id, parent, network_analysis["artifacts"], "network_recon")
+        db.commit()
+        emit(
+            task_id,
+            "tool",
+            f"Network parser produced {len(validator_nodes)} normalized graph artifacts",
+            {"kind": network_analysis["kind"], "target": network_analysis["target"]},
+            investigation_id,
+        )
 
         record_sets = {
             "A": resolve_records(domain, "A"),
@@ -773,7 +873,15 @@ def run_domain_task(
                 except OSError:
                     continue
 
-        result = {"domain": domain, "records": {key: len(value) for key, value in record_sets.items()}, "ips": ip_count}
+        result = {
+            "domain": domain,
+            "records": {key: len(value) for key, value in record_sets.items()},
+            "ips": ip_count,
+            "validator_artifacts": len(validator_nodes),
+            "network_kind": network_analysis["kind"],
+            "rdap": network_analysis.get("rdap"),
+            "subdomains": len(network_analysis.get("subdomains", [])),
+        }
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
         db.commit()
@@ -785,6 +893,62 @@ def run_domain_task(
         mark_investigation(db, investigation_id, "failed")
         db.commit()
         emit(task_id, "error", f"Domain recon failed: {exc}", {"target": target}, investigation_id)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="nexusintel.phone")
+def run_phone_task(
+    self,
+    task_id: str,
+    investigation_id: str,
+    target: str,
+    mode: str = "standard",
+    parent_node_id: str | None = None,
+    transform: str = "phone_recon",
+) -> dict[str, Any]:
+    db = task_session()
+    try:
+        mark_task(db, task_id, "running")
+        mark_investigation(db, investigation_id, "running")
+        db.commit()
+        emit(task_id, "info", f"Starting public numbering-plan recon for {target}", {"mode": mode, "transform": transform}, investigation_id)
+
+        parent = db.get(Entity, parent_node_id) if parent_node_id else None
+        analysis = analyze_phone_target(target, mode)
+        if not parent:
+            parent = upsert_entity(
+                db,
+                investigation_id,
+                type_="phone",
+                label=analysis["target"] or target,
+                value=analysis["target"] or target,
+                source="phone_recon",
+                confidence="high" if analysis["valid_e164"] else "low",
+                data={"role": "pivot", "valid_e164": analysis["valid_e164"]},
+            )
+
+        validator_nodes = persist_artifacts(db, investigation_id, parent, analysis["artifacts"], "phone_recon")
+        result = {
+            "target": analysis["target"],
+            "valid_e164": analysis["valid_e164"],
+            "calling_code": analysis["calling_code"],
+            "line_type": analysis["line_type"],
+            "validator_artifacts": len(validator_nodes),
+            "guardrails": analysis["guardrails"],
+        }
+        mark_task(db, task_id, "completed", result=result)
+        mark_investigation(db, investigation_id, "completed")
+        db.commit()
+        emit(task_id, "success", f"Phone recon completed for {analysis['target']}", result, investigation_id)
+        return result
+    except Exception as exc:
+        db.rollback()
+        mark_task(db, task_id, "failed", error=str(exc), result={"target": target})
+        mark_investigation(db, investigation_id, "failed")
+        db.commit()
+        emit(task_id, "error", f"Phone recon failed: {exc}", {"target": target}, investigation_id)
         raise
     finally:
         db.close()

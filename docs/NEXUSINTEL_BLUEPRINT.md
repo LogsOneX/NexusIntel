@@ -6,9 +6,12 @@ NexusIntel adalah OSINT investigation platform standalone yang menggabungkan gra
 
 ```text
 frontend/src/components/Dashboard.tsx
+frontend/src/components/FlowCanvas.tsx
+frontend/src/components/CustomNode.tsx
 frontend/src/components/GraphCanvas.tsx
 backend/main.py
 backend/tasks.py
+backend/recon_validators.py
 docker-compose.yml
 ```
 
@@ -16,8 +19,10 @@ docker-compose.yml
 
 - Graph-first investigation seperti Flowsint/Maltego.
 - Context transform dari node, bukan module picker mentah.
+- Drag-and-drop entity pipeline untuk menambah pivot langsung ke canvas.
 - Deep entity data table seperti OSINT.Industries.
 - Live terminal HUD untuk melihat worker bergerak.
+- Minimalist monochrome intelligence UI: black, anthracite, white/gray, 1px borders, sharp tactical layout.
 - Public-source, free, dan deployable dengan satu command.
 
 ## Investigation Loop
@@ -27,6 +32,7 @@ seed target
   -> root entity
   -> transform
   -> task record
+  -> recon validator
   -> live logs
   -> normalized entities
   -> directed relationships
@@ -42,21 +48,36 @@ seed target
 - Public profile normalization.
 - Platform/service node generation.
 - Local-part pivot dari email.
+- Public profile candidate URL generation.
 
 ### Email and Workspace
 
+- Regex email validation.
 - Email local-part/domain split.
 - MX/TXT lookup.
 - DMARC and BIMI lookup.
+- Disposable-domain hint.
 - Google/Microsoft/Zoho/Proton workspace hints.
 - Gravatar hash/avatar check in standard/aggressive modes.
+- Guardrail for registration probing and breach corpus dependency.
 
 ### Domain and Infrastructure
 
-- A/AAAA/MX/NS/TXT/CAA lookup.
+- A/AAAA/CNAME/MX/NS/TXT/CAA lookup.
+- RDAP domain/IP lookup.
+- crt.sh passive subdomain collection.
+- Reverse DNS for IP pivots.
+- GeoIP/ASN hint through free public source.
 - IP node extraction.
 - DNS record graphing.
 - Candidate subdomain resolution in standard/aggressive modes.
+
+### Phone
+
+- E.164 validation.
+- Country calling code parsing.
+- Public numbering-plan line-type hint.
+- Guardrail for messaging-app account-existence probing.
 
 ## Graph Schema
 

@@ -16,7 +16,7 @@ import {
   Terminal,
   UserSearch,
 } from "lucide-react";
-import GraphCanvas from "./GraphCanvas";
+import FlowCanvas from "./FlowCanvas";
 
 type GraphNode = {
   id: string;
@@ -112,6 +112,12 @@ function graphStats(graph: GraphPayload) {
     profiles: byType.profile || 0,
     infra: (byType.domain || 0) + (byType.ip || 0) + (byType.dns_record || 0),
   };
+}
+
+function terminalPrefix(level: string): string {
+  if (["tool", "info", "success"].includes(level)) return "[OSINT]";
+  if (level === "error") return "[ALERT]";
+  return "[SYS]";
 }
 
 export default function Dashboard() {
@@ -341,7 +347,7 @@ export default function Dashboard() {
         )}
 
         <div className="nx-workbench">
-          <GraphCanvas
+          <FlowCanvas
             investigationId={activeInvestigationId}
             nodes={graph.nodes}
             edges={graph.edges}
@@ -416,17 +422,18 @@ export default function Dashboard() {
             {terminalLines.map((line, index) => (
               <div className={`nx-term-line ${line.level}`} key={`${line.time || index}:${index}`}>
                 <span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span>
-                <strong>{line.level}</strong>
+                <strong>{terminalPrefix(line.level)}</strong>
                 <code>{line.message}</code>
               </div>
             ))}
             {!terminalLines.length && (
               <div className="nx-term-line system">
                 <span>00:00:00</span>
-                <strong>system</strong>
+                <strong>[SYS]</strong>
                 <code>Waiting for a recon task...</code>
               </div>
             )}
+            <div className="nx-terminal-cursor" aria-hidden="true" />
           </div>
         </section>
       </section>

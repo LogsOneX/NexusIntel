@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+import ipaddress
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Literal
@@ -15,7 +16,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstra
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
-from tasks import run_domain_task, run_email_google_task, run_nexusrecon_task
+from tasks import run_domain_task, run_email_google_task, run_nexusrecon_task, run_phone_task
 
 
 DATABASE_URL = os.getenv(
@@ -151,6 +152,11 @@ def classify_target(value: str) -> str:
         return "email"
     if target.replace("+", "").replace("-", "").replace(" ", "").isdigit() and len(target) >= 7:
         return "phone"
+    try:
+        ipaddress.ip_address(target)
+        return "ip"
+    except ValueError:
+        pass
     if "." in target and " " not in target:
         return "domain"
     return "username"
@@ -387,8 +393,18 @@ def get_graph(investigation_id: str, db: Session = Depends(get_db)) -> ApiRespon
 async def start_nexusrecon(payload: InvestigationCreate, db: Session = Depends(get_db)) -> ApiResponse:
     created = await create_investigation(payload, db)
     investigation_id = created.data["investigation"]
-    record = create_task_record(db, investigation_id, "nexusrecon.identity", payload.target.strip())
-    record.celery_id = enqueue_nexus(record, investigation_id, payload.target.strip(), payload.mode)
+    target = payload.target.strip()
+    target_type = classify_target(target)
+    record = create_task_record(db, investigation_id, f"nexusintel.{target_type}", target)
+    if target_type == "email":
+        celery = run_email_google_task.delay(record.id, investigation_id, target, payload.mode, created.data["root_node"]["id"], "email_footprint")
+    elif target_type in {"domain", "ip"}:
+        celery = run_domain_task.delay(record.id, investigation_id, target, payload.mode, created.data["root_node"]["id"], "network_recon")
+    elif target_type == "phone":
+        celery = run_phone_task.delay(record.id, investigation_id, target, payload.mode, created.data["root_node"]["id"], "phone_recon")
+    else:
+        celery = run_nexusrecon_task.delay(record.id, investigation_id, target, payload.mode, created.data["root_node"]["id"])
+    record.celery_id = celery.id
     investigation = db.get(Investigation, investigation_id)
     investigation.status = "running"
     db.commit()
@@ -397,7 +413,7 @@ async def start_nexusrecon(payload: InvestigationCreate, db: Session = Depends(g
         {
             "task_id": record.id,
             "level": "info",
-            "message": f"Queued NexusRecon identity sweep for {payload.target.strip()}",
+            "message": f"Queued {target_type} OSINT pipeline for {target}",
             "time": now_iso(),
         },
     )
@@ -464,8 +480,10 @@ async def run_transform(payload: TransformRequest, db: Session = Depends(get_db)
         celery = run_nexusrecon_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id)
     elif transform in {"email_footprint", "holehe_email", "google_osint", "workspace_recon"}:
         celery = run_email_google_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
-    elif transform in {"domain_recon", "dns_recon", "website_recon"}:
+    elif transform in {"domain_recon", "dns_recon", "website_recon", "network_recon", "ip_recon", "reverse_dns"}:
         celery = run_domain_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
+    elif transform in {"phone_recon", "e164_phone", "carrier_lookup", "numbering_plan"}:
+        celery = run_phone_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported transform: {payload.transform}")
 

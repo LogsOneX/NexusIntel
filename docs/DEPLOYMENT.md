@@ -186,11 +186,28 @@ WS  /api/v1/ws/logs/{task_id}
 ## Build Verification
 
 ```bash
-python3 -m py_compile backend/main.py backend/tasks.py
+python3 -m py_compile backend/main.py backend/tasks.py backend/recon_validators.py
 cd frontend && npm ci && npm run build
 docker compose config
 docker compose build
 ```
+
+## Updated Runtime Files
+
+Core runtime yang harus ikut ter-deploy:
+
+```text
+backend/main.py
+backend/tasks.py
+backend/recon_validators.py
+frontend/src/components/Dashboard.tsx
+frontend/src/components/FlowCanvas.tsx
+frontend/src/components/CustomNode.tsx
+frontend/src/components/GraphCanvas.tsx
+frontend/src/styles.css
+```
+
+`GraphCanvas.tsx` dipertahankan sebagai compatibility wrapper. Canvas aktif adalah `FlowCanvas.tsx`.
 
 ## Local Legacy Mode
 

@@ -2,6 +2,40 @@
 
 Dokumen ini menjelaskan modul CLI legacy yang dimuat oleh `core.engine.AnalyticsEngine`. Dashboard enterprise terbaru tidak menampilkan module picker; dashboard menjalankan transform dari node, lalu `backend/tasks.py` yang memutuskan wrapper OSINT mana yang dipakai. Folder `modules/` tetap penting untuk CLI dan legacy-compatible engine.
 
+Untuk runtime dashboard terbaru, layer normalisasi utama ada di:
+
+```text
+backend/recon_validators.py
+```
+
+Layer ini dipanggil oleh Celery sebelum hasil recon ditulis sebagai graph node/edge.
+
+## Runtime Transform Validators
+
+### `analyze_identity_target`
+
+Validasi username/nama, split name parts, public profile candidate URLs, dan guardrail untuk sensitive cultural-origin inference.
+
+Target: `username`, `name`
+
+### `analyze_email_target`
+
+Validasi format email, split local-part/domain, DNS MX/TXT/DMARC/BIMI, disposable-domain hint, mail exchanger posture, dan guardrail untuk breach/register probing.
+
+Target: `email`, `domain-like email pivot`
+
+### `analyze_network_target`
+
+Domain/IP recon public-source: DNS A/AAAA/CNAME/MX/NS/TXT/CAA, RDAP domain/IP, crt.sh passive subdomain, reverse DNS, dan GeoIP/ASN hint via source gratis.
+
+Target: `domain`, `url`, `ip`
+
+### `analyze_phone_target`
+
+Strict E.164 validation, country calling code parsing, Indonesian mobile prefix hint, public numbering-plan line-type signal, dan guardrail untuk WhatsApp/Telegram/Instagram registration probing.
+
+Target: `phone`
+
 Modul di bawah ini adalah plugin OSINT yang dimuat otomatis oleh `AnalyticsEngine`. Mode `standard` menjaga eksekusi ringan, sedangkan `active` dan `aggressive` mengaktifkan modul/crawling read-only yang lebih dalam.
 
 ## identity

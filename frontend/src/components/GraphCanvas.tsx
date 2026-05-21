@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
 import { Crosshair, Database, Globe, Mail, Network, Play, Plus, Trash2, UserRound } from "lucide-react";
+import FlowCanvas from "./FlowCanvas";
+
+export default FlowCanvas;
 
 type GraphNode = {
   id: string;
@@ -142,7 +145,7 @@ async function apiJson(path: string, options?: RequestInit) {
   return payload;
 }
 
-export default function GraphCanvas({
+export function LegacyGraphCanvas({
   investigationId,
   nodes,
   edges,
