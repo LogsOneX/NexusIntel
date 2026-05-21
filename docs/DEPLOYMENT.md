@@ -152,6 +152,17 @@ BYOK opsional:
 SHODAN_API_KEY=... INTELX_API_KEY=... VIRUSTOTAL_API_KEY=... docker compose up -d --build
 ```
 
+
+## Ghost Engine Runtime Options
+
+Optional internal egress proxy for public-source HTTP requests:
+
+```bash
+NEXUS_EGRESS_PROXY=http://proxy.internal:8080 docker compose up -d --build
+```
+
+The engine uses exponential backoff for 429/5xx responses and does not rotate proxies or bypass rate limits. Package `phonenumbers` is installed in the backend image for phone parsing; DNS uses dnspython through asyncio thread workers for Python 3.13 stability.
+
 ## Services
 
 - `frontend`: Nginx static React dashboard, reverse proxy `/api/`.

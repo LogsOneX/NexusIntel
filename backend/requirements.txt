@@ -13,3 +13,4 @@ beautifulsoup4==4.14.2
 python-multipart==0.0.20
 rich==15.0.0
 colorama==0.4.6
+phonenumbers==9.0.19

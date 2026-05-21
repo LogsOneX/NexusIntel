@@ -23,6 +23,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from recon_validators import analyze_email_target, analyze_identity_target, analyze_network_target, analyze_phone_target, normalize_username
+from backend.modules.email_recon import EmailPresenceResolver
+from backend.modules.identity_recon import IdentityResolver
+from backend.modules.phone_recon import PhoneResolver
 
 
 DATABASE_URL = os.getenv(
@@ -317,6 +320,13 @@ def mark_investigation(db: Session, investigation_id: str, status: str) -> None:
         investigation.updated_at = datetime.utcnow()
 
 
+def make_task_emitter(task_id: str, investigation_id: str):
+    async def _emit(message: str, payload: dict[str, Any] | None = None) -> None:
+        emit(task_id, "tool", message, payload or {}, investigation_id)
+
+    return _emit
+
+
 class RedisLineWriter(io.TextIOBase):
     def __init__(self, task_id: str, investigation_id: str, level: str = "tool"):
         self.task_id = task_id
@@ -485,6 +495,18 @@ def run_nexusrecon_task(
             investigation_id,
         )
 
+        identity_limit = None if mode in {"standard", "aggressive"} else 48
+        ghost_identity = asyncio.run(IdentityResolver(concurrency=72, timeout=10).resolve(username, emit=make_task_emitter(task_id, investigation_id), limit=identity_limit))
+        ghost_identity_nodes = persist_artifacts(db, investigation_id, parent, ghost_identity["artifacts"], "ghost_identity")
+        db.commit()
+        emit(
+            task_id,
+            "tool",
+            f"Ghost identity engine checked {ghost_identity['checked']} platforms and normalized {len(ghost_identity_nodes)} live public signals",
+            {"checked": ghost_identity["checked"], "found": ghost_identity["found"]},
+            investigation_id,
+        )
+
         writer = RedisLineWriter(task_id, investigation_id)
         with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
             raw = asyncio.run(run_legacy_nexus(username, mode))
@@ -565,6 +587,7 @@ def run_nexusrecon_task(
             "profiles": found_count,
             "raw_count": len(results),
             "identity_artifacts": len(identity_nodes),
+            "ghost_identity_artifacts": len(ghost_identity_nodes) if "ghost_identity_nodes" in locals() else 0,
         }
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
@@ -675,6 +698,17 @@ def run_email_google_task(
                 confidence="confirmed",
                 data={"role": "pivot"},
             )
+
+        ghost_email = asyncio.run(EmailPresenceResolver(timeout=10, identity_limit=24 if mode == "passive" else 64).resolve(target, emit=make_task_emitter(task_id, investigation_id)))
+        ghost_email_nodes = persist_artifacts(db, investigation_id, parent, ghost_email["artifacts"], "ghost_email")
+        db.commit()
+        emit(
+            task_id,
+            "tool",
+            f"Ghost email engine normalized {len(ghost_email_nodes)} public posture signals",
+            {"domain": ghost_email.get("domain"), "valid": ghost_email.get("valid")},
+            investigation_id,
+        )
 
         email_analysis = asyncio.run(analyze_email_target(target, mode))
         validator_nodes = persist_artifacts(db, investigation_id, parent, email_analysis["artifacts"], "email_recon")
@@ -819,6 +853,7 @@ def run_email_google_task(
             "services": len(services),
             "gravatar": gravatar,
             "validator_artifacts": len(validator_nodes),
+            "ghost_email_artifacts": len(ghost_email_nodes) if "ghost_email_nodes" in locals() else 0,
             "guardrails": email_analysis["guardrails"],
         }
         mark_task(db, task_id, "completed", result=result)
@@ -1001,6 +1036,17 @@ def run_phone_task(
                 data={"role": "pivot", "valid_e164": analysis["valid_e164"]},
             )
 
+        ghost_phone = asyncio.run(PhoneResolver().resolve(target, emit=make_task_emitter(task_id, investigation_id)))
+        ghost_phone_nodes = persist_artifacts(db, investigation_id, parent, ghost_phone["artifacts"], "ghost_phone")
+        db.commit()
+        emit(
+            task_id,
+            "tool",
+            f"Ghost phone engine normalized {len(ghost_phone_nodes)} public numbering-plan signals",
+            {"valid_e164": ghost_phone.get("valid_e164"), "plan": ghost_phone.get("plan", {})},
+            investigation_id,
+        )
+
         validator_nodes = persist_artifacts(db, investigation_id, parent, analysis["artifacts"], "phone_recon")
         result = {
             "target": analysis["target"],
@@ -1008,6 +1054,7 @@ def run_phone_task(
             "calling_code": analysis["calling_code"],
             "line_type": analysis["line_type"],
             "validator_artifacts": len(validator_nodes),
+            "ghost_phone_artifacts": len(ghost_phone_nodes) if "ghost_phone_nodes" in locals() else 0,
             "guardrails": analysis["guardrails"],
         }
         mark_task(db, task_id, "completed", result=result)

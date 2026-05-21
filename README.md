@@ -350,3 +350,15 @@ NEXUS_LLM_MODEL=llama3.1
 ```
 
 Optional BYOK keys tersedia untuk Shodan, IntelX, dan VirusTotal di Settings. Core OSINT tetap berjalan tanpa paid API.
+
+
+## Ghost Engine: Async Public Presence Resolution
+
+Backend terbaru memiliki `backend/modules/` sebagai asynchronous public-source recon engine:
+
+- `identity_recon.py`: concurrent 100+ public profile checks dengan false-positive filtering berbasis status code, title/body markers, dan username evidence.
+- `workspace_recon.py`: non-blocking async DNS MX/TXT/DMARC/BIMI, provider posture Google/Microsoft/Proton/Zoho/Fastmail, Microsoft tenant hint, dan Gravatar hash.
+- `email_recon.py`: safe email posture resolver yang memecah local-part/domain dan menjalankan workspace + public username pivot. Tidak memakai signup/password-reset/SMTP account probes.
+- `phone_recon.py`: E.164, carrier/geolocation/timezone via `phonenumbers` bila tersedia, public numbering-plan hints, dan deep-link candidate generation tanpa account-existence probing.
+
+Celery worker menjalankan engine ini via `asyncio.run()` dan men-stream temuan ke Redis/WebSocket saat ditemukan. Rate-limit handling memakai exponential backoff; tidak ada bypass atau rate-limit evasion. Optional egress proxy tunggal bisa dipakai dengan `NEXUS_EGRESS_PROXY` untuk environment internal.

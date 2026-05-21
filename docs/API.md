@@ -181,6 +181,8 @@ Transform routing:
 
 All transform workers call `backend/recon_validators.py` before returning graph updates. Relationships now include numeric `confidence_level` (0-100) for UI edge thickness and filtering.
 
+Celery workers also invoke `backend/modules/` Ghost Engine resolvers. These stream progress through `WS /api/v1/ws/logs/{task_id}` immediately as public signals are found, while final artifacts are persisted to the graph database.
+
 ## Tasks
 
 ```text

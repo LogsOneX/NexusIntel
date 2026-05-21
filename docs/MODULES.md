@@ -10,6 +10,27 @@ backend/recon_validators.py
 
 Layer ini dipanggil oleh Celery sebelum hasil recon ditulis sebagai graph node/edge.
 
+
+## Ghost Engine Backend Modules
+
+Folder `backend/modules/` adalah runtime OSINT async untuk dashboard/Celery. Modul ini berbeda dari folder legacy `modules/` di root. Semua modul memakai public-source/read-only signals dan menghindari signup, forgot-password, credential, contact-sync, SMTP VRFY, dan SMTP RCPT account-enumeration probes.
+
+### `backend/modules/identity_recon.py`
+
+Async username resolver dengan `aiohttp`, concurrency tinggi, 100+ platform profile URL, false-positive filtering, negative marker parsing, title extraction, dan confidence scoring. Hasil langsung di-stream ke WebSocket melalui callback Celery.
+
+### `backend/modules/workspace_recon.py`
+
+Workspace/cloud posture resolver: MX/TXT/DMARC/BIMI, Google/Microsoft/Proton/Zoho/Fastmail/Yandex/Amazon SES/Mailgun/SendGrid provider hints, Microsoft tenant discovery, dan Gravatar hash. DNS berjalan non-blocking via `asyncio.to_thread(dnspython)` agar stabil di Python 3.13.
+
+### `backend/modules/email_recon.py`
+
+Email posture resolver yang memvalidasi format, mendeteksi disposable domain, memecah local-part/domain, menjalankan workspace resolver, dan melakukan public username pivot dari local-part. Tidak melakukan pre-registration check, password reset, SMTP VRFY, SMTP RCPT, atau contact-sync.
+
+### `backend/modules/phone_recon.py`
+
+Phone posture resolver: normalisasi E.164, parsing `phonenumbers`, carrier/geolocation/timezone jika library tersedia, fallback numbering-plan lokal, dan deep-link candidate artifacts tanpa fetch atau klaim registrasi messenger.
+
 ## Runtime Transform Validators
 
 ### `analyze_identity_target`
