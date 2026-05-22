@@ -57,6 +57,16 @@ type Investigation = {
   meta?: Record<string, unknown>;
 };
 
+type GraphIntelligence = {
+  posture: string;
+  risk_score: number;
+  source_reliability: number;
+  lead_queue: Array<{ priority: string; node_id: string; label: string; action: string; reason: string }>;
+  entity_risks: Array<Record<string, unknown>>;
+  communities: Array<{ id: string; size: number; hub_id: string; hub_label: string; types: Record<string, number> }>;
+  dossier: Record<string, unknown>;
+};
+
 type CaseHealth = {
   score: number;
   status: string;
@@ -66,6 +76,7 @@ type CaseHealth = {
   weak_nodes: Array<Record<string, unknown>>;
   isolated_nodes: Array<Record<string, unknown>>;
   recommendations: Array<{ priority: string; action: string; reason: string }>;
+  intelligence?: GraphIntelligence;
 };
 
 type TerminalLine = {
@@ -253,6 +264,8 @@ function CaseDock({
   loading: boolean;
 }) {
   const topRecommendation = health?.recommendations?.[0];
+  const intel = health?.intelligence;
+  const topLead = intel?.lead_queue?.[0];
   return (
     <aside className="graph-case-dock" aria-label="Investigation lifecycle controls">
       <header>
@@ -272,7 +285,13 @@ function CaseDock({
         <span><Activity size={13} />Health {health ? `${health.score}%` : "--"}</span>
         <code>{health?.status || "no graph"}</code>
       </div>
-      {topRecommendation && <p>{topRecommendation.action}: {topRecommendation.reason}</p>}
+      <div className="intel-kpi-grid">
+        <span><strong>{intel ? `${intel.risk_score}%` : "--"}</strong><small>Risk</small></span>
+        <span><strong>{intel ? `${intel.source_reliability}%` : "--"}</strong><small>Source</small></span>
+        <span><strong>{intel?.communities?.length ?? "--"}</strong><small>Clusters</small></span>
+      </div>
+      {topLead && <div className="lead-queue-card"><strong>{topLead.action}</strong><span>{topLead.reason}</span></div>}
+      {!topLead && topRecommendation && <p>{topRecommendation.action}: {topRecommendation.reason}</p>}
     </aside>
   );
 }

@@ -79,6 +79,7 @@ POST   /api/v1/investigations
 GET    /api/v1/investigations
 GET    /api/v1/investigations/{investigation_id}/graph
 GET    /api/v1/investigations/{investigation_id}/health
+GET    /api/v1/investigations/{investigation_id}/intelligence
 DELETE /api/v1/investigations/{investigation_id}
 DELETE /api/v1/cases/{investigation_id}
 ```
@@ -93,7 +94,7 @@ Create body:
 }
 ```
 
-`target_type` is optional. The backend can classify username, email, domain, IP, and phone-like targets. `POST /api/v1/investigations` creates a blank/ready case with a root node. `POST /api/v1/scans/nexusrecon` creates a case and immediately queues the recon worker. The health endpoint returns Case Hygiene score, coverage, weak nodes, isolated nodes, and recommendations.
+`target_type` is optional. The backend can classify username, email, domain, IP, and phone-like targets. `POST /api/v1/investigations` creates a blank/ready case with a root node. `POST /api/v1/scans/nexusrecon` creates a case and immediately queues the recon worker. The health endpoint returns Case Hygiene score, coverage, weak nodes, isolated nodes, recommendations, and embedded graph intelligence. The intelligence endpoint returns risk posture, source reliability, lead queue, entity risk tags, communities, and a compact case dossier.
 
 ## Quick Scan
 

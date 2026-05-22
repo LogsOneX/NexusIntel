@@ -3748,3 +3748,54 @@ select:focus {
     transform: none;
   }
 }
+
+/* Analyst intelligence layer */
+.intel-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.intel-kpi-grid span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid #333333;
+  background: #050505;
+  padding: 7px;
+}
+
+.intel-kpi-grid strong {
+  color: #ffffff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.intel-kpi-grid small {
+  color: #888888;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.lead-queue-card {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #ffffff;
+  background: #000000;
+  padding: 8px;
+}
+
+.lead-queue-card strong {
+  color: #ffffff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.lead-queue-card span {
+  color: #888888;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+}

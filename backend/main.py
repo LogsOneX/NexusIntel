@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
 from tasks import run_domain_task, run_email_google_task, run_full_identity_pipeline_task, run_nexusrecon_task, run_phone_task
 from backend.modules.case_hygiene import build_case_hygiene_report
+from backend.modules.graph_intel import build_graph_intelligence
 
 
 DATABASE_URL = os.getenv(
@@ -520,6 +521,7 @@ def recommended_transforms_for_node(node: dict[str, Any] | None) -> list[dict[st
 def fallback_oracle(prompt: str, graph_state: dict[str, Any], node: dict[str, Any] | None = None) -> dict[str, Any]:
     lowered = prompt.lower()
     metrics = graph_metrics(graph_state)
+    intelligence = build_graph_intelligence(graph_state)
     commands: list[dict[str, Any]] = []
     if "clear" in lowered and "highlight" in lowered:
         commands.append({"type": "clear_highlight"})
@@ -557,10 +559,12 @@ def fallback_oracle(prompt: str, graph_state: dict[str, Any], node: dict[str, An
         f" High-confidence IPs: {metrics['high_conf_ips'] or 'none'}. High-confidence domains: {metrics['high_conf_domains'] or 'none'}."
         f"{node_label} Recommended next transforms: {[item['transform'] for item in recommended]}."
         f" Collection gaps: {gaps or ['no obvious structural gaps from current graph']}."
+        f" Risk posture: {intelligence['posture']} ({intelligence['risk_score']}%). Source reliability: {intelligence['source_reliability']}%."
+        f" Top leads: {[lead['action'] for lead in intelligence['lead_queue'][:3]]}."
     )
     if commands:
         reply += " UI command(s) emitted for graph focus or next-action hints."
-    return {"reply": reply, "commands": commands, "metrics": metrics, "provider": "local_investigation_rules"}
+    return {"reply": reply, "commands": commands, "metrics": metrics, "intelligence": intelligence, "provider": "local_investigation_rules"}
 
 
 async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[str, Any], node: dict[str, Any] | None) -> dict[str, Any]:
@@ -577,7 +581,8 @@ async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[st
         "Do not invent findings; distinguish confirmed, weak, and missing evidence."
     )
     metrics = graph_metrics(graph_state)
-    compact_graph = {"metrics": metrics, "active_node": node}
+    intelligence = build_graph_intelligence(graph_state)
+    compact_graph = {"metrics": metrics, "intelligence": intelligence, "active_node": node}
     user_prompt = f"Prompt: {prompt}\nGraph: {json.dumps(compact_graph, default=str)[:12000]}"
     endpoint = str((settings.get("llm") or {}).get("endpoint") or "").rstrip("/")
     model = str((settings.get("llm") or {}).get("model") or "llama3.1")
@@ -604,11 +609,12 @@ async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[st
             if isinstance(parsed, dict) and "reply" in parsed:
                 parsed.setdefault("commands", [])
                 parsed.setdefault("metrics", metrics)
+                parsed.setdefault("intelligence", intelligence)
                 parsed.setdefault("provider", provider)
                 return parsed
         except Exception:
             pass
-        return {"reply": content or "Oracle returned an empty response.", "commands": [], "metrics": metrics, "provider": provider}
+        return {"reply": content or "Oracle returned an empty response.", "commands": [], "metrics": metrics, "intelligence": intelligence, "provider": provider}
     except Exception as exc:
         fallback = fallback_oracle(prompt, graph_state, node)
         fallback["reply"] = f"Configured LLM failed ({exc}). " + fallback["reply"]
@@ -748,8 +754,19 @@ def investigation_health(investigation_id: str, db: Session = Depends(get_db), _
     investigation = db.get(Investigation, investigation_id)
     if not investigation:
         raise HTTPException(status_code=404, detail="Investigation not found")
-    report = build_case_hygiene_report(graph_payload(db, investigation_id))
+    graph = graph_payload(db, investigation_id)
+    report = build_case_hygiene_report(graph)
+    report["intelligence"] = build_graph_intelligence(graph)
     return ApiResponse(ok=True, data={"investigation_id": investigation_id, "health": report})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/intelligence", response_model=ApiResponse)
+def investigation_intelligence(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    graph = graph_payload(db, investigation_id)
+    return ApiResponse(ok=True, data={"investigation_id": investigation_id, "intelligence": build_graph_intelligence(graph)})
 
 
 @app.delete("/api/v1/investigations/{investigation_id}", response_model=ApiResponse)

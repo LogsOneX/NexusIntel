@@ -48,7 +48,7 @@ Network Graph sekarang memakai layout Maltego-purity: canvas memenuhi seluruh ar
 6. Terminal HUD tetap menerima telemetry meskipun panel disembunyikan.
 7. Graph refresh otomatis saat task berjalan tanpa mereset pan/zoom.
 8. Delete investigation tersedia di Graph lifecycle dock dan Workspace case folders; delete menghapus case beserta graph data lewat API.
-9. Health strip menampilkan Case Hygiene score dan rekomendasi next action.
+9. Health strip menampilkan Case Hygiene score, risk score, source reliability, cluster count, dan rekomendasi next action.
 10. Time-Machine slider di bawah canvas memfilter node/edge berdasarkan `created_at` untuk replay investigation.
 11. Correlation heatmap flat memberi border amber/red pada node dengan banyak koneksi; passive auto-tagging memberi `[INTERNAL]` pada IP private/bogon dan `[SUSPICIOUS]` pada domain ber-keyword phishing.
 
@@ -120,3 +120,7 @@ Mode ini hanya untuk fallback manual. UI enterprise terbaru berjalan lewat Compo
 ## AI Oracle
 
 Oracle panel tersedia di `/graph`, `/workspace`, dan `/oracle`. Prompt natural language dikirim ke `/api/v1/oracle/chat` bersama JSON graph state dan active node. Jika LLM belum dikonfigurasi, backend memakai local NexusIntel investigation brain untuk summary, confidence posture, high-confidence IP/domain pivots, highlight entity type, clear highlight, transform suggestion, dan collection-gap analysis. Quick prompts di panel Oracle mempercepat triage tanpa harus mengetik prompt panjang.
+
+## Analyst Intelligence Layer
+
+NexusIntel menambahkan graph intelligence lokal yang meniru workflow enterprise tanpa paid API: risk posture, source reliability, entity risk queue, connected communities, dossier ringkas, dan lead queue. Layer ini muncul di Graph lifecycle dock dan tersedia melalui `/api/v1/investigations/{investigation_id}/intelligence`.

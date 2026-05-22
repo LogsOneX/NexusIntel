@@ -35,6 +35,10 @@ Phone posture resolver: normalisasi E.164, parsing `phonenumbers`, carrier/geolo
 
 Investigation quality module untuk menghitung health score, coverage entity, weak-confidence nodes, isolated nodes, edge distribution, dan rekomendasi next action. Modul ini dipakai oleh endpoint `/api/v1/investigations/{investigation_id}/health` dan lifecycle dock di Network Graph supaya operator tahu apakah case sudah matang, masih tipis, atau perlu transform lanjutan.
 
+### `backend/modules/graph_intel.py`
+
+Analyst intelligence layer untuk risk posture, source reliability, entity risk tagging, connected communities, lead queue, dan compact dossier. Modul ini membantu operator memilih next best transform, memprioritaskan core entities, dan melihat kualitas sumber tanpa layanan berbayar.
+
 ## Runtime Transform Validators
 
 ### `analyze_identity_target`

@@ -236,7 +236,7 @@ Transform utama:
 - IP recon: reverse DNS, RDAP allocation, dan GeoIP/ASN hint dari sumber gratis.
 - Phone recon: E.164 validation, country calling code, dan offline public numbering-plan hint.
 - Manual entity builder + drag-and-drop entity pipeline: tambah entity dan link langsung ke selected node.
-- Case Hygiene: health score, coverage, weak/isolated entity detection, dan next-action recommendation untuk menjaga kualitas investigation.
+- Case Hygiene + Graph Intelligence: health score, risk posture, source reliability, communities, lead queue, weak/isolated entity detection, dan next-action recommendation untuk menjaga kualitas investigation.
 - Time-Machine slider: replay graph berdasarkan `created_at` node/edge tanpa remount canvas.
 - Passive auto-tagging: IP private/bogon diberi `[INTERNAL]`, domain dengan phishing keywords diberi `[SUSPICIOUS]`, dan node ber-degree tinggi diberi border amber/red flat.
 
