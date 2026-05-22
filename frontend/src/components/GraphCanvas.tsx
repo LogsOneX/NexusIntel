@@ -93,7 +93,7 @@ type GraphCanvasProps = {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
-const PALETTE_TYPES = ["username", "email", "domain", "ip", "phone"] as const;
+const PALETTE_TYPES = ["username", "email", "domain", "ip", "phone", "crypto_wallet"] as const;
 const HISTORY_LIMIT = 40;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
@@ -112,6 +112,7 @@ function confidenceScore(value?: string): number | undefined {
 
 function shapeFor(type: string): GraphNode["nodeShape"] {
   if (["domain", "platform", "service", "dns_record"].includes(type)) return "hexagon";
+  if (["crypto_wallet", "crypto_transaction", "transaction"].includes(type)) return "square";
   if (["ip", "profile", "avatar_hash", "signal"].includes(type)) return "square";
   if (["phone", "guardrail", "breach", "risk"].includes(type)) return "triangle";
   return "circle";
@@ -122,6 +123,27 @@ function cyShape(shape: GraphNode["nodeShape"]): string {
   if (shape === "square") return "rectangle";
   if (shape === "triangle") return "triangle";
   return "hexagon";
+}
+
+function svgDataUri(svg: string): string {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+const CY_NODE_ICONS: Record<string, string> = {
+  username: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><circle cx="32" cy="22" r="10" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M14 54c3-13 11-20 18-20s15 7 18 20" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="square"/></svg>`),
+  name: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><circle cx="32" cy="22" r="10" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M14 54c3-13 11-20 18-20s15 7 18 20" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="square"/></svg>`),
+  email: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><rect x="10" y="18" width="44" height="30" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M12 20l20 17 20-17" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="square"/></svg>`),
+  domain: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><circle cx="32" cy="32" r="22" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M10 32h44M32 10c8 8 8 36 0 44M32 10c-8 8-8 36 0 44" fill="none" stroke="#ffffff" stroke-width="3"/></svg>`),
+  ip: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><rect x="12" y="14" width="40" height="12" fill="none" stroke="#ffffff" stroke-width="4"/><rect x="12" y="30" width="40" height="12" fill="none" stroke="#ffffff" stroke-width="4"/><rect x="12" y="46" width="40" height="6" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M20 20h4M20 36h4" stroke="#ffffff" stroke-width="4"/></svg>`),
+  phone: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M22 10h20v44H22z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M29 47h6" stroke="#ffffff" stroke-width="4"/></svg>`),
+  crypto_wallet: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M10 20h44v30H10z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M44 30h12v12H44z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M22 42V18h24" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
+  crypto_transaction: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M12 22h34l-8-8M46 22l-8 8" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M52 42H18l8-8M18 42l8 8" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
+  transaction: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M12 22h34l-8-8M46 22l-8 8" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M52 42H18l8-8M18 42l8 8" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
+  profile: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M32 10l20 12v20L32 54 12 42V22z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M24 32h16" stroke="#ffffff" stroke-width="4"/></svg>`),
+};
+
+function iconForNodeType(type: string): string {
+  return CY_NODE_ICONS[type] || CY_NODE_ICONS.profile;
 }
 
 function labelForApiNode(node: ApiGraphNode): string {
@@ -241,9 +263,19 @@ function transformsFor(node: GraphNode): TransformAction[] {
   }
   if (node.nodeType === "email") {
     return [
+      { id: "tier_1_major_socials", label: "Major Socials", description: "Fast account pivots from local-part across major social platforms" },
+      { id: "tier_2_tech_dev", label: "Tech & Dev", description: "Local-part sweep across developer/security platforms" },
+      { id: "tier_3_gaming_forums", label: "Gaming & Forums", description: "Local-part sweep across communities and gaming surfaces" },
+      { id: "tier_4_deep_sweep", label: "Deep Sweep", description: "Full local-part Maigret/Sherlock style execution" },
       { id: "email_to_account", label: "Email -> Accounts", description: "Public signup response signatures, workspace posture and local-part profile pivots" },
       { id: "email_to_domain", label: "Email -> Domain", description: "Extract mail domain, MX, DMARC, SPF, BIMI and DNS records" },
       { id: "full_identity_pipeline", label: "Email -> Full Pivot", description: "Mailbox to username, account surfaces, domain, DNS and workspace nodes" },
+    ];
+  }
+  if (node.nodeType === "crypto_wallet") {
+    return [
+      { id: "check_wallet_balance", label: "Check Balance", description: "Fetch public chain balance and wallet summary" },
+      { id: "trace_transactions", label: "Trace Transactions", description: "Create linked transaction nodes and public flow edges" },
     ];
   }
   if (node.nodeType === "domain") {
@@ -405,11 +437,14 @@ function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
     group: "nodes",
     data: {
       id: node.id,
-      label: `${tag ? `[${tag}] ` : ""}[${node.nodeIcon || "NX"}] ${node.nodeLabel}`,
+      label: `${tag ? `[${tag}] ` : ""}${node.nodeLabel}
+[${upperSnake(node.nodeType)}]`,
       rawLabel: node.nodeLabel,
       tag: tag || "",
       nodeType: node.nodeType,
+      typeLabel: `[${upperSnake(node.nodeType)}]`,
       value: String(node.nodeProperties.value || node.nodeLabel),
+      icon: iconForNodeType(node.nodeType),
       confidence,
       nodeShape: cyShape(node.nodeShape),
       flag: node.nodeFlag || "",
@@ -771,23 +806,29 @@ export default function GraphCanvas({
         {
           selector: "node",
           style: {
-            width: 76,
-            height: 76,
+            width: 92,
+            height: 72,
             shape: "data(nodeShape)",
             "background-color": "#111111",
             "background-opacity": 1,
+            "background-image": "data(icon)",
+            "background-fit": "none",
+            "background-width": "30px",
+            "background-height": "30px",
+            "background-position-x": "50%",
+            "background-position-y": "24%",
             "border-width": 1,
             "border-color": "#ffffff",
             color: "#ffffff",
             label: "data(label)",
             "font-family": "JetBrains Mono, SFMono-Regular, Consolas, monospace",
-            "font-size": 9,
+            "font-size": 8,
             "font-weight": 600,
             "text-wrap": "wrap",
-            "text-max-width": 132,
+            "text-max-width": 150,
             "text-valign": "bottom",
             "text-halign": "center",
-            "text-margin-y": 8,
+            "text-margin-y": 9,
             "overlay-opacity": 0,
             opacity: 1,
           },
@@ -1013,11 +1054,16 @@ export default function GraphCanvas({
 
   useEffect(() => {
     const close = () => setContextMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
     window.addEventListener("click", close);
     window.addEventListener("resize", close);
+    window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("click", close);
       window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", closeOnEscape);
     };
   }, []);
 
@@ -1058,10 +1104,18 @@ export default function GraphCanvas({
   }, [redoGraph, undoGraph]);
 
   const contextPosition = useMemo(() => {
-    if (!contextMenu) return { x: 0, y: 0 };
+    if (!contextMenu) return { x: 0, y: 0, transform: "translate3d(0, 0, 0)" };
+    const width = 342;
+    const height = 430;
+    const margin = 10;
+    const flipX = contextMenu.x + width + margin > window.innerWidth;
+    const flipY = contextMenu.y + height + margin > window.innerHeight;
+    const x = Math.max(margin, Math.min(contextMenu.x, window.innerWidth - margin));
+    const y = Math.max(margin, Math.min(contextMenu.y, window.innerHeight - margin));
     return {
-      x: Math.max(10, Math.min(contextMenu.x, window.innerWidth - 342)),
-      y: Math.max(10, Math.min(contextMenu.y, window.innerHeight - 390)),
+      x,
+      y,
+      transform: `translate3d(${flipX ? "-100%" : "0"}, ${flipY ? "-100%" : "0"}, 0)`,
     };
   }, [contextMenu]);
 
@@ -1214,7 +1268,7 @@ export default function GraphCanvas({
       {contextMenu && (
         <div
           className="graph-context-menu"
-          style={{ transform: `translate3d(${contextPosition.x}px, ${contextPosition.y}px, 0)` }}
+          style={{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px`, transform: contextPosition.transform }}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="context-node-card">

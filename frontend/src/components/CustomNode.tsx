@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
-import { AtSign, Crosshair, Fingerprint, Globe2, Hash, Network, Phone, ShieldAlert, UserRound } from "lucide-react";
+import { ArrowRightLeft, AtSign, Crosshair, Fingerprint, Globe2, Hash, Network, Phone, ShieldAlert, UserRound, WalletCards } from "lucide-react";
 
-export type EntityKind = "username" | "email" | "domain" | "ip" | "phone" | "profile" | "platform" | "service" | "signal" | "guardrail" | "target";
+export type EntityKind = "username" | "email" | "domain" | "ip" | "phone" | "crypto_wallet" | "crypto_transaction" | "profile" | "platform" | "service" | "signal" | "guardrail" | "target";
 
 type CustomNodeProps = {
   kind: string;
@@ -17,6 +17,8 @@ export const ENTITY_KIND_META: Record<string, { label: string; icon: ReactElemen
   domain: { label: "Domain", icon: <Globe2 size={15} />, description: "DNS and RDAP pivot" },
   ip: { label: "IP", icon: <Network size={15} />, description: "network and reverse DNS pivot" },
   phone: { label: "Phone", icon: <Phone size={15} />, description: "numbering plan pivot" },
+  crypto_wallet: { label: "Wallet", icon: <WalletCards size={15} />, description: "blockchain wallet pivot" },
+  crypto_transaction: { label: "Tx", icon: <ArrowRightLeft size={15} />, description: "blockchain transaction pivot" },
   profile: { label: "Profile", icon: <Fingerprint size={15} />, description: "public profile URL" },
   platform: { label: "Platform", icon: <Hash size={15} />, description: "service host" },
   service: { label: "Service", icon: <Crosshair size={15} />, description: "observed capability" },
@@ -40,6 +42,8 @@ export function platformMark(kind: string, label?: string, value?: string): stri
   if (kind === "ip") return "IP";
   if (kind === "phone") return "TEL";
   if (kind === "username") return "ID";
+  if (kind === "crypto_wallet") return "₿";
+  if (kind === "crypto_transaction" || kind === "transaction") return "TX";
   return kind.slice(0, 3).toUpperCase();
 }
 

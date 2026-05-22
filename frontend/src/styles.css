@@ -3897,3 +3897,166 @@ select:focus {
   width: 34px;
   border-top: 1px dashed #f59e0b;
 }
+
+/* Flat Terminal Polish: dense toolbar, hard dividers, crypto graph cards */
+.tactical-graph-toolbar {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+  min-height: 54px !important;
+  background: #000000 !important;
+  backdrop-filter: none !important;
+}
+
+.graph-toolbar-stats,
+.graph-launcher,
+.entity-pipeline,
+.graph-toolbar-controls {
+  border-right: 1px solid #333333 !important;
+  padding: 0 10px !important;
+}
+
+.graph-toolbar-stats {
+  flex: 0 0 150px !important;
+  align-content: center;
+}
+
+.graph-launcher {
+  flex: 1 1 430px !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+  background: #000000 !important;
+}
+
+.entity-pipeline {
+  flex: 0 0 auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  background: #000000 !important;
+}
+
+.graph-toolbar-controls {
+  flex: 1 1 auto !important;
+  border-right: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+}
+
+.graph-smart-selector,
+.layout-switcher,
+.tactical-graph-actions {
+  border-right: 1px solid #333333 !important;
+  padding-right: 8px !important;
+}
+
+.tactical-graph-actions {
+  border-right: 0 !important;
+}
+
+.entity-palette-item,
+.icon-button,
+.layout-switcher button,
+.graph-add-button,
+.graph-launch-button,
+.graph-report-button {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+.entity-palette-item:hover,
+.icon-button:hover,
+.layout-switcher button:hover,
+.graph-add-button:hover,
+.graph-report-button:hover {
+  background: #222222 !important;
+}
+
+.graph-context-menu {
+  position: fixed !important;
+  width: 342px !important;
+  max-height: min(430px, calc(100vh - 20px)) !important;
+  overflow: auto !important;
+  z-index: 9999 !important;
+  border: 1px solid #333333 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  will-change: transform;
+}
+
+.graph-context-menu button:hover,
+.context-actions button:hover,
+.context-tabs button:hover,
+.context-oracle:hover {
+  background: #222222 !important;
+}
+
+.context-node-card,
+.context-oracle,
+.context-tabs,
+.context-actions button {
+  background: #000000 !important;
+  border-color: #333333 !important;
+  border-radius: 0 !important;
+}
+
+.context-node-mark {
+  border-radius: 0 !important;
+  background: #111111 !important;
+  border: 1px solid #ffffff !important;
+  color: #ffffff !important;
+}
+
+.time-machine-slider {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #000000 !important;
+}
+
+.time-machine-slider input[type="range"] {
+  appearance: none;
+  height: 3px;
+  background: #333333;
+  outline: none;
+  accent-color: #ffffff;
+}
+
+.time-machine-slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 18px;
+  border: 1px solid #ffffff;
+  background: #ffffff;
+  border-radius: 0;
+}
+
+.time-machine-slider input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 18px;
+  border: 1px solid #ffffff;
+  background: #ffffff;
+  border-radius: 0;
+}
+
+@media (max-width: 1420px) {
+  .tactical-graph-toolbar {
+    flex-wrap: wrap !important;
+    max-height: 38vh;
+    overflow: auto;
+  }
+
+  .graph-toolbar-stats,
+  .graph-launcher,
+  .entity-pipeline,
+  .graph-toolbar-controls {
+    min-height: 38px;
+  }
+}

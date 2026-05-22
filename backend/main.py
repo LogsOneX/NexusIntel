@@ -1006,6 +1006,8 @@ async def run_transform(payload: TransformRequest, db: Session = Depends(get_db)
         celery = run_domain_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
     elif transform in {"phone_recon", "e164_phone", "carrier_lookup", "numbering_plan", "phone_to_email", "phone_to_account"}:
         celery = run_phone_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
+    elif transform in {"check_wallet_balance", "trace_transactions", "crypto_wallet", "wallet_recon"}:
+        celery = run_crypto_wallet_task.apply_async(args=[record.id, payload.investigation_id, target, payload.node_id], queue="network_io")
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported transform: {payload.transform}")
 

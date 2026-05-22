@@ -63,6 +63,7 @@ Transform yang tersedia berubah mengikuti tipe node:
 - `domain`: DNS/domain recon, RDAP/crt.sh, workspace recon, website surface.
 - `ip`: IP recon, reverse DNS, RDAP allocation, GeoIP/ASN hint.
 - `phone`: `phone_to_email`, `phone_to_account`, E.164 validation, deep-link metadata, dan public numbering-plan hint.
+- `crypto_wallet`: `check_wallet_balance` dan `trace_transactions` untuk wallet balance serta linked transaction nodes.
 - `profile/platform`: host/domain pivot dan identity sweep ulang.
 
 Dashboard tidak menampilkan include/exclude atau module picker. UI dibuat agar investigator memilih entity dan transform, bukan memilih modul internal.
@@ -127,3 +128,8 @@ Oracle panel tersedia di `/graph`, `/workspace`, dan `/oracle`. Prompt natural l
 ## Analyst Intelligence Layer
 
 NexusIntel menambahkan graph intelligence lokal yang meniru workflow enterprise tanpa paid API: risk posture, source reliability, entity risk queue, connected communities, dossier ringkas, dan lead queue. Layer ini muncul di Graph lifecycle dock dan tersedia melalui `/api/v1/investigations/{investigation_id}/intelligence`.
+
+
+## High-Density Terminal Layer
+
+GraphCanvas memakai Cytoscape node cards flat: `#111111` background, `1px solid #FFFFFF` border, JetBrains Mono label, SVG data-uri icon di tengah, dan secondary label `[NODE_TYPE]`. Context menu memakai fixed viewport positioning, auto-flip di kanan/bawah layar, z-index `9999`, close on outside click dan `Escape`. Toolbar utama memakai flex row dengan 1px vertical dividers: Stats | Search/Mode | Entity Palette | Controls/Export.

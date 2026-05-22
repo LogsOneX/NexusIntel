@@ -122,3 +122,8 @@ Queue Celery: `network_io`.
 - `POST /api/v1/serverless/invoke`
 - `GET /api/v1/proxies/status`
 - `POST /api/v1/proxies/seed`
+
+
+## Graph UI Handling
+
+Crypto wallets are rendered as flat `crypto_wallet` node cards with wallet SVG icons. Transaction artifacts are rendered as `crypto_transaction` nodes with directional ledger icons. Right-click transforms for wallet nodes are `check_wallet_balance` and `trace_transactions`; both route to the `network_io` crypto worker.

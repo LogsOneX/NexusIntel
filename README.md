@@ -256,6 +256,10 @@ Transform utama:
 - Time-Machine slider: replay graph berdasarkan `created_at` node/edge tanpa remount canvas.
 - Passive auto-tagging: IP private/bogon diberi `[INTERNAL]`, domain dengan phishing keywords diberi `[SUSPICIOUS]`, dan node ber-degree tinggi diberi border amber/red flat.
 
+## High-Density Terminal Graph Polish
+
+Network Graph sekarang memakai node card flat dengan SVG data-uri iconography untuk username, email, domain, IP, phone, crypto wallet, dan transaction. Context menu memakai viewport-aware bounds dengan z-index tinggi agar tidak overlap/clip, serta crypto transforms `check_wallet_balance` dan `trace_transactions`. Toolbar memakai divider vertikal 1px seperti hardware dashboard dan slider temporal tetap flat monokrom.
+
 ## Deep Recon Validator
 
 `backend/recon_validators.py` adalah parser public-source baru yang berjalan sebelum data dikirim ke UI:

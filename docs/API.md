@@ -191,6 +191,8 @@ Supported transform families:
 - `identity_macro`
 - `email_macro`
 - `autonomous_identity_pipeline`
+- `check_wallet_balance`
+- `trace_transactions`
 
 Transform routing:
 
@@ -283,7 +285,7 @@ POST /api/v1/crypto/wallet
 POST /api/v1/serverless/invoke
 ```
 
-Both run on `network_io`. If `NEXUS_ENV=development`, external calls return deterministic dummy JSON for safe testing.
+Both run on `network_io`. If `NEXUS_ENV=development`, external calls return deterministic dummy JSON for safe testing. Graph context menu maps crypto wallet nodes to `check_wallet_balance` and `trace_transactions`.
 
 ### Proxy Governance
 
