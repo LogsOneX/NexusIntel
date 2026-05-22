@@ -12,6 +12,7 @@ TASK_ROUTES = {
     "nexusintel.full_identity_pipeline": {"queue": NETWORK_IO_QUEUE},
     "nexusintel.serverless_invoke": {"queue": NETWORK_IO_QUEUE},
     "nexusintel.crypto_wallet": {"queue": NETWORK_IO_QUEUE},
+    "nexusintel.google_footprint": {"queue": NETWORK_IO_QUEUE},
     "nexusintel.watchlist_tick": {"queue": NETWORK_IO_QUEUE},
     "nexusintel.watchlist_sweep_all": {"queue": NETWORK_IO_QUEUE},
     "nexusintel.entity_resolution": {"queue": ML_GPU_QUEUE},

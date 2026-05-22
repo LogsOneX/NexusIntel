@@ -256,9 +256,13 @@ Transform utama:
 - Time-Machine slider: replay graph berdasarkan `created_at` node/edge tanpa remount canvas.
 - Passive auto-tagging: IP private/bogon diberi `[INTERNAL]`, domain dengan phishing keywords diberi `[SUSPICIOUS]`, dan node ber-degree tinggi diberi border amber/red flat.
 
+## Safe Pivot Policy
+
+NexusIntel tidak menjalankan password-reset probing, recovery-flow scraping, contact-sync simulation, 2FA triggering, atau endpoint internal Google untuk mengungkap data akun. Pivot email/phone/Google dibatasi ke public-source, dry-run development, atau explicit public profile URL yang diberikan operator. Censored entity types (`censored_email`, `censored_phone`) hanya dipakai untuk menandai hint parsial yang sudah tersedia secara authorized, bukan untuk memicu recovery flow.
+
 ## High-Density Terminal Graph Polish
 
-Network Graph sekarang memakai node card flat dengan SVG data-uri iconography untuk username, email, domain, IP, phone, crypto wallet, dan transaction. Context menu memakai viewport-aware bounds dengan z-index tinggi agar tidak overlap/clip, serta crypto transforms `check_wallet_balance` dan `trace_transactions`. Toolbar memakai divider vertikal 1px seperti hardware dashboard dan slider temporal tetap flat monokrom.
+Network Graph sekarang memakai node card flat dengan SVG data-uri iconography untuk username, email, domain, IP, phone, crypto wallet, transaction, censored identifiers, Google reviews, dan locations. Context menu memakai viewport-aware bounds dengan z-index tinggi agar tidak overlap/clip, serta crypto transforms `check_wallet_balance` dan `trace_transactions`. Toolbar memakai divider vertikal 1px seperti hardware dashboard dan slider temporal tetap flat monokrom.
 
 ## Deep Recon Validator
 

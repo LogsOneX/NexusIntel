@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
-import { ArrowRightLeft, AtSign, Crosshair, Fingerprint, Globe2, Hash, Network, Phone, ShieldAlert, UserRound, WalletCards } from "lucide-react";
+import { ArrowRightLeft, AtSign, Crosshair, Fingerprint, Globe2, Hash, KeyRound, MapPin, Network, Phone, ShieldAlert, Star, UserRound, WalletCards } from "lucide-react";
 
-export type EntityKind = "username" | "email" | "domain" | "ip" | "phone" | "crypto_wallet" | "crypto_transaction" | "profile" | "platform" | "service" | "signal" | "guardrail" | "target";
+export type EntityKind = "username" | "email" | "domain" | "ip" | "phone" | "crypto_wallet" | "crypto_transaction" | "censored_email" | "censored_phone" | "google_profile" | "google_review" | "location" | "profile" | "platform" | "service" | "signal" | "guardrail" | "target";
 
 type CustomNodeProps = {
   kind: string;
@@ -19,6 +19,11 @@ export const ENTITY_KIND_META: Record<string, { label: string; icon: ReactElemen
   phone: { label: "Phone", icon: <Phone size={15} />, description: "numbering plan pivot" },
   crypto_wallet: { label: "Wallet", icon: <WalletCards size={15} />, description: "blockchain wallet pivot" },
   crypto_transaction: { label: "Tx", icon: <ArrowRightLeft size={15} />, description: "blockchain transaction pivot" },
+  censored_email: { label: "Masked Email", icon: <KeyRound size={15} />, description: "partial email recovery hint" },
+  censored_phone: { label: "Masked Phone", icon: <KeyRound size={15} />, description: "partial phone recovery hint" },
+  google_profile: { label: "Google", icon: <Fingerprint size={15} />, description: "public Google profile pivot" },
+  google_review: { label: "Review", icon: <Star size={15} />, description: "public Google Maps review" },
+  location: { label: "Location", icon: <MapPin size={15} />, description: "reviewed venue/location" },
   profile: { label: "Profile", icon: <Fingerprint size={15} />, description: "public profile URL" },
   platform: { label: "Platform", icon: <Hash size={15} />, description: "service host" },
   service: { label: "Service", icon: <Crosshair size={15} />, description: "observed capability" },
@@ -44,6 +49,9 @@ export function platformMark(kind: string, label?: string, value?: string): stri
   if (kind === "username") return "ID";
   if (kind === "crypto_wallet") return "₿";
   if (kind === "crypto_transaction" || kind === "transaction") return "TX";
+  if (kind === "censored_email" || kind === "censored_phone") return "***";
+  if (kind === "google_review") return "★";
+  if (kind === "location") return "LOC";
   return kind.slice(0, 3).toUpperCase();
 }
 

@@ -111,9 +111,9 @@ function confidenceScore(value?: string): number | undefined {
 }
 
 function shapeFor(type: string): GraphNode["nodeShape"] {
-  if (["domain", "platform", "service", "dns_record"].includes(type)) return "hexagon";
+  if (["domain", "platform", "service", "dns_record", "location"].includes(type)) return "hexagon";
   if (["crypto_wallet", "crypto_transaction", "transaction"].includes(type)) return "square";
-  if (["ip", "profile", "avatar_hash", "signal"].includes(type)) return "square";
+  if (["ip", "profile", "avatar_hash", "signal", "google_review", "google_profile", "censored_email", "censored_phone"].includes(type)) return "square";
   if (["phone", "guardrail", "breach", "risk"].includes(type)) return "triangle";
   return "circle";
 }
@@ -139,11 +139,21 @@ const CY_NODE_ICONS: Record<string, string> = {
   crypto_wallet: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M10 20h44v30H10z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M44 30h12v12H44z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M22 42V18h24" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
   crypto_transaction: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M12 22h34l-8-8M46 22l-8 8" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M52 42H18l8-8M18 42l8 8" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
   transaction: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M12 22h34l-8-8M46 22l-8 8" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M52 42H18l8-8M18 42l8 8" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
+  censored_email: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M16 30h32v22H16z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M23 30v-7a9 9 0 0118 0v7" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M32 39v6" stroke="#ffffff" stroke-width="4"/></svg>`),
+  censored_phone: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M16 30h32v22H16z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M23 30v-7a9 9 0 0118 0v7" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M32 39v6" stroke="#ffffff" stroke-width="4"/></svg>`),
+  google_review: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M32 10l6 15h16l-13 9 5 16-14-10-14 10 5-16-13-9h16z" fill="none" stroke="#ffffff" stroke-width="4" stroke-linejoin="miter"/></svg>`),
+  location: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M32 56s18-18 18-32A18 18 0 1014 24c0 14 18 32 18 32z" fill="none" stroke="#ffffff" stroke-width="4"/><circle cx="32" cy="24" r="6" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
   profile: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M32 10l20 12v20L32 54 12 42V22z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M24 32h16" stroke="#ffffff" stroke-width="4"/></svg>`),
 };
 
 function iconForNodeType(type: string): string {
   return CY_NODE_ICONS[type] || CY_NODE_ICONS.profile;
+}
+
+function displayTypeLabel(type: string): string {
+  if (type === "google_review") return "[REVIEW]";
+  if (type === "location") return "[LOCATION]";
+  return `[${upperSnake(type)}]`;
 }
 
 function labelForApiNode(node: ApiGraphNode): string {
@@ -254,7 +264,7 @@ function transformsFor(node: GraphNode): TransformAction[] {
   if (["username", "name", "profile", "profile_candidate"].includes(node.nodeType)) {
     return [
       { id: "username_to_email", label: "Username -> Email", description: "Generate mailbox candidates and public email pivots from this handle" },
-      { id: "username_to_accounts", label: "Username -> Accounts", description: "Resolve confirmed public account/profile surfaces" },
+      { id: "username_identity_sweep", label: "Username Identity Sweep", description: "Resolve confirmed public account/profile surfaces" },
       { id: "tier_1_major_socials", label: "Major Socials", description: "Facebook, Instagram, LinkedIn, X, Threads, TikTok" },
       { id: "tier_2_tech_dev", label: "Tech & Dev", description: "GitHub, GitLab, StackOverflow, HackTheBox" },
       { id: "tier_3_gaming_forums", label: "Gaming & Forums", description: "Steam, Discord, Reddit, Twitch" },
@@ -263,13 +273,9 @@ function transformsFor(node: GraphNode): TransformAction[] {
   }
   if (node.nodeType === "email") {
     return [
-      { id: "tier_1_major_socials", label: "Major Socials", description: "Fast account pivots from local-part across major social platforms" },
-      { id: "tier_2_tech_dev", label: "Tech & Dev", description: "Local-part sweep across developer/security platforms" },
-      { id: "tier_3_gaming_forums", label: "Gaming & Forums", description: "Local-part sweep across communities and gaming surfaces" },
-      { id: "tier_4_deep_sweep", label: "Deep Sweep", description: "Full local-part Maigret/Sherlock style execution" },
-      { id: "email_to_account", label: "Email -> Accounts", description: "Public signup response signatures, workspace posture and local-part profile pivots" },
+      { id: "check_email_registrations", label: "Check Registrations", description: "Analyze public registration response signatures without stripping the domain" },
+      { id: "google_footprint_lookup", label: "Google Footprint", description: "Development dry-run or explicit public Maps profile review expansion" },
       { id: "email_to_domain", label: "Email -> Domain", description: "Extract mail domain, MX, DMARC, SPF, BIMI and DNS records" },
-      { id: "full_identity_pipeline", label: "Email -> Full Pivot", description: "Mailbox to username, account surfaces, domain, DNS and workspace nodes" },
     ];
   }
   if (node.nodeType === "crypto_wallet") {
@@ -294,7 +300,7 @@ function transformsFor(node: GraphNode): TransformAction[] {
   if (node.nodeType === "phone") {
     return [
       { id: "phone_to_email", label: "Phone -> Email", description: "Create conservative public contact/email pivot candidates from numbering metadata" },
-      { id: "phone_to_account", label: "Phone -> Accounts", description: "Resolve public deep-link and account metadata candidates" },
+      { id: "check_messenger_presence", label: "Messenger Presence", description: "Validate E.164 and parse public deep-link metadata only" },
       { id: "phone_recon", label: "Numbering Plan", description: "Validate E.164 and map public numbering-plan hints" },
       { id: "carrier_lookup", label: "Carrier Hint", description: "Create public line-type and region signals" },
     ];
@@ -442,7 +448,7 @@ function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
       rawLabel: node.nodeLabel,
       tag: tag || "",
       nodeType: node.nodeType,
-      typeLabel: `[${upperSnake(node.nodeType)}]`,
+      typeLabel: displayTypeLabel(node.nodeType),
       value: String(node.nodeProperties.value || node.nodeLabel),
       icon: iconForNodeType(node.nodeType),
       confidence,
@@ -450,7 +456,7 @@ function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
       flag: node.nodeFlag || "",
     },
     position: { x: node.x, y: node.y },
-    classes: `entity shape-${node.nodeShape} ${confidence === "low" ? "low-confidence" : ""} ${tag === "INTERNAL" ? "tag-internal" : ""} ${tag === "SUSPICIOUS" ? "tag-suspicious" : ""}`,
+    classes: `entity shape-${node.nodeShape} ${confidence === "low" ? "low-confidence" : ""} ${node.nodeType.startsWith("censored_") ? "censored-entity" : ""} ${node.nodeType === "location" ? "location-entity" : ""} ${tag === "INTERNAL" ? "tag-internal" : ""} ${tag === "SUSPICIOUS" ? "tag-suspicious" : ""}`,
   };
 }
 
@@ -654,9 +660,9 @@ export default function GraphCanvas({
   const runLayout = useCallback((mode: LayoutMode = layoutMode, fit = true) => {
     const cy = cyRef.current;
     if (!cy || !cy.nodes().length) return;
-    const common = { animate: true, animationDuration: 520, animationEasing: "ease-out", fit, padding: 92 };
+    const common = { animate: true, animationDuration: 520, animationEasing: "ease-out", fit, padding: 110 };
     if (mode === "tree") {
-      cy.layout({ name: "breadthfirst", directed: true, circle: false, spacingFactor: 1.6, avoidOverlap: true, ...common }).run();
+      cy.layout({ name: "breadthfirst", directed: true, circle: false, spacingFactor: 2.0, avoidOverlap: true, ...common }).run();
       return;
     }
     if (mode === "circular") {
@@ -806,29 +812,32 @@ export default function GraphCanvas({
         {
           selector: "node",
           style: {
-            width: 92,
-            height: 72,
+            width: 54,
+            height: 54,
             shape: "data(nodeShape)",
             "background-color": "#111111",
             "background-opacity": 1,
             "background-image": "data(icon)",
-            "background-fit": "none",
-            "background-width": "30px",
-            "background-height": "30px",
+            "background-fit": "contain",
+            "background-width": "42px",
+            "background-height": "42px",
             "background-position-x": "50%",
-            "background-position-y": "24%",
-            "border-width": 1,
-            "border-color": "#ffffff",
+            "background-position-y": "50%",
+            "border-width": 2,
+            "border-color": "#555555",
             color: "#ffffff",
             label: "data(label)",
             "font-family": "JetBrains Mono, SFMono-Regular, Consolas, monospace",
-            "font-size": 8,
+            "font-size": 11,
             "font-weight": 600,
             "text-wrap": "wrap",
-            "text-max-width": 150,
+            "text-max-width": 156,
             "text-valign": "bottom",
             "text-halign": "center",
-            "text-margin-y": 9,
+            "text-margin-y": 8,
+            "text-background-color": "#000000",
+            "text-background-opacity": 1,
+            "text-background-padding": 3,
             "overlay-opacity": 0,
             opacity: 1,
           },
@@ -836,14 +845,22 @@ export default function GraphCanvas({
         {
           selector: "node:selected",
           style: {
-            "border-width": 3,
+            "border-width": 2,
             "border-color": "#ffffff",
-            "background-color": "#181818",
+            "background-color": "#111111",
           },
         },
         {
           selector: "node.low-confidence",
           style: { "border-style": "dashed", "border-color": "#888888", color: "#888888" },
+        },
+        {
+          selector: "node.censored-entity",
+          style: { "border-style": "dashed", "border-color": "#888888", "background-color": "#111111" },
+        },
+        {
+          selector: "node.location-entity",
+          style: { "background-color": "#151515", "border-color": "#ffffff" },
         },
         {
           selector: "node.processing",
@@ -868,10 +885,12 @@ export default function GraphCanvas({
         {
           selector: "edge",
           style: {
-            width: "data(width)",
-            "line-color": "#666666",
+            width: 1,
+            "line-color": "#333333",
             "target-arrow-shape": "triangle",
-            "target-arrow-color": "#666666",
+            "target-arrow-color": "#555555",
+            "target-arrow-width": 6,
+            "arrow-scale": 0.72,
             "curve-style": "bezier",
             label: "data(label)",
             color: "#888888",
@@ -926,7 +945,8 @@ export default function GraphCanvas({
       const strict = graphNodesRef.current.find((item) => item.id === event.target.id());
       if (!strict || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const rendered = event.renderedPosition || { x: rect.width / 2, y: rect.height / 2 };
+      const original = event.originalEvent as MouseEvent | undefined;
+      const rendered = event.renderedPosition || (original ? { x: original.clientX - rect.left, y: original.clientY - rect.top } : { x: rect.width / 2, y: rect.height / 2 });
       selectStrictNode(strict);
       setContextTab("transforms");
       setContextMenu({ x: rect.left + rendered.x, y: rect.top + rendered.y, node: strict });
@@ -1104,18 +1124,15 @@ export default function GraphCanvas({
   }, [redoGraph, undoGraph]);
 
   const contextPosition = useMemo(() => {
-    if (!contextMenu) return { x: 0, y: 0, transform: "translate3d(0, 0, 0)" };
+    if (!contextMenu) return { x: 0, y: 0 };
     const width = 342;
     const height = 430;
     const margin = 10;
-    const flipX = contextMenu.x + width + margin > window.innerWidth;
-    const flipY = contextMenu.y + height + margin > window.innerHeight;
-    const x = Math.max(margin, Math.min(contextMenu.x, window.innerWidth - margin));
-    const y = Math.max(margin, Math.min(contextMenu.y, window.innerHeight - margin));
+    const x = contextMenu.x + width + margin > window.innerWidth ? contextMenu.x - width : contextMenu.x;
+    const y = contextMenu.y + height + margin > window.innerHeight ? contextMenu.y - height : contextMenu.y;
     return {
-      x,
-      y,
-      transform: `translate3d(${flipX ? "-100%" : "0"}, ${flipY ? "-100%" : "0"}, 0)`,
+      x: Math.max(margin, Math.min(x, window.innerWidth - width - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - height - margin)),
     };
   }, [contextMenu]);
 
@@ -1268,7 +1285,7 @@ export default function GraphCanvas({
       {contextMenu && (
         <div
           className="graph-context-menu"
-          style={{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px`, transform: contextPosition.transform }}
+          style={{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="context-node-card">

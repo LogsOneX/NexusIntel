@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from recon_validators import analyze_email_target, analyze_identity_target, analyze_network_target, analyze_phone_target, normalize_username
 from backend.modules.email_recon import EmailPresenceResolver
 from backend.modules.identity_recon import IdentityResolver
+from backend.modules.google_recon import lookup_google_footprint
 from backend.modules.phone_recon import PhoneResolver
 from backend.modules.crypto_recon import lookup_wallet
 from backend.modules.entity_resolution import EntityResolutionEngine
@@ -1528,5 +1529,74 @@ def run_watchlist_sweep_all_task(self) -> dict[str, Any]:
             row.updated_at = datetime.utcnow()
         db.commit()
         return {"checked": len(rows), "changed": changed}
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="nexusintel.google_footprint", queue=NETWORK_IO_QUEUE)
+def run_google_footprint_task(self, task_id: str, investigation_id: str, email: str, parent_node_id: str | None = None) -> dict[str, Any]:
+    db = task_session()
+    try:
+        mark_task(db, task_id, "running")
+        mark_investigation(db, investigation_id, "running")
+        db.commit()
+        emit(task_id, "info", f"Starting safe Google footprint lookup for {email}", {"dry_run": os.getenv("NEXUS_ENV") == "development"}, investigation_id)
+        result = asyncio.run(lookup_google_footprint(email))
+        parent = db.get(Entity, parent_node_id) if parent_node_id else None
+        if not parent:
+            parent = upsert_entity(db, investigation_id, type_="email", label=email, value=email, source="google_footprint", confidence="confirmed", data={"role": "pivot"})
+
+        profile_value = result.get("gaia_id") or f"google_profile:{email}"
+        profile = upsert_entity(
+            db,
+            investigation_id,
+            type_="google_profile",
+            label=str(result.get("display_name") or email),
+            value=str(profile_value),
+            source="google_footprint",
+            confidence="medium" if result.get("gaia_id") else "low",
+            data={"gaia_id": result.get("gaia_id"), "avatar_url": result.get("avatar_url"), "guardrail": result.get("guardrail"), "dry_run": result.get("dry_run", False)},
+        )
+        upsert_relationship(db, investigation_id, source_id=parent.id, target_id=profile.id, type_="HAS_GOOGLE_PROFILE", source="google_footprint", confidence="medium" if result.get("gaia_id") else "low")
+
+        review_count = 0
+        for index, review in enumerate(result.get("reviews") or []):
+            place = str(review.get("place_name") or f"Google Review {index + 1}")
+            review_node = upsert_entity(
+                db,
+                investigation_id,
+                type_="google_review",
+                label=place[:96],
+                value=f"google_review:{profile.id}:{index}:{place}",
+                source="google_footprint",
+                confidence="medium",
+                data={"snippet": review.get("snippet"), "rating": review.get("rating"), "timestamp": review.get("timestamp"), "raw": review},
+            )
+            upsert_relationship(db, investigation_id, source_id=profile.id, target_id=review_node.id, type_="POSTED", source="google_footprint", confidence="medium")
+            location_node = upsert_entity(
+                db,
+                investigation_id,
+                type_="location",
+                label=place[:96],
+                value=f"location:{place}:{review.get('address') or ''}",
+                source="google_footprint",
+                confidence="medium",
+                data={"address": review.get("address"), "coordinates": review.get("coordinates") or {}, "place_name": place},
+            )
+            upsert_relationship(db, investigation_id, source_id=review_node.id, target_id=location_node.id, type_="REVIEWED_AT", source="google_footprint", confidence="medium")
+            review_count += 1
+
+        mark_task(db, task_id, "completed", result={"email": email, "reviews": review_count, "guardrail": result.get("guardrail")})
+        mark_investigation(db, investigation_id, "completed")
+        db.commit()
+        emit(task_id, "success", f"Google footprint lookup completed: {review_count} review/location pivots", {"reviews": review_count, "guardrail": result.get("guardrail")}, investigation_id)
+        return result
+    except Exception as exc:
+        db.rollback()
+        mark_task(db, task_id, "failed", error=str(exc), result={"email": email})
+        mark_investigation(db, investigation_id, "failed")
+        db.commit()
+        emit(task_id, "error", f"Google footprint lookup failed: {exc}", {"email": email}, investigation_id)
+        raise
     finally:
         db.close()

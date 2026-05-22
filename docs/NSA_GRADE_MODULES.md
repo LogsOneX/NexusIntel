@@ -127,3 +127,8 @@ Queue Celery: `network_io`.
 ## Graph UI Handling
 
 Crypto wallets are rendered as flat `crypto_wallet` node cards with wallet SVG icons. Transaction artifacts are rendered as `crypto_transaction` nodes with directional ledger icons. Right-click transforms for wallet nodes are `check_wallet_balance` and `trace_transactions`; both route to the `network_io` crypto worker.
+
+
+## Google Footprint Guardrail
+
+`backend/modules/google_recon.py` intentionally avoids account recovery, People API hinting, Calendar invite probing, and internal endpoint enumeration. Development mode returns dummy review/location data. Production mode requires an explicit public Maps profile URL before parsing public review documents.

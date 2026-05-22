@@ -193,6 +193,10 @@ Supported transform families:
 - `autonomous_identity_pipeline`
 - `check_wallet_balance`
 - `trace_transactions`
+- `check_messenger_presence`
+- `username_identity_sweep`
+- `google_footprint_lookup`
+- `check_email_registrations`
 
 Transform routing:
 
@@ -295,3 +299,8 @@ POST /api/v1/proxies/seed
 ```
 
 Manages approved Redis-backed proxy pool for read-only collection. This is governance and rate-control, not WAF bypass.
+
+
+## Google Footprint
+
+`google_footprint_lookup` runs on `network_io`. In `NEXUS_ENV=development`, it returns deterministic synthetic `google_profile`, `google_review`, and `location` graph artifacts. In production it does not probe internal Google endpoints by email; it only parses an explicit public Maps profile URL supplied through `NEXUS_GOOGLE_PUBLIC_PROFILE_URL`.

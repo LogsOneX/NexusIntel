@@ -21,7 +21,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstra
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
-from tasks import run_crypto_wallet_task, run_domain_task, run_email_google_task, run_entity_resolution_task, run_full_identity_pipeline_task, run_nexusrecon_task, run_phone_task, run_serverless_invoker_task
+from tasks import run_crypto_wallet_task, run_domain_task, run_email_google_task, run_entity_resolution_task, run_full_identity_pipeline_task, run_google_footprint_task, run_nexusrecon_task, run_phone_task, run_serverless_invoker_task
 from backend.modules.case_hygiene import build_case_hygiene_report
 from backend.modules.graph_intel import build_graph_intelligence
 from backend.modules.collaboration_bus import CollaborationBus
@@ -698,12 +698,17 @@ async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[st
         return fallback_oracle(prompt, graph_state, node)
 
     system = (
-        "You are NexusIntel Oracle, a senior OSINT investigation copilot. "
-        "Analyze only the supplied graph JSON and active node. Be concise, operational, and evidence-aware. "
+        "You are the NexusIntel Tactical Oracle, an elite Cyber Intelligence Analyst and OSINT investigator. "
+        "You do not act like an AI assistant. Analyze graph data, identify OPSEC failures, map centers of gravity, and brief tersely. "
+        "Use military-style intelligence language with concise bullets for tactical recommendations. "
+        "Highlight Centers of Gravity: nodes with many relationships or high-confidence infrastructure. "
+        "Suggest specific lawful OSINT pivots from the provided graph only, such as MX/workspace enumeration when mail posture appears important, "
+        "or technical background assessment when usernames overlap on developer/security platforms. "
+        "Do not invent findings, do not claim private access, do not recommend password-reset or notification-triggering actions, and do not use emojis. "
         "Return strict JSON with keys reply and commands. "
-        "Commands may include {type:'highlight_type', nodeType:'ip|domain|email|username|profile', minConfidence?:number}, "
-        "{type:'clear_highlight'}, or {type:'suggest_transform', transform:'domain_recon|email_footprint|maigret_username|phone_recon|full_identity_pipeline', reason:string}. "
-        "Do not invent findings; distinguish confirmed, weak, and missing evidence."
+        "Commands may include {type:'highlight_type', nodeType:'ip|domain|email|username|profile|crypto_wallet|location', minConfidence?:number}, "
+        "{type:'clear_highlight'}, or {type:'suggest_transform', transform:'domain_recon|email_footprint|check_email_registrations|google_footprint_lookup|maigret_username|phone_recon|full_identity_pipeline|check_wallet_balance|trace_transactions', reason:string}. "
+        "Distinguish confirmed, weak, and missing evidence."
     )
     metrics = graph_metrics(graph_state)
     intelligence = build_graph_intelligence(graph_state)
@@ -998,13 +1003,15 @@ async def run_transform(payload: TransformRequest, db: Session = Depends(get_db)
 
     if transform in {"full_identity_pipeline", "identity_macro", "email_macro", "autonomous_identity_pipeline"}:
         celery = run_full_identity_pipeline_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
-    elif transform in {"legacy_nexusrecon", "nexusrecon", "maigret_username", "sherlock_username", "username_presence", "username_to_email", "username_to_accounts", "tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums", "tier_4_deep_sweep"}:
+    elif transform in {"legacy_nexusrecon", "nexusrecon", "maigret_username", "sherlock_username", "username_presence", "username_to_email", "username_to_accounts", "username_identity_sweep", "tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums", "tier_4_deep_sweep"}:
         celery = run_nexusrecon_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
-    elif transform in {"email_footprint", "holehe_email", "google_osint", "workspace_recon", "email_to_account", "email_to_domain"}:
+    elif transform in {"email_footprint", "holehe_email", "google_osint", "workspace_recon", "email_to_account", "email_to_domain", "check_email_registrations"}:
         celery = run_email_google_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
+    elif transform in {"google_footprint_lookup", "google_maps_reviews"}:
+        celery = run_google_footprint_task.apply_async(args=[record.id, payload.investigation_id, target, payload.node_id], queue="network_io")
     elif transform in {"domain_recon", "dns_recon", "website_recon", "network_recon", "ip_recon", "reverse_dns"}:
         celery = run_domain_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
-    elif transform in {"phone_recon", "e164_phone", "carrier_lookup", "numbering_plan", "phone_to_email", "phone_to_account"}:
+    elif transform in {"phone_recon", "e164_phone", "carrier_lookup", "numbering_plan", "phone_to_email", "phone_to_account", "check_messenger_presence", "phone_public_presence"}:
         celery = run_phone_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
     elif transform in {"check_wallet_balance", "trace_transactions", "crypto_wallet", "wallet_recon"}:
         celery = run_crypto_wallet_task.apply_async(args=[record.id, payload.investigation_id, target, payload.node_id], queue="network_io")

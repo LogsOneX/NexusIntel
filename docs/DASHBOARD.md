@@ -59,10 +59,10 @@ Network Graph sekarang memakai layout Maltego-purity: canvas memenuhi seluruh ar
 Transform yang tersedia berubah mengikuti tipe node:
 
 - `username`: `username_to_email`, `username_to_accounts`, serta empat cluster `tier_1_major_socials`, `tier_2_tech_dev`, `tier_3_gaming_forums`, `tier_4_deep_sweep`.
-- `email`: `email_to_account`, `email_to_domain`, dan `full_identity_pipeline`.
+- `email`: `check_email_registrations`, `google_footprint_lookup`, dan `email_to_domain`. Full email dikirim utuh; domain tidak dilucuti untuk registration posture.
 - `domain`: DNS/domain recon, RDAP/crt.sh, workspace recon, website surface.
 - `ip`: IP recon, reverse DNS, RDAP allocation, GeoIP/ASN hint.
-- `phone`: `phone_to_email`, `phone_to_account`, E.164 validation, deep-link metadata, dan public numbering-plan hint.
+- `phone`: `check_messenger_presence`, `phone_to_email`, E.164 validation, deep-link metadata, dan public numbering-plan hint. Tidak ada password-reset/contact-sync/2FA triggering.
 - `crypto_wallet`: `check_wallet_balance` dan `trace_transactions` untuk wallet balance serta linked transaction nodes.
 - `profile/platform`: host/domain pivot dan identity sweep ulang.
 
@@ -133,3 +133,8 @@ NexusIntel menambahkan graph intelligence lokal yang meniru workflow enterprise 
 ## High-Density Terminal Layer
 
 GraphCanvas memakai Cytoscape node cards flat: `#111111` background, `1px solid #FFFFFF` border, JetBrains Mono label, SVG data-uri icon di tengah, dan secondary label `[NODE_TYPE]`. Context menu memakai fixed viewport positioning, auto-flip di kanan/bawah layar, z-index `9999`, close on outside click dan `Escape`. Toolbar utama memakai flex row dengan 1px vertical dividers: Stats | Search/Mode | Entity Palette | Controls/Export.
+
+
+## Censored and Google Entities
+
+Schema graph mengenali `censored_email`, `censored_phone`, `google_profile`, `google_review`, dan `location`. Censored nodes memakai border dashed flat `#888888`; review/location nodes memakai solid flat card dan secondary labels `[REVIEW]` / `[LOCATION]`. Google footprint transform default memakai development dry-run atau explicit public Maps profile URL; tidak ada internal Google account probing.
