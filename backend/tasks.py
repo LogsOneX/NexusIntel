@@ -453,20 +453,23 @@ def run_nexusrecon_task(
     target: str,
     mode: str = "standard",
     parent_node_id: str | None = None,
+    transform: str = "maigret_username",
 ) -> dict[str, Any]:
     db = task_session()
     try:
         mark_task(db, task_id, "running")
         mark_investigation(db, investigation_id, "running")
         db.commit()
-        username = normalize_username(target)
+        tier = transform if transform in {"tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums", "tier_4_deep_sweep"} else None
+        username_source = target.split("@", 1)[0] if "@" in target else target
+        username = normalize_username(username_source)
         if not username:
             raise ValueError("Username target is empty after normalization")
         emit(
             task_id,
             "info",
             f"Starting standalone NexusRecon username sweep: {username}",
-            {"mode": mode, "raw_target": target, "normalized_username": username},
+            {"mode": mode, "raw_target": target, "normalized_username": username, "transform": transform, "tier": tier},
             investigation_id,
         )
 
@@ -480,7 +483,7 @@ def run_nexusrecon_task(
                 value=username,
                 source="nexusrecon",
                 confidence="confirmed",
-                data={"role": "pivot", "mode": mode, "raw_input": target},
+                data={"role": "pivot", "mode": mode, "raw_input": target, "transform": transform, "tier": tier},
             )
             db.commit()
 
@@ -496,23 +499,30 @@ def run_nexusrecon_task(
         )
 
         identity_limit = None if mode in {"standard", "aggressive"} else 48
-        ghost_identity = asyncio.run(IdentityResolver(concurrency=72, timeout=10).resolve(username, emit=make_task_emitter(task_id, investigation_id), limit=identity_limit))
+        if tier in {"tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums", "tier_4_deep_sweep"}:
+            identity_limit = None
+        concurrency = 18 if tier in {"tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums"} else 72
+        ghost_identity = asyncio.run(IdentityResolver(concurrency=concurrency, timeout=10).resolve(username, emit=make_task_emitter(task_id, investigation_id), limit=identity_limit, tier=tier))
         ghost_identity_nodes = persist_artifacts(db, investigation_id, parent, ghost_identity["artifacts"], "ghost_identity")
         db.commit()
         emit(
             task_id,
             "tool",
             f"Ghost identity engine checked {ghost_identity['checked']} platforms and normalized {len(ghost_identity_nodes)} live public signals",
-            {"checked": ghost_identity["checked"], "found": ghost_identity["found"]},
+            {"checked": ghost_identity["checked"], "found": ghost_identity["found"], "tier": ghost_identity.get("tier"), "transform": transform},
             investigation_id,
         )
 
-        writer = RedisLineWriter(task_id, investigation_id)
-        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
-            raw = asyncio.run(run_legacy_nexus(username, mode))
-        writer.flush()
+        results: list[dict[str, Any]] = []
+        if not tier or tier == "tier_4_deep_sweep":
+            writer = RedisLineWriter(task_id, investigation_id)
+            with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+                raw = asyncio.run(run_legacy_nexus(username, mode))
+            writer.flush()
+            results = normalize_nexus_result(raw)
+        else:
+            emit(task_id, "tool", f"Skipped legacy full sweep for clustered transform {tier}; async cluster already completed.", {"tier": tier, "username": username}, investigation_id)
 
-        results = normalize_nexus_result(raw)
         found_count = 0
         for item in results:
             if not item.get("found") and mode != "aggressive":
@@ -580,11 +590,17 @@ def run_nexusrecon_task(
                 )
             found_count += 1
 
+        cluster_found = int(ghost_identity.get("found", 0)) if "ghost_identity" in locals() else 0
+        total_profile_signals = found_count + cluster_found
         result = {
             "target": username,
             "raw_target": target,
             "mode": mode,
-            "profiles": found_count,
+            "transform": transform,
+            "tier": tier,
+            "profiles": total_profile_signals,
+            "legacy_profiles": found_count,
+            "cluster_profiles": cluster_found,
             "raw_count": len(results),
             "identity_artifacts": len(identity_nodes),
             "ghost_identity_artifacts": len(ghost_identity_nodes) if "ghost_identity_nodes" in locals() else 0,
@@ -592,9 +608,9 @@ def run_nexusrecon_task(
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
         db.commit()
-        level = "success" if found_count else "warning"
-        message = f"NexusRecon sweep completed: {found_count} confirmed profile signals normalized"
-        if not found_count:
+        level = "success" if total_profile_signals else "warning"
+        message = f"NexusRecon sweep completed: {total_profile_signals} public profile signals normalized"
+        if not total_profile_signals:
             message += "; no confirmed public profiles matched this handle"
         emit(task_id, level, message, result, investigation_id)
         return result

@@ -31,7 +31,7 @@ docker compose down
 - Persistent sidebar: Dashboard, Workspace, Network Graph, AI Oracle, Settings, Account.
 - Dashboard: recent investigations, case folders, timeline/report quick links.
 - Workspace: case name, assigned operator, markdown notes, AI auto-briefing.
-- Network Graph: edge-to-edge tactical canvas, explicit investigation lifecycle dock (select/new/clear/delete), unified master toolbar, integrated launch form, entity palette, Smart Selector, Playbooks, Ask Oracle from node context menu, collapsible data panel, and collapsible terminal HUD.
+- Network Graph: edge-to-edge tactical canvas, explicit investigation lifecycle dock (select/new/clear/delete), unified master toolbar, integrated launch form, entity palette, 4-tier clustered username/email transforms, Smart Selector, Time-Machine slider, flat heat/auto-tags, Playbooks, Ask Oracle from node context menu, collapsible data panel, and collapsible terminal HUD.
 - Settings: BYOK API keys and LLM provider configuration.
 
 ## Tactical Canvas
@@ -49,13 +49,14 @@ Network Graph sekarang memakai layout Maltego-purity: canvas memenuhi seluruh ar
 7. Graph refresh otomatis saat task berjalan tanpa mereset pan/zoom.
 8. Delete investigation tersedia di Graph lifecycle dock dan Workspace case folders; delete menghapus case beserta graph data lewat API.
 9. Health strip menampilkan Case Hygiene score dan rekomendasi next action.
+10. Time-Machine slider di bawah canvas memfilter node/edge berdasarkan `created_at` untuk replay investigation.
+11. Correlation heatmap flat memberi border amber/red pada node dengan banyak koneksi; passive auto-tagging memberi `[INTERNAL]` pada IP private/bogon dan `[SUSPICIOUS]` pada domain ber-keyword phishing.
 
 ## Context Transforms
 
 Transform yang tersedia berubah mengikuti tipe node:
 
-- `username`: username sweep dan Sherlock-style pivot.
-- `email`: email footprint, Google/workspace public indicators, local-part username pivot.
+- `username`/`email`: empat cluster wajib `tier_1_major_socials`, `tier_2_tech_dev`, `tier_3_gaming_forums`, `tier_4_deep_sweep`.
 - `domain`: DNS/domain recon, RDAP/crt.sh, workspace recon, website surface.
 - `ip`: IP recon, reverse DNS, RDAP allocation, GeoIP/ASN hint.
 - `phone`: E.164 validation dan public numbering-plan hint.

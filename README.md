@@ -216,7 +216,7 @@ Folder `data/` di-ignore dari git.
 
 ## Command Center Flow
 
-UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan edge-to-edge tactical canvas, unified master toolbar, integrated launch form, drag-and-drop entity palette, right-click Logic Flow, Playbooks, Smart Selector, collapsible data drawer, collapsible terminal HUD, Timeline Mode, Export Intelligence report, dan explicit investigation lifecycle dock untuk select/new/clear/delete case tanpa auto-load case lama.
+UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan edge-to-edge tactical canvas, unified master toolbar, integrated launch form, drag-and-drop entity palette, right-click Logic Flow, Playbooks, Smart Selector, collapsible data drawer, collapsible terminal HUD, Timeline Mode, Export Intelligence report, explicit investigation lifecycle dock untuk select/new/clear/delete case tanpa auto-load case lama, Time-Machine temporal playback, flat correlation heat indicators, dan passive threat auto-tagging.
 
 1. Buka Network Graph; canvas mulai detached kecuali URL berisi `?case=<id>`.
 2. Pilih investigation dari lifecycle dock, buat blank investigation, atau submit target username/email/domain/IP/phone.
@@ -230,13 +230,15 @@ UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protec
 
 Transform utama:
 
-- Username sweep: konsep Maigret/Sherlock untuk enumerasi profil publik.
+- Username/email clustered sweep: 4 tier eksekusi `tier_1_major_socials`, `tier_2_tech_dev`, `tier_3_gaming_forums`, dan `tier_4_deep_sweep` agar worker tidak langsung menembak 100+ platform.
 - Email/workspace recon: konsep Holehe/GHunt yang dibatasi ke DNS, provider hints, Gravatar hash, dan public workspace indicators.
 - Domain/DNS recon: A/AAAA/CNAME/MX/NS/TXT/CAA, RDAP, mail posture, service hints, dan crt.sh subdomain read-only.
 - IP recon: reverse DNS, RDAP allocation, dan GeoIP/ASN hint dari sumber gratis.
 - Phone recon: E.164 validation, country calling code, dan offline public numbering-plan hint.
 - Manual entity builder + drag-and-drop entity pipeline: tambah entity dan link langsung ke selected node.
 - Case Hygiene: health score, coverage, weak/isolated entity detection, dan next-action recommendation untuk menjaga kualitas investigation.
+- Time-Machine slider: replay graph berdasarkan `created_at` node/edge tanpa remount canvas.
+- Passive auto-tagging: IP private/bogon diberi `[INTERNAL]`, domain dengan phishing keywords diberi `[SUSPICIOUS]`, dan node ber-degree tinggi diberi border amber/red flat.
 
 ## Deep Recon Validator
 

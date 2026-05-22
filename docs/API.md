@@ -158,6 +158,10 @@ Body:
 
 Supported transform families:
 
+- `tier_1_major_socials`
+- `tier_2_tech_dev`
+- `tier_3_gaming_forums`
+- `tier_4_deep_sweep`
 - `maigret_username`
 - `sherlock_username`
 - `legacy_nexusrecon`
@@ -183,12 +187,12 @@ Supported transform families:
 
 Transform routing:
 
-- identity transforms route to `run_nexusrecon_task`.
+- identity transforms route to `run_nexusrecon_task`; tier transforms constrain the async identity resolver to the exact cluster and only `tier_4_deep_sweep` runs the legacy full sweep.
 - email/workspace transforms route to `run_email_google_task`.
 - domain/IP/network transforms route to `run_domain_task`.
 - phone transforms route to `run_phone_task`.
 
-All transform workers call `backend/recon_validators.py` before returning graph updates. Relationships now include numeric `confidence_level` (0-100) for UI edge thickness and filtering.
+All transform workers call `backend/recon_validators.py` before returning graph updates. Username/email context menus expose four clustered tiers: Major Socials, Tech & Dev, Gaming & Forums, and Deep Sweep. Relationships now include numeric `confidence_level` (0-100) for UI edge thickness and filtering.
 
 Celery workers also invoke `backend/modules/` Ghost Engine resolvers. These stream progress through `WS /api/v1/ws/logs/{task_id}` immediately as public signals are found, while final artifacts are persisted to the graph database.
 

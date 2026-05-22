@@ -22,6 +22,7 @@ export type GraphEdge = {
   target: string;
   label: string;
   confidence_level?: number;
+  created_at?: string;
 };
 
 type ApiGraphNode = {
@@ -207,6 +208,7 @@ function strictEdgeFromApi(edge: ApiGraphEdge): GraphEdge {
     target: edge.target,
     label: upperSnake(edge.type),
     confidence_level: typeof edge.confidence_level === "number" ? edge.confidence_level : typeof edge.data?.confidence_level === "number" ? edge.data.confidence_level : confidenceScore(edge.confidence),
+    created_at: edge.created_at || String(edge.data?.created_at || ""),
   };
 }
 
@@ -226,18 +228,12 @@ function cloneState(nodes: GraphNode[], edges: GraphEdge[]) {
 }
 
 function transformsFor(node: GraphNode): TransformAction[] {
-  if (["username", "name", "profile_candidate"].includes(node.nodeType)) {
+  if (["username", "name", "profile", "profile_candidate", "email"].includes(node.nodeType)) {
     return [
-      { id: "maigret_username", label: "Username Sweep", description: "Standalone public profile enumeration" },
-      { id: "sherlock_username", label: "Sherlock-Style Pivot", description: "Cross-platform existence checks" },
-      { id: "email_footprint", label: "Local-Part Email Logic", description: "Derive email/domain pivots when present" },
-    ];
-  }
-  if (node.nodeType === "email") {
-    return [
-      { id: "email_footprint", label: "Email Footprint", description: "Syntax, MX, TXT, DMARC, BIMI and avatar signals" },
-      { id: "google_osint", label: "Workspace Signals", description: "Public Google/Microsoft workspace inference" },
-      { id: "maigret_username", label: "Local-Part Username", description: "Pivot the mailbox local-part across public platforms" },
+      { id: "tier_1_major_socials", label: "Major Socials", description: "Facebook, Instagram, LinkedIn, X, Threads, TikTok" },
+      { id: "tier_2_tech_dev", label: "Tech & Dev", description: "GitHub, GitLab, StackOverflow, HackTheBox" },
+      { id: "tier_3_gaming_forums", label: "Gaming & Forums", description: "Steam, Discord, Reddit, Twitch" },
+      { id: "tier_4_deep_sweep", label: "Deep Sweep", description: "Full 100+ site Maigret/Sherlock execution" },
     ];
   }
   if (node.nodeType === "domain") {
@@ -362,14 +358,44 @@ function confidenceLevelForNode(node: GraphNode): number {
   return confidenceScore(String(node.nodeProperties.confidence || "medium")) || 50;
 }
 
+function timestampForNode(node: GraphNode): number {
+  const raw = String(node.nodeProperties.created_at || node.nodeProperties.timestamp || "");
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function timestampForEdge(edge: GraphEdge): number {
+  const parsed = Date.parse(String(edge.created_at || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isPrivateOrBogonIp(value: string): boolean {
+  const ip = value.trim().toLowerCase();
+  return /^(10|127|0)\./.test(ip) || /^192\.168\./.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip) || /^169\.254\./.test(ip) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip) || ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80:");
+}
+
+function suspiciousDomain(value: string): boolean {
+  const domain = value.toLowerCase();
+  return ["login-", "secure-", "verify-", "account-", "wallet-", "signin-", "-login", "-verify", "password", "update-billing"].some((term) => domain.includes(term));
+}
+
+function passiveNodeTag(node: GraphNode): "INTERNAL" | "SUSPICIOUS" | null {
+  const value = String(node.nodeProperties.value || node.nodeLabel);
+  if (node.nodeType === "ip" && isPrivateOrBogonIp(value)) return "INTERNAL";
+  if (node.nodeType === "domain" && suspiciousDomain(value)) return "SUSPICIOUS";
+  return null;
+}
+
 function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
   const confidence = String(node.nodeProperties.confidence || "medium");
+  const tag = passiveNodeTag(node);
   return {
     group: "nodes",
     data: {
       id: node.id,
-      label: `[${node.nodeIcon || "NX"}] ${node.nodeLabel}`,
+      label: `${tag ? `[${tag}] ` : ""}[${node.nodeIcon || "NX"}] ${node.nodeLabel}`,
       rawLabel: node.nodeLabel,
+      tag: tag || "",
       nodeType: node.nodeType,
       value: String(node.nodeProperties.value || node.nodeLabel),
       confidence,
@@ -377,7 +403,7 @@ function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
       flag: node.nodeFlag || "",
     },
     position: { x: node.x, y: node.y },
-    classes: `entity shape-${node.nodeShape} ${confidence === "low" ? "low-confidence" : ""}`,
+    classes: `entity shape-${node.nodeShape} ${confidence === "low" ? "low-confidence" : ""} ${tag === "INTERNAL" ? "tag-internal" : ""} ${tag === "SUSPICIOUS" ? "tag-suspicious" : ""}`,
   };
 }
 
@@ -391,6 +417,7 @@ function edgeElement(edge: GraphEdge, runningNodeId: string | null, faded = fals
       target: edge.target,
       label: edge.label,
       confidence_level: confidence,
+      created_at: edge.created_at || "",
       width: Math.max(1, confidence / 38),
     },
     classes: `edge ${confidence < 50 ? "low-confidence" : ""} ${runningNodeId && edge.source === runningNodeId ? "running-flow" : ""} ${faded ? "faded" : ""}`,
@@ -441,6 +468,7 @@ export default function GraphCanvas({
   const [timelineMode, setTimelineMode] = useState(false);
   const [highlightType, setHighlightType] = useState("all");
   const [highlightMinConfidence, setHighlightMinConfidence] = useState(0);
+  const [timeCursor, setTimeCursor] = useState(100);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [contextTab, setContextTab] = useState<ContextTab>("transforms");
   const [runningTask, setRunningTask] = useState<string | null>(null);
@@ -456,6 +484,25 @@ export default function GraphCanvas({
   const effectiveDataPanelOpen = dataPanelOpen ?? localDataPanelOpen;
   const effectiveSetDataPanelOpen = setDataPanelOpen ?? setLocalDataPanelOpen;
   const selectedStrictNode = useMemo(() => graphNodes.find((node) => node.id === selectedNode?.id) || null, [graphNodes, selectedNode?.id]);
+  const degreeById = useMemo(() => {
+    const degree = new Map<string, number>();
+    graphEdges.forEach((edge) => {
+      degree.set(edge.source, (degree.get(edge.source) || 0) + 1);
+      degree.set(edge.target, (degree.get(edge.target) || 0) + 1);
+    });
+    return degree;
+  }, [graphEdges]);
+  const timeBounds = useMemo(() => {
+    const stamps = graphNodes.map(timestampForNode).filter((stamp) => stamp > 0).sort((a, b) => a - b);
+    return { min: stamps[0] || 0, max: stamps[stamps.length - 1] || 0 };
+  }, [graphNodes]);
+  const temporalCutoff = useMemo(() => {
+    if (!timeBounds.min || !timeBounds.max || timeBounds.min === timeBounds.max) return Number.POSITIVE_INFINITY;
+    return timeBounds.min + ((timeBounds.max - timeBounds.min) * timeCursor) / 100;
+  }, [timeBounds.max, timeBounds.min, timeCursor]);
+  const temporalActive = Number.isFinite(temporalCutoff) && timeCursor < 100;
+  const visibleNodeIds = useMemo(() => new Set(graphNodes.filter((node) => !temporalActive || timestampForNode(node) <= temporalCutoff).map((node) => node.id)), [graphNodes, temporalActive, temporalCutoff]);
+  const timeMachineLabel = timeCursor >= 100 || !Number.isFinite(temporalCutoff) ? "live" : new Date(temporalCutoff).toLocaleString();
 
   const resizeGraph = useCallback((fit = false) => {
     window.requestAnimationFrame(() => {
@@ -735,12 +782,9 @@ export default function GraphCanvas({
         {
           selector: "node:selected",
           style: {
-            "border-width": 2,
+            "border-width": 3,
             "border-color": "#ffffff",
             "background-color": "#181818",
-            "shadow-blur": 10,
-            "shadow-color": "#ffffff",
-            "shadow-opacity": 0.28,
           },
         },
         {
@@ -749,7 +793,23 @@ export default function GraphCanvas({
         },
         {
           selector: "node.processing",
-          style: { "shadow-blur": 14, "shadow-color": "#ffffff", "shadow-opacity": 0.44, "border-width": 2 },
+          style: { "border-width": 4, "border-color": "#ffffff" },
+        },
+        {
+          selector: "node.hub-amber",
+          style: { "border-width": 4, "border-color": "#f59e0b" },
+        },
+        {
+          selector: "node.hub-red",
+          style: { "border-width": 5, "border-color": "#ef4444" },
+        },
+        {
+          selector: "node.tag-internal",
+          style: { "border-color": "#facc15", color: "#facc15" },
+        },
+        {
+          selector: "node.tag-suspicious",
+          style: { "border-color": "#ef4444", "background-color": "#171111" },
         },
         {
           selector: "edge",
@@ -777,6 +837,10 @@ export default function GraphCanvas({
         {
           selector: ".faded",
           style: { opacity: 0.2 },
+        },
+        {
+          selector: ".time-hidden",
+          style: { display: "none", opacity: 0 },
         },
         {
           selector: "edge.running-flow",
@@ -862,7 +926,10 @@ export default function GraphCanvas({
         const existing = cy.getElementById(node.id);
         const element = nodeElement(node);
         const faded = highlightType !== "all" && (node.nodeType !== highlightType || confidenceLevelForNode(node) < highlightMinConfidence);
-        const classes = `${element.classes || ""} ${node.id === runningNodeId ? "processing" : ""} ${faded ? "faded" : ""}`.trim();
+        const degree = degreeById.get(node.id) || 0;
+        const hubClass = degree > 10 ? "hub-red" : degree > 5 ? "hub-amber" : "";
+        const timeHidden = temporalActive && !visibleNodeIds.has(node.id);
+        const classes = `${element.classes || ""} ${node.id === runningNodeId ? "processing" : ""} ${hubClass} ${faded ? "faded" : ""} ${timeHidden ? "time-hidden" : ""}`.trim();
         if (existing.length) {
           existing.data(element.data || {});
           existing.classes(classes);
@@ -879,13 +946,16 @@ export default function GraphCanvas({
         if (!cy.getElementById(edge.source).length || !cy.getElementById(edge.target).length) return;
         const existing = cy.getElementById(edge.id);
         const edgeConfidence = edge.confidence_level || 60;
+        const edgeTimestamp = timestampForEdge(edge);
+        const timeHidden = temporalActive && (!visibleNodeIds.has(edge.source) || !visibleNodeIds.has(edge.target) || (edgeTimestamp > 0 && edgeTimestamp > temporalCutoff));
         const faded = highlightType !== "all" && ((typeById.get(edge.source) !== highlightType && typeById.get(edge.target) !== highlightType) || edgeConfidence < highlightMinConfidence);
         const element = edgeElement(edge, runningNodeId, faded);
+        const classes = `${element.classes || ""} ${timeHidden ? "time-hidden" : ""}`.trim();
         if (existing.length) {
           existing.data(element.data || {});
-          existing.classes(String(element.classes || ""));
+          existing.classes(classes);
         } else {
-          const added = cy.add(element);
+          const added = cy.add({ ...element, classes });
           added.style("opacity", 0);
           added.animate({ style: { opacity: 1 } }, { duration: 320, easing: "ease-out" });
         }
@@ -898,7 +968,7 @@ export default function GraphCanvas({
     } else {
       resizeGraph(false);
     }
-  }, [graphEdges, graphNodes, highlightMinConfidence, highlightType, layoutMode, resizeGraph, runLayout, runningNodeId]);
+  }, [degreeById, graphEdges, graphNodes, highlightMinConfidence, highlightType, layoutMode, resizeGraph, runLayout, runningNodeId, temporalActive, temporalCutoff, visibleNodeIds]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -1099,6 +1169,17 @@ export default function GraphCanvas({
               <span>Create or select a target, then drag entities into the canvas.</span>
             </div>
           )}
+        </div>
+      )}
+
+      {!timelineMode && graphNodes.length > 1 && (
+        <div className="time-machine-slider" aria-label="Temporal playback slider">
+          <div>
+            <Clock3 size={13} />
+            <span>Time Machine</span>
+            <code>{timeMachineLabel}</code>
+          </div>
+          <input type="range" min="0" max="100" value={timeCursor} onChange={(event) => setTimeCursor(Number(event.target.value))} />
         </div>
       )}
 

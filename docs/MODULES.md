@@ -17,7 +17,7 @@ Folder `backend/modules/` adalah runtime OSINT async untuk dashboard/Celery. Mod
 
 ### `backend/modules/identity_recon.py`
 
-Async username resolver dengan `aiohttp`, concurrency tinggi, curated public profile URLs, optional `NEXUS_PLATFORM_CATALOG` untuk registry internal 500+ surface, false-positive filtering, negative marker parsing, title/DOM metadata extraction, dan confidence scoring. Hasil langsung di-stream ke WebSocket melalui callback Celery.
+Async username resolver dengan `aiohttp`, concurrency tinggi, curated public profile URLs, optional `NEXUS_PLATFORM_CATALOG` untuk registry internal 500+ surface, false-positive filtering, negative marker parsing, title/DOM metadata extraction, confidence scoring, dan 4-tier clustered execution: Major Socials, Tech & Dev, Gaming & Forums, Deep Sweep. Hasil langsung di-stream ke WebSocket melalui callback Celery.
 
 ### `backend/modules/workspace_recon.py`
 

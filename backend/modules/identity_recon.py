@@ -25,6 +25,9 @@ PLATFORMS: tuple[PlatformProfile, ...] = tuple(
     for name, url, category, required in [
         ("GitHub", "https://github.com/{username}", "code", True),
         ("GitLab", "https://gitlab.com/{username}", "code", True),
+        ("Facebook", "https://www.facebook.com/{username}", "major_social", False),
+        ("LinkedIn", "https://www.linkedin.com/in/{username}/", "major_social", True),
+        ("Discord", "https://discord.com/users/{username}", "gaming_forum", False),
         ("Codeberg", "https://codeberg.org/{username}", "code", True),
         ("SourceHut", "https://sr.ht/~{username}", "code", True),
         ("Bitbucket", "https://bitbucket.org/{username}/", "code", True),
@@ -176,6 +179,24 @@ def _load_external_platforms() -> tuple[PlatformProfile, ...]:
 PLATFORMS = tuple(dict.fromkeys(PLATFORMS + _load_external_platforms()))
 
 
+TIER_PLATFORM_NAMES: dict[str, frozenset[str] | None] = {
+    "tier_1_major_socials": frozenset({"Facebook", "Instagram", "LinkedIn", "X", "Threads", "TikTok"}),
+    "tier_2_tech_dev": frozenset({"GitHub", "GitLab", "StackOverflow", "HackTheBox"}),
+    "tier_3_gaming_forums": frozenset({"Steam", "Discord", "Reddit", "Twitch"}),
+    "tier_4_deep_sweep": None,
+}
+
+
+def platforms_for_tier(tier: str | None, *, limit: int | None = None) -> tuple[PlatformProfile, ...]:
+    selected = PLATFORMS
+    names = TIER_PLATFORM_NAMES.get(str(tier or ""))
+    if names is not None:
+        selected = tuple(platform for platform in PLATFORMS if platform.name in names)
+    if limit is not None:
+        selected = selected[:limit]
+    return selected
+
+
 class IdentityResolver:
     def __init__(self, *, concurrency: int = 64, timeout: float = 10.0):
         self.concurrency = concurrency
@@ -219,9 +240,9 @@ class IdentityResolver:
             {"platform": platform.name, "category": platform.category, "status_code": status, "final_url": result.get("url"), "title": title, "metadata": metadata},
         )
 
-    async def resolve(self, username: str, *, emit: EmitCallback | None = None, limit: int | None = None) -> dict[str, Any]:
+    async def resolve(self, username: str, *, emit: EmitCallback | None = None, limit: int | None = None, tier: str | None = None) -> dict[str, Any]:
         normalized = normalize_username(username)
-        platforms = PLATFORMS[:limit] if limit is not None else PLATFORMS
+        platforms = platforms_for_tier(tier, limit=limit)
         findings: list[ReconFinding] = []
         async with AsyncHttpClient(concurrency=self.concurrency, timeout=self.timeout) as client:
             tasks = [self.check_platform(client, normalized, platform) for platform in platforms]
@@ -234,5 +255,6 @@ class IdentityResolver:
             "target": normalized,
             "checked": len(platforms),
             "found": len(findings),
+            "tier": tier or ("tier_4_deep_sweep" if limit is None else "limited"),
             "artifacts": [finding.as_artifact() for finding in findings],
         }
