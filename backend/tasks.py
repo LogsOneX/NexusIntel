@@ -27,6 +27,11 @@ from recon_validators import analyze_email_target, analyze_identity_target, anal
 from backend.modules.email_recon import EmailPresenceResolver
 from backend.modules.identity_recon import IdentityResolver
 from backend.modules.phone_recon import PhoneResolver
+from backend.modules.crypto_recon import lookup_wallet
+from backend.modules.entity_resolution import EntityResolutionEngine
+from backend.modules.serverless_invoker import invoke_serverless
+from backend.modules.watchlist_engine import diff_graph, graph_signature
+from backend.queues import TASK_ROUTES, ML_GPU_QUEUE, NETWORK_IO_QUEUE
 
 
 DATABASE_URL = os.getenv(
@@ -45,6 +50,15 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_time_limit=int(os.getenv("TASK_TIME_LIMIT", "1800")),
     task_soft_time_limit=int(os.getenv("TASK_SOFT_TIME_LIMIT", "1500")),
+    task_routes=TASK_ROUTES,
+    task_default_queue=NETWORK_IO_QUEUE,
+    beat_schedule={
+        "watchlist-sweep-every-30-minutes": {
+            "task": "nexusintel.watchlist_sweep_all",
+            "schedule": float(os.getenv("WATCHLIST_SWEEP_SECONDS", "1800")),
+            "options": {"queue": NETWORK_IO_QUEUE},
+        }
+    },
 )
 
 
@@ -123,6 +137,21 @@ class Event(Base):
     message = Column(Text, nullable=False)
     payload = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class Watchlist(Base):
+    __tablename__ = "watchlists"
+
+    id = Column(String(36), primary_key=True)
+    investigation_id = Column(String(36), ForeignKey("investigations.id", ondelete="CASCADE"), nullable=False, index=True)
+    target = Column(String(512), nullable=False)
+    target_type = Column(String(64), nullable=False)
+    enabled = Column(String(8), nullable=False, default="true")
+    interval_hours = Column(String(8), nullable=False, default="12")
+    last_signature = Column(String(128), nullable=True)
+    last_delta = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 def now_iso() -> str:
@@ -1398,5 +1427,106 @@ def run_full_identity_pipeline_task(
         db.commit()
         emit(task_id, "error", f"Autonomous identity macro failed: {exc}", {"target": target, "transform": transform}, investigation_id)
         raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="nexusintel.serverless_invoke", queue=NETWORK_IO_QUEUE)
+def run_serverless_invoker_task(self, task_id: str, investigation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    db = task_session()
+    try:
+        mark_task(db, task_id, "running")
+        mark_investigation(db, investigation_id, "running")
+        db.commit()
+        emit(task_id, "info", "Starting authorized serverless collection invocation", {"dry_run": os.getenv("NEXUS_ENV") == "development"}, investigation_id)
+        result = asyncio.run(invoke_serverless(payload))
+        mark_task(db, task_id, "completed", result=result)
+        mark_investigation(db, investigation_id, "completed")
+        db.commit()
+        emit(task_id, "success", "Serverless invocation completed", result, investigation_id)
+        return result
+    except Exception as exc:
+        db.rollback()
+        mark_task(db, task_id, "failed", error=str(exc), result={"payload": payload})
+        mark_investigation(db, investigation_id, "failed")
+        db.commit()
+        emit(task_id, "error", f"Serverless invocation failed: {exc}", {"payload": payload}, investigation_id)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="nexusintel.crypto_wallet", queue=NETWORK_IO_QUEUE)
+def run_crypto_wallet_task(self, task_id: str, investigation_id: str, address: str, parent_node_id: str | None = None) -> dict[str, Any]:
+    db = task_session()
+    try:
+        mark_task(db, task_id, "running")
+        mark_investigation(db, investigation_id, "running")
+        db.commit()
+        emit(task_id, "info", f"Starting crypto wallet tracker for {address}", {"dry_run": os.getenv("NEXUS_ENV") == "development"}, investigation_id)
+        result = asyncio.run(lookup_wallet(address))
+        parent = db.get(Entity, parent_node_id) if parent_node_id else None
+        wallet = upsert_entity(db, investigation_id, type_="crypto_wallet", label=address, value=address, source="crypto_recon", confidence="high" if not result.get("error") else "low", data=result)
+        if parent and parent.id != wallet.id:
+            upsert_relationship(db, investigation_id, source_id=parent.id, target_id=wallet.id, type_="HAS_WALLET", source="crypto_recon", confidence="medium")
+        for tx in result.get("transactions", [])[:10]:
+            tx_hash = str(tx.get("txid") or tx.get("hash") or tx.get("id") or "unknown")
+            tx_node = upsert_entity(db, investigation_id, type_="crypto_transaction", label=tx_hash[:18], value=tx_hash, source="crypto_recon", confidence="medium", data=tx)
+            upsert_relationship(db, investigation_id, source_id=wallet.id, target_id=tx_node.id, type_="HAS_TRANSACTION", source="crypto_recon", confidence="medium")
+        mark_task(db, task_id, "completed", result=result)
+        mark_investigation(db, investigation_id, "completed")
+        db.commit()
+        emit(task_id, "success", "Crypto wallet tracker completed", {"address": address, "chain": result.get("chain")}, investigation_id)
+        return result
+    except Exception as exc:
+        db.rollback()
+        mark_task(db, task_id, "failed", error=str(exc), result={"address": address})
+        mark_investigation(db, investigation_id, "failed")
+        db.commit()
+        emit(task_id, "error", f"Crypto wallet tracker failed: {exc}", {"address": address}, investigation_id)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="nexusintel.entity_resolution", queue=ML_GPU_QUEUE)
+def run_entity_resolution_task(self, left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    return EntityResolutionEngine().score_pair(left, right)
+
+
+@celery_app.task(bind=True, name="nexusintel.watchlist_tick", queue=NETWORK_IO_QUEUE)
+def run_watchlist_tick_task(self, previous_graph: dict[str, Any] | None, current_graph: dict[str, Any]) -> dict[str, Any]:
+    delta = diff_graph(previous_graph, current_graph)
+    return {"signature": graph_signature(current_graph), "delta": delta}
+
+
+
+def _graph_for_signature(db: Session, investigation_id: str) -> dict[str, Any]:
+    entities = db.execute(select(Entity).where(Entity.investigation_id == investigation_id)).scalars().all()
+    relationships = db.execute(select(Relationship).where(Relationship.investigation_id == investigation_id)).scalars().all()
+    return {
+        "nodes": [{"id": entity.id, "type": entity.type, "value": entity.value} for entity in entities],
+        "edges": [{"id": edge.id, "source": edge.source_id, "target": edge.target_id, "type": edge.type} for edge in relationships],
+    }
+
+
+@celery_app.task(bind=True, name="nexusintel.watchlist_sweep_all", queue=NETWORK_IO_QUEUE)
+def run_watchlist_sweep_all_task(self) -> dict[str, Any]:
+    db = task_session()
+    try:
+        rows = db.execute(select(Watchlist).where(Watchlist.enabled == "true")).scalars().all()
+        changed = 0
+        for row in rows:
+            graph = _graph_for_signature(db, row.investigation_id)
+            signature = graph_signature(graph)
+            delta = {"changed": row.last_signature != signature, "signature": signature}
+            if row.last_signature and row.last_signature != signature:
+                changed += 1
+                emit("watchlist", "warning", f"SYSTEM_ALERT watchlist delta for {row.target}", {"watchlist_id": row.id, "delta": delta}, row.investigation_id)
+            row.last_signature = signature
+            row.last_delta = delta
+            row.updated_at = datetime.utcnow()
+        db.commit()
+        return {"checked": len(rows), "changed": changed}
     finally:
         db.close()

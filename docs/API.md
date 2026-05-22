@@ -229,3 +229,67 @@ The WebSocket streams JSON lines:
   "time": "2026-05-18T00:00:00Z"
 }
 ```
+
+## Advanced Architecture Endpoints
+
+### Provenance
+
+```text
+POST /api/v1/provenance
+GET /api/v1/provenance/{provenance_id}/verify
+```
+
+Stores raw payload bytes/JSON into the provenance object store, records SHA-256 in Postgres, and verifies integrity on demand.
+
+### Audit
+
+```text
+GET /api/v1/audit
+```
+
+Returns recent internal operator actions captured by FastAPI audit middleware.
+
+### Watchlist
+
+```text
+POST /api/v1/watchlists
+GET /api/v1/watchlists
+PATCH /api/v1/watchlists/{watchlist_id}/toggle
+```
+
+Persistent surveillance state. Celery Beat runs watchlist sweeps on queue `network_io` and emits `SYSTEM_ALERT` when graph signatures change.
+
+### Entity Resolution
+
+```text
+POST /api/v1/entity-resolution/score
+```
+
+Queues identity scoring on `ml_gpu`. Scores `>=85` become permanent identity matches; lower scores are hypothetical edges.
+
+### Multiplayer Collaboration
+
+```text
+POST /api/v1/collaboration/patch
+POST /api/v1/collaboration/presence
+```
+
+Bridges Yjs/Zustand workspace changes to Redis Pub/Sub channels `workspace:{id}`.
+
+### Crypto and Serverless Dry-Run
+
+```text
+POST /api/v1/crypto/wallet
+POST /api/v1/serverless/invoke
+```
+
+Both run on `network_io`. If `NEXUS_ENV=development`, external calls return deterministic dummy JSON for safe testing.
+
+### Proxy Governance
+
+```text
+GET /api/v1/proxies/status
+POST /api/v1/proxies/seed
+```
+
+Manages approved Redis-backed proxy pool for read-only collection. This is governance and rate-control, not WAF bypass.

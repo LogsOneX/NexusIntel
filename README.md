@@ -214,6 +214,20 @@ data/redis
 
 Folder `data/` di-ignore dari git.
 
+
+## Advanced Architecture Modules
+
+NexusIntel sekarang memiliki foundation 6 modul lanjutan yang tetap read-only dan public-source:
+
+- Egress governance: Redis proxy rotator, jitter 1.2-4.7 detik, exponential backoff, dan serverless invoker dengan dry-run.
+- Chain of Custody: RAW payload store, SHA-256 provenance, verify endpoint, dan audit middleware.
+- Watchlist Engine: persistent surveillance on/off, Celery Beat, dan `SYSTEM_ALERT` saat graph signature berubah.
+- Deep Entity Resolution: queue `ml_gpu`, scoring identity, permanent/hypothetical edge decision.
+- Multiplayer Canvas: Yjs + y-websocket + Zustand + Redis Pub/Sub patch/presence.
+- Crypto Wallet Tracker: wallet node + transaction edges dengan `NEXUS_ENV=development` dry-run.
+
+Detail lengkap ada di `docs/NSA_GRADE_MODULES.md`.
+
 ## Command Center Flow
 
 UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan edge-to-edge tactical canvas, unified master toolbar, integrated launch form, drag-and-drop entity palette, right-click Logic Flow, Playbooks, Smart Selector, collapsible data drawer, collapsible terminal HUD, Timeline Mode, Export Intelligence report, explicit investigation lifecycle dock untuk select/new/clear/delete case tanpa auto-load case lama, Time-Machine temporal playback, flat correlation heat indicators, dan passive threat auto-tagging.

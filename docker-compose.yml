@@ -66,24 +66,79 @@ services:
       retries: 10
     restart: unless-stopped
 
-  worker:
+  worker-network:
     build:
       context: .
       dockerfile: backend/Dockerfile
     image: nexusintel-api:latest
-    container_name: nexusintel-worker
-    command: ["celery", "-A", "tasks.celery_app", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
+    container_name: nexusintel-worker-network
+    command: ["celery", "-A", "tasks.celery_app", "worker", "--loglevel=INFO", "--queues=network_io,default", "--concurrency=${NETWORK_WORKER_CONCURRENCY:-2}"]
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
+      NEXUS_ENV: ${NEXUS_ENV:-development}
       NEXUS_EGRESS_PROXY: ${NEXUS_EGRESS_PROXY:-}
+      NEXUS_PROXY_POOL: ${NEXUS_PROXY_POOL:-}
       NEXUS_PLATFORM_CATALOG: ${NEXUS_PLATFORM_CATALOG:-}
+      NEXUS_SERVERLESS_INVOKER_URL: ${NEXUS_SERVERLESS_INVOKER_URL:-}
+      NEXUS_SERVERLESS_INVOKER_TOKEN: ${NEXUS_SERVERLESS_INVOKER_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker-ml:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: nexusintel-api:latest
+    container_name: nexusintel-worker-ml
+    command: ["celery", "-A", "tasks.celery_app", "worker", "--loglevel=INFO", "--queues=ml_gpu", "--concurrency=${ML_WORKER_CONCURRENCY:-1}"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
+      REDIS_URL: redis://redis:6379/0
+      NEXUS_ENV: ${NEXUS_ENV:-development}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: nexusintel-api:latest
+    container_name: nexusintel-celery-beat
+    command: ["celery", "-A", "tasks.celery_app", "beat", "--loglevel=INFO"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
+      REDIS_URL: redis://redis:6379/0
+      NEXUS_ENV: ${NEXUS_ENV:-development}
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  y-websocket:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.yjs
+    image: nexusintel-y-websocket:latest
+    container_name: nexusintel-y-websocket
+    ports:
+      - "${YJS_HOST:-127.0.0.1}:${YJS_PORT:-1234}:1234"
+    depends_on:
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
@@ -98,6 +153,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      y-websocket:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 15s

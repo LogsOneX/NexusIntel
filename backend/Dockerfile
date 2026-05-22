@@ -17,6 +17,7 @@ COPY backend/main.py ./main.py
 COPY backend/tasks.py ./tasks.py
 COPY backend/recon_validators.py ./recon_validators.py
 COPY backend/__init__.py ./backend/__init__.py
+COPY backend/queues.py ./backend/queues.py
 COPY backend/modules ./backend/modules
 COPY core ./core
 COPY modules ./modules

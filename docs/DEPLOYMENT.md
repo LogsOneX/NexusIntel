@@ -265,3 +265,25 @@ python3 main.py dashboard 127.0.0.1:8080
 ```
 
 Untuk platform enterprise terbaru, gunakan Compose.
+
+
+## Advanced Services
+
+Compose menjalankan service tambahan:
+
+- `worker-network`: Celery queue `network_io,default`.
+- `worker-ml`: Celery queue `ml_gpu`.
+- `celery-beat`: scheduler watchlist.
+- `y-websocket`: multiplayer canvas CRDT server.
+
+Environment penting:
+
+```bash
+NEXUS_ENV=development
+NEXUS_PROXY_POOL=http://proxy1:8080,http://proxy2:8080
+WATCHLIST_SWEEP_SECONDS=1800
+YJS_HOST=127.0.0.1
+YJS_PORT=1234
+```
+
+`NEXUS_ENV=development` mengaktifkan dry-run untuk modul berpotensi memakai API eksternal seperti crypto tracker dan serverless invoker.

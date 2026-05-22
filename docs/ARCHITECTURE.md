@@ -120,3 +120,17 @@ Arsitektur ini public-source first:
 - no credential or private session use,
 - no register/forgot-password probing,
 - active/aggressive mode tetap read-only dan hanya untuk target authorized.
+
+
+## Queue Isolation
+
+Celery worker dipisahkan secara eksplisit:
+
+- `network_io`: HTTP, DNS, proxy-governed requests, crypto explorer, serverless invocation, watchlist sweep.
+- `ml_gpu`: entity resolution, NLP/embedding/scoring workloads.
+
+Pemisahan ini mencegah task ML yang berat menghabiskan memori worker scraping/I/O.
+
+## Multiplayer Runtime
+
+Graph collaboration menggunakan Yjs + `y-websocket` di frontend, Zustand untuk state lokal, dan Redis Pub/Sub backend untuk patch/presence bridging. Service `y-websocket` tersedia di Docker Compose dan expose default `127.0.0.1:1234`.

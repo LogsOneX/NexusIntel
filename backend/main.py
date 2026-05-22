@@ -14,16 +14,19 @@ from typing import Any, Literal
 
 import redis.asyncio as aioredis
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint, create_engine, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
-from tasks import run_domain_task, run_email_google_task, run_full_identity_pipeline_task, run_nexusrecon_task, run_phone_task
+from tasks import run_crypto_wallet_task, run_domain_task, run_email_google_task, run_entity_resolution_task, run_full_identity_pipeline_task, run_nexusrecon_task, run_phone_task, run_serverless_invoker_task
 from backend.modules.case_hygiene import build_case_hygiene_report
 from backend.modules.graph_intel import build_graph_intelligence
+from backend.modules.collaboration_bus import CollaborationBus
+from backend.modules.provenance_store import ProvenanceStore
+from backend.modules.proxy_rotator import ProxyRotator
 
 
 DATABASE_URL = os.getenv(
@@ -124,6 +127,51 @@ class SettingRecord(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class DataProvenance(Base):
+    __tablename__ = "data_provenance"
+
+    id = Column(String(36), primary_key=True)
+    investigation_id = Column(String(36), ForeignKey("investigations.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_id = Column(String(36), nullable=True, index=True)
+    source = Column(String(256), nullable=False)
+    uri = Column(String(2048), nullable=False)
+    sha256 = Column(String(64), nullable=False, index=True)
+    content_type = Column(String(128), nullable=False, default="application/octet-stream")
+    size_bytes = Column(String(32), nullable=False, default="0")
+    meta = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(128), nullable=False, default="anonymous")
+    action = Column(String(128), nullable=False)
+    target_entity = Column(String(256), nullable=True)
+    ip_address = Column(String(128), nullable=True)
+    method = Column(String(16), nullable=False)
+    path = Column(String(2048), nullable=False)
+    status_code = Column(String(16), nullable=False, default="0")
+    meta = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class Watchlist(Base):
+    __tablename__ = "watchlists"
+
+    id = Column(String(36), primary_key=True)
+    investigation_id = Column(String(36), ForeignKey("investigations.id", ondelete="CASCADE"), nullable=False, index=True)
+    target = Column(String(512), nullable=False)
+    target_type = Column(String(64), nullable=False)
+    enabled = Column(String(8), nullable=False, default="true")
+    interval_hours = Column(String(8), nullable=False, default="12")
+    last_signature = Column(String(128), nullable=True)
+    last_delta = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class InvestigationCreate(BaseModel):
     target: str = Field(..., min_length=2, max_length=512)
     target_type: str | None = Field(default=None, max_length=64)
@@ -177,6 +225,51 @@ class OracleBriefingRequest(BaseModel):
 class ApiResponse(BaseModel):
     ok: bool
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProvenanceCreate(BaseModel):
+    investigation_id: str
+    entity_id: str | None = None
+    source: str = Field(..., min_length=1, max_length=256)
+    payload: dict[str, Any] | str
+
+
+class WatchlistCreate(BaseModel):
+    investigation_id: str
+    target: str = Field(..., min_length=1, max_length=512)
+    target_type: str | None = None
+    enabled: bool = True
+    interval_hours: int = Field(default=12, ge=1, le=720)
+
+
+class CollaborationPatch(BaseModel):
+    workspace_id: str
+    patch: dict[str, Any] = Field(default_factory=dict)
+
+
+class PresenceUpdate(BaseModel):
+    workspace_id: str
+    state: dict[str, Any] = Field(default_factory=dict)
+
+
+class EntityResolutionRequest(BaseModel):
+    left: dict[str, Any]
+    right: dict[str, Any]
+
+
+class CryptoLookupRequest(BaseModel):
+    investigation_id: str
+    address: str = Field(..., min_length=16, max_length=128)
+    parent_node_id: str | None = None
+
+
+class ServerlessInvokeRequest(BaseModel):
+    investigation_id: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProxySeedRequest(BaseModel):
+    proxies: list[str] = Field(default_factory=list)
 
 
 def get_db() -> Session:
@@ -411,6 +504,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def audit_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/") and request.url.path not in {"/api/health", "/api/v1/health"}:
+        auth = request.headers.get("authorization", "")
+        user_id = "anonymous"
+        if auth.lower().startswith("bearer "):
+            try:
+                user_id = verify_token(auth.split(" ", 1)[1].strip())
+            except Exception:
+                user_id = "invalid-token"
+        try:
+            with SessionLocal() as db:
+                db.add(
+                    AuditLog(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        action=f"{request.method} {request.url.path}",
+                        target_entity=request.path_params.get("node_id") or request.path_params.get("investigation_id"),
+                        ip_address=request.client.host if request.client else None,
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=str(response.status_code),
+                        meta={"query": str(request.url.query or "")},
+                    )
+                )
+                db.commit()
+        except Exception:
+            pass
+    return response
 
 
 @app.get("/api/health")
@@ -928,6 +1053,126 @@ def task_graph(task_id: str, db: Session = Depends(get_db)) -> ApiResponse:
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return ApiResponse(ok=True, data=graph_payload(db, task.investigation_id))
+
+
+
+
+@app.post("/api/v1/provenance", response_model=ApiResponse)
+def create_provenance(payload: ProvenanceCreate, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, payload.investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    stored = ProvenanceStore().put(investigation_id=payload.investigation_id, source=payload.source, content=payload.payload)
+    record = DataProvenance(
+        id=str(uuid.uuid4()),
+        investigation_id=payload.investigation_id,
+        entity_id=payload.entity_id,
+        source=payload.source,
+        uri=stored["uri"],
+        sha256=stored["sha256"],
+        content_type=stored["content_type"],
+        size_bytes=str(stored["size"]),
+        meta={"storage": stored["storage"]},
+    )
+    db.add(record)
+    db.commit()
+    return ApiResponse(ok=True, data={"provenance": {"id": record.id, **stored}})
+
+
+@app.get("/api/v1/provenance/{provenance_id}/verify", response_model=ApiResponse)
+def verify_provenance(provenance_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    record = db.get(DataProvenance, provenance_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Provenance record not found")
+    return ApiResponse(ok=True, data={"verification": ProvenanceStore().verify(record.uri, record.sha256)})
+
+
+@app.get("/api/v1/audit", response_model=ApiResponse)
+def list_audit(limit: int = 100, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    rows = db.execute(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(max(1, min(500, limit)))).scalars().all()
+    return ApiResponse(ok=True, data={"items": [{"id": row.id, "user_id": row.user_id, "action": row.action, "target_entity": row.target_entity, "ip_address": row.ip_address, "status_code": row.status_code, "created_at": row.created_at.isoformat() + "Z"} for row in rows]})
+
+
+@app.post("/api/v1/watchlists", response_model=ApiResponse)
+def create_watchlist(payload: WatchlistCreate, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, payload.investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    item = Watchlist(id=str(uuid.uuid4()), investigation_id=payload.investigation_id, target=payload.target, target_type=payload.target_type or classify_target(payload.target), enabled=str(payload.enabled).lower(), interval_hours=str(payload.interval_hours))
+    db.add(item)
+    db.commit()
+    return ApiResponse(ok=True, data={"watchlist": {"id": item.id, "investigation_id": item.investigation_id, "target": item.target, "target_type": item.target_type, "enabled": item.enabled == "true", "interval_hours": int(item.interval_hours)}})
+
+
+@app.get("/api/v1/watchlists", response_model=ApiResponse)
+def list_watchlists(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    rows = db.execute(select(Watchlist).order_by(Watchlist.updated_at.desc())).scalars().all()
+    return ApiResponse(ok=True, data={"items": [{"id": row.id, "investigation_id": row.investigation_id, "target": row.target, "target_type": row.target_type, "enabled": row.enabled == "true", "interval_hours": int(row.interval_hours), "last_delta": row.last_delta or {}, "updated_at": row.updated_at.isoformat() + "Z"} for row in rows]})
+
+
+@app.patch("/api/v1/watchlists/{watchlist_id}/toggle", response_model=ApiResponse)
+def toggle_watchlist(watchlist_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    item = db.get(Watchlist, watchlist_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+    item.enabled = "false" if item.enabled == "true" else "true"
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    return ApiResponse(ok=True, data={"id": item.id, "enabled": item.enabled == "true"})
+
+
+@app.post("/api/v1/entity-resolution/score", response_model=ApiResponse)
+def score_entity_resolution(payload: EntityResolutionRequest, _: str = Depends(current_operator)) -> ApiResponse:
+    async_result = run_entity_resolution_task.apply_async(args=[payload.left, payload.right], queue="ml_gpu")
+    return ApiResponse(ok=True, data={"task_id": async_result.id, "queue": "ml_gpu"})
+
+
+@app.post("/api/v1/collaboration/patch", response_model=ApiResponse)
+def publish_collaboration_patch(payload: CollaborationPatch, operator: str = Depends(current_operator)) -> ApiResponse:
+    published = CollaborationBus(REDIS_URL).publish_patch(payload.workspace_id, {**payload.patch, "operator": operator, "time": now_iso()})
+    return ApiResponse(ok=True, data={"published": published, "workspace_id": payload.workspace_id})
+
+
+@app.post("/api/v1/collaboration/presence", response_model=ApiResponse)
+def update_presence(payload: PresenceUpdate, operator: str = Depends(current_operator)) -> ApiResponse:
+    bus = CollaborationBus(REDIS_URL)
+    bus.presence(payload.workspace_id, operator, {**payload.state, "operator": operator, "time": now_iso()})
+    return ApiResponse(ok=True, data={"presence": bus.list_presence(payload.workspace_id)})
+
+
+@app.post("/api/v1/crypto/wallet", response_model=ApiResponse)
+def crypto_wallet_lookup(payload: CryptoLookupRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, payload.investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    record = create_task_record(db, payload.investigation_id, "crypto_wallet", payload.address)
+    celery = run_crypto_wallet_task.apply_async(args=[record.id, payload.investigation_id, payload.address, payload.parent_node_id], queue="network_io")
+    record.celery_id = celery.id
+    db.commit()
+    return ApiResponse(ok=True, data={"task_id": record.id, "queue": "network_io"})
+
+
+@app.post("/api/v1/serverless/invoke", response_model=ApiResponse)
+def serverless_invoke(payload: ServerlessInvokeRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, payload.investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    record = create_task_record(db, payload.investigation_id, "serverless_invoke", json.dumps(payload.payload, default=str)[:2048])
+    celery = run_serverless_invoker_task.apply_async(args=[record.id, payload.investigation_id, payload.payload], queue="network_io")
+    record.celery_id = celery.id
+    db.commit()
+    return ApiResponse(ok=True, data={"task_id": record.id, "queue": "network_io"})
+
+
+@app.get("/api/v1/proxies/status", response_model=ApiResponse)
+def proxy_status(_: str = Depends(current_operator)) -> ApiResponse:
+    rotator = ProxyRotator(REDIS_URL)
+    seeded = rotator.seed_from_env()
+    decision = rotator.next()
+    return ApiResponse(ok=True, data={"configured": seeded, "next_source": decision.source, "has_proxy": bool(decision.proxy_url)})
+
+
+@app.post("/api/v1/proxies/seed", response_model=ApiResponse)
+def proxy_seed(payload: ProxySeedRequest, _: str = Depends(current_operator)) -> ApiResponse:
+    count = ProxyRotator(REDIS_URL).seed(payload.proxies)
+    return ApiResponse(ok=True, data={"configured": count})
 
 
 @app.websocket("/api/v1/ws/logs/{task_id}")

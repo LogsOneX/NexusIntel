@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import GraphCanvas from "./GraphCanvas";
 import OraclePanel from "./OraclePanel";
+import PresenceBar from "./PresenceBar";
 
 type ApiNode = {
   id: string;
@@ -578,6 +579,7 @@ function GraphHub({ token, navigate }: PageProps) {
     <section className="graph-page">
       {error && <div className="nx-alert graph-alert">{error}</div>}
       <div className="graph-operational-grid">
+        <PresenceBar />
         <GraphCanvas
           investigationId={activeInvestigationId}
           nodes={graph.nodes}
