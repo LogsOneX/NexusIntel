@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import socket
 import sys
 import uuid
@@ -376,6 +377,33 @@ def platform_icon(hostname: str) -> str:
     return "globe"
 
 
+PUBLIC_EMAIL_RE = re.compile(r"(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{2,64}@[A-Za-z0-9.-]+\.[A-Za-z]{2,24})(?![A-Za-z0-9._%+-])")
+
+
+def public_email_artifacts_from_metadata(artifacts: list[dict[str, Any]], *, source: str, relationship: str) -> list[dict[str, Any]]:
+    emails: dict[str, dict[str, Any]] = {}
+    for artifact in artifacts:
+        blob = json.dumps(artifact.get("data") or artifact, default=str)[:120_000]
+        for raw in PUBLIC_EMAIL_RE.findall(blob):
+            email = raw.strip(".,;:()[]{}<>\"'").lower()
+            if email.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg')):
+                continue
+            emails[email] = {
+                "type": "email",
+                "label": email,
+                "value": email,
+                "source": source,
+                "confidence": "medium",
+                "relationship": relationship,
+                "data": {
+                    "extraction": "public_dom_metadata",
+                    "from_artifact": artifact.get("label") or artifact.get("value"),
+                    "guardrail": "read_only_public_metadata_only",
+                },
+            }
+    return list(emails.values())[:25]
+
+
 def normalize_nexus_result(raw: Any) -> list[dict[str, Any]]:
     def object_to_dict(value: Any) -> Any:
         if is_dataclass(value):
@@ -509,6 +537,11 @@ def run_nexusrecon_task(
         concurrency = 18 if tier in {"tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums"} else 72
         ghost_identity = asyncio.run(IdentityResolver(concurrency=concurrency, timeout=10).resolve(username, emit=make_task_emitter(task_id, investigation_id), limit=identity_limit, tier=tier))
         ghost_identity_nodes = persist_artifacts(db, investigation_id, parent, ghost_identity["artifacts"], "ghost_identity")
+        if transform == "username_to_email":
+            email_artifacts = public_email_artifacts_from_metadata(ghost_identity["artifacts"], source="username_email_pivot", relationship="HAS_PUBLIC_CONTACT_EMAIL")
+            email_nodes = persist_artifacts(db, investigation_id, parent, email_artifacts, "username_email_pivot")
+        else:
+            email_nodes = []
         db.commit()
         emit(
             task_id,
@@ -517,6 +550,8 @@ def run_nexusrecon_task(
             {"checked": ghost_identity["checked"], "found": ghost_identity["found"], "tier": ghost_identity.get("tier"), "transform": transform},
             investigation_id,
         )
+        if transform == "username_to_email":
+            emit(task_id, "tool", f"Username -> Email extracted {len(email_nodes)} public metadata email pivots", {"emails": len(email_nodes)}, investigation_id)
 
         results: list[dict[str, Any]] = []
         if not tier or tier == "tier_4_deep_sweep":
@@ -609,6 +644,7 @@ def run_nexusrecon_task(
             "raw_count": len(results),
             "identity_artifacts": len(identity_nodes),
             "ghost_identity_artifacts": len(ghost_identity_nodes) if "ghost_identity_nodes" in locals() else 0,
+            "public_email_pivots": len(email_nodes) if "email_nodes" in locals() else 0,
         }
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
@@ -1059,6 +1095,11 @@ def run_phone_task(
 
         ghost_phone = asyncio.run(PhoneResolver(timeout=10).resolve(target, emit=make_task_emitter(task_id, investigation_id)))
         ghost_phone_nodes = persist_artifacts(db, investigation_id, parent, ghost_phone["artifacts"], "ghost_phone")
+        if transform == "phone_to_email":
+            phone_email_artifacts = public_email_artifacts_from_metadata(ghost_phone["artifacts"], source="phone_email_pivot", relationship="HAS_PUBLIC_CONTACT_EMAIL")
+            phone_email_nodes = persist_artifacts(db, investigation_id, parent, phone_email_artifacts, "phone_email_pivot")
+        else:
+            phone_email_nodes = []
         db.commit()
         emit(
             task_id,
@@ -1067,6 +1108,8 @@ def run_phone_task(
             {"valid_e164": ghost_phone.get("valid_e164"), "plan": ghost_phone.get("plan", {})},
             investigation_id,
         )
+        if transform == "phone_to_email":
+            emit(task_id, "tool", f"Phone -> Email extracted {len(phone_email_nodes)} public metadata email pivots", {"emails": len(phone_email_nodes)}, investigation_id)
 
         validator_nodes = persist_artifacts(db, investigation_id, parent, analysis["artifacts"], "phone_recon")
         result = {
@@ -1076,6 +1119,7 @@ def run_phone_task(
             "line_type": analysis["line_type"],
             "validator_artifacts": len(validator_nodes),
             "ghost_phone_artifacts": len(ghost_phone_nodes) if "ghost_phone_nodes" in locals() else 0,
+            "public_email_pivots": len(phone_email_nodes) if "phone_email_nodes" in locals() else 0,
             "guardrails": analysis["guardrails"],
         }
         mark_task(db, task_id, "completed", result=result)

@@ -873,13 +873,13 @@ async def run_transform(payload: TransformRequest, db: Session = Depends(get_db)
 
     if transform in {"full_identity_pipeline", "identity_macro", "email_macro", "autonomous_identity_pipeline"}:
         celery = run_full_identity_pipeline_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
-    elif transform in {"legacy_nexusrecon", "nexusrecon", "maigret_username", "sherlock_username", "username_presence", "tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums", "tier_4_deep_sweep"}:
+    elif transform in {"legacy_nexusrecon", "nexusrecon", "maigret_username", "sherlock_username", "username_presence", "username_to_email", "username_to_accounts", "tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums", "tier_4_deep_sweep"}:
         celery = run_nexusrecon_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
-    elif transform in {"email_footprint", "holehe_email", "google_osint", "workspace_recon"}:
+    elif transform in {"email_footprint", "holehe_email", "google_osint", "workspace_recon", "email_to_account", "email_to_domain"}:
         celery = run_email_google_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
     elif transform in {"domain_recon", "dns_recon", "website_recon", "network_recon", "ip_recon", "reverse_dns"}:
         celery = run_domain_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
-    elif transform in {"phone_recon", "e164_phone", "carrier_lookup", "numbering_plan"}:
+    elif transform in {"phone_recon", "e164_phone", "carrier_lookup", "numbering_plan", "phone_to_email", "phone_to_account"}:
         celery = run_phone_task.delay(record.id, payload.investigation_id, target, payload.mode, payload.node_id, transform)
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported transform: {payload.transform}")

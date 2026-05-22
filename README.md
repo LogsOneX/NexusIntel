@@ -219,23 +219,25 @@ Folder `data/` di-ignore dari git.
 UI terbaru berjalan sebagai multi-page Intelligence Command Center dengan protected local login, persistent sidebar, dashboard hub, workspace/case management, network graph, AI Oracle, settings, dan account page. Core graph memakai `GraphCanvas` berbasis Cytoscape dengan edge-to-edge tactical canvas, unified master toolbar, integrated launch form, drag-and-drop entity palette, right-click Logic Flow, Playbooks, Smart Selector, collapsible data drawer, collapsible terminal HUD, Timeline Mode, Export Intelligence report, explicit investigation lifecycle dock untuk select/new/clear/delete case tanpa auto-load case lama, Time-Machine temporal playback, flat correlation heat indicators, dan passive threat auto-tagging.
 
 1. Buka Network Graph; canvas mulai detached kecuali URL berisi `?case=<id>`.
-2. Pilih investigation dari lifecycle dock, buat blank investigation, atau submit target username/email/domain/IP/phone.
-3. API mengklasifikasi target dan membuat investigation + root entity.
-4. Worker Celery menjalankan pipeline OSINT public-source sesuai tipe target.
-5. `backend/recon_validators.py` memvalidasi, memecah, dan menormalisasi artifact menjadi schema graph.
-6. Worker menulis node/edge ke PostgreSQL dan menyiarkan log real-time ke Redis.
-7. UI menerima WebSocket telemetry di terminal HUD.
-8. Case Hygiene module menghitung health score, weak nodes, isolated nodes, coverage gaps, dan rekomendasi transform.
-9. Graph refresh otomatis dan investigator bisa klik/right-click/drag-drop entity untuk transform lanjutan.
+2. Pilih investigation dari lifecycle dock, buat blank investigation, atau ketik target username/email/domain/IP/phone di master toolbar.
+3. Klik `Add Entity` untuk menambahkan target ke canvas/case tanpa lookup dan tanpa menjalankan worker.
+4. Klik `Lookup` hanya jika operator memang ingin menjalankan pipeline OSINT public-source untuk target tersebut.
+5. API mengklasifikasi target dan membuat investigation + root entity jika belum ada case aktif.
+6. Worker Celery menjalankan pipeline OSINT public-source sesuai tipe target.
+7. `backend/recon_validators.py` memvalidasi, memecah, dan menormalisasi artifact menjadi schema graph.
+8. Worker menulis node/edge ke PostgreSQL dan menyiarkan log real-time ke Redis.
+9. UI menerima WebSocket telemetry di terminal HUD dan polling task graph sampai selesai, jadi node muncul langsung tanpa pindah halaman.
+10. Case Hygiene module menghitung health score, weak nodes, isolated nodes, coverage gaps, dan rekomendasi transform.
+11. Investigator bisa klik/right-click/drag-drop entity untuk transform lanjutan secara eksplisit.
 
 Transform utama:
 
-- Username/email clustered sweep: 4 tier eksekusi `tier_1_major_socials`, `tier_2_tech_dev`, `tier_3_gaming_forums`, dan `tier_4_deep_sweep` agar worker tidak langsung menembak 100+ platform.
-- Email/workspace recon: konsep Holehe/GHunt yang dibatasi ke DNS, provider hints, Gravatar hash, dan public workspace indicators.
+- Username/account pivots: `username_to_email`, `username_to_accounts`, plus 4 tier eksekusi `tier_1_major_socials`, `tier_2_tech_dev`, `tier_3_gaming_forums`, dan `tier_4_deep_sweep` agar worker tidak langsung menembak 100+ platform.
+- Email/account/workspace recon: `email_to_account`, `email_to_domain`, konsep Holehe/GHunt yang dibatasi ke DNS, provider hints, Gravatar hash, dan public workspace indicators.
 - Domain/DNS recon: A/AAAA/CNAME/MX/NS/TXT/CAA, RDAP, mail posture, service hints, dan crt.sh subdomain read-only.
 - IP recon: reverse DNS, RDAP allocation, dan GeoIP/ASN hint dari sumber gratis.
-- Phone recon: E.164 validation, country calling code, dan offline public numbering-plan hint.
-- Manual entity builder + drag-and-drop entity pipeline: tambah entity dan link langsung ke selected node.
+- Phone recon: `phone_to_email`, `phone_to_account`, E.164 validation, country calling code, public deep-link metadata, dan offline public numbering-plan hint.
+- Manual entity builder + drag-and-drop entity pipeline: tambah entity dan link langsung ke selected node tanpa auto-lookup; lookup hanya terjadi lewat tombol `Lookup` atau context transform.
 - Case Hygiene + Graph Intelligence: health score, risk posture, source reliability, communities, lead queue, weak/isolated entity detection, dan next-action recommendation untuk menjaga kualitas investigation.
 - Time-Machine slider: replay graph berdasarkan `created_at` node/edge tanpa remount canvas.
 - Passive auto-tagging: IP private/bogon diberi `[INTERNAL]`, domain dengan phishing keywords diberi `[SUSPICIOUS]`, dan node ber-degree tinggi diberi border amber/red flat.

@@ -167,10 +167,14 @@ Supported transform families:
 - `sherlock_username`
 - `legacy_nexusrecon`
 - `username_presence`
+- `username_to_accounts`
+- `username_to_email`
 - `email_footprint`
 - `holehe_email`
 - `google_osint`
 - `workspace_recon`
+- `email_to_domain`
+- `email_to_account`
 - `domain_recon`
 - `dns_recon`
 - `website_recon`
@@ -181,6 +185,8 @@ Supported transform families:
 - `e164_phone`
 - `carrier_lookup`
 - `numbering_plan`
+- `phone_to_account`
+- `phone_to_email`
 - `full_identity_pipeline`
 - `identity_macro`
 - `email_macro`
@@ -193,7 +199,7 @@ Transform routing:
 - domain/IP/network transforms route to `run_domain_task`.
 - phone transforms route to `run_phone_task`.
 
-All transform workers call `backend/recon_validators.py` before returning graph updates. Username/email context menus expose four clustered tiers: Major Socials, Tech & Dev, Gaming & Forums, and Deep Sweep. Relationships now include numeric `confidence_level` (0-100) for UI edge thickness and filtering.
+All transform workers call `backend/recon_validators.py` before returning graph updates. Context menus expose explicit operator-driven pivots: username to email/accounts, email to accounts/domain, phone to email/accounts, plus clustered Major Socials, Tech & Dev, Gaming & Forums, and Deep Sweep tiers. Relationships now include numeric `confidence_level` (0-100) for UI edge thickness and filtering.
 
 Celery workers also invoke `backend/modules/` Ghost Engine resolvers. These stream progress through `WS /api/v1/ws/logs/{task_id}` immediately as public signals are found, while final artifacts are persisted to the graph database.
 

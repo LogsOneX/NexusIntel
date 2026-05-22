@@ -163,6 +163,15 @@ function flattenData(input: unknown, prefix = ""): Array<[string, string]> {
   });
 }
 
+function classifyEntityValue(value: string): string {
+  const target = value.trim();
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(target)) return "email";
+  if (/^\+[1-9]\d{7,14}$/.test(target.replace(/[\s-]/g, ""))) return "phone";
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(target) || target.includes(":")) return "ip";
+  if (/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(target.replace(/^https?:\/\//, "").split("/")[0])) return "domain";
+  return target.includes(" ") ? "name" : "username";
+}
+
 function LoginPage({ onLogin }: { onLogin: (session: SessionState) => void }) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
@@ -387,6 +396,37 @@ function GraphHub({ token, navigate }: PageProps) {
 
   useEffect(() => {
     if (!currentTaskId) return undefined;
+    let stopped = false;
+    let timer: number | undefined;
+    const refresh = async () => {
+      try {
+        const taskPayload = await apiJson(`/api/v1/tasks/${currentTaskId}`, undefined, token);
+        const investigationId = taskPayload.data.investigation_id || activeInvestigationId;
+        if (investigationId) {
+          const graphPayload = await apiJson(`/api/v1/tasks/${currentTaskId}/graph`, undefined, token);
+          if (!stopped) setGraph(graphPayload.data || { nodes: [], edges: [] });
+        }
+        if (["completed", "failed"].includes(taskPayload.data.status)) {
+          if (!stopped && investigationId) void loadCaseHealth(investigationId);
+          return;
+        }
+        if (!stopped) timer = window.setTimeout(refresh, 1400);
+      } catch (caught) {
+        if (!stopped) {
+          setError(caught instanceof Error ? caught.message : "Failed to refresh running graph");
+          timer = window.setTimeout(refresh, 3000);
+        }
+      }
+    };
+    void refresh();
+    return () => {
+      stopped = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [activeInvestigationId, currentTaskId, loadCaseHealth, token]);
+
+  useEffect(() => {
+    if (!currentTaskId) return undefined;
     const socket = new WebSocket(wsUrl(currentTaskId));
     socket.onmessage = (event) => {
       try { setTerminalLines((previous) => [...previous.slice(-260), JSON.parse(event.data) as TerminalLine]); }
@@ -430,6 +470,62 @@ function GraphHub({ token, navigate }: PageProps) {
       setTerminalLines([{ level: "system", message: `Deleted investigation ${caseTitle(active)}`, time: new Date().toISOString() }]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to delete investigation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addSeedEntity = async (value: string, entityMode: "passive" | "standard" | "aggressive") => {
+    const clean = value.trim();
+    if (!clean) return;
+    const kind = classifyEntityValue(clean);
+    setLoading(true);
+    setError(null);
+    try {
+      if (!activeInvestigationId) {
+        const payload = await apiJson(
+          "/api/v1/investigations",
+          { method: "POST", body: JSON.stringify({ target: clean, mode: entityMode, target_type: kind }) },
+          token,
+        );
+        const id = payload.data.investigation_id || payload.data.investigation;
+        setActiveInvestigationId(id);
+        setGraph(payload.data.graph || { nodes: [], edges: [] });
+        setSelectedNode(payload.data.root_node || null);
+        setOracleNode(null);
+        setCurrentTaskId(null);
+        setTaskLabel(`manual entity / ${clean}`);
+        setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Added ${kind} entity without lookup: ${clean}`, time: new Date().toISOString() }]);
+        setDataPanelOpen(true);
+        navigate(`/graph?case=${id}`);
+        await loadInvestigations();
+        await loadCaseHealth(id);
+        return;
+      }
+
+      const payload = await apiJson(
+        "/api/v1/entities",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            investigation_id: activeInvestigationId,
+            type: kind,
+            label: clean,
+            value: clean,
+            source_id: selectedNode?.id || null,
+            relationship_type: selectedNode ? "manual_pivot" : "manual_seed",
+            data: { created_from: "toolbar_add_entity", mode: entityMode },
+          }),
+        },
+        token,
+      );
+      setGraph(payload.data.graph || { nodes: [], edges: [] });
+      setSelectedNode(payload.data.node || null);
+      setTaskLabel(`manual entity / ${clean}`);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Added ${kind} entity without lookup: ${clean}`, time: new Date().toISOString() }]);
+      await loadCaseHealth(activeInvestigationId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to add entity");
     } finally {
       setLoading(false);
     }
@@ -498,6 +594,7 @@ function GraphHub({ token, navigate }: PageProps) {
           reconMode={mode}
           setReconMode={setMode}
           onLaunch={startInvestigation}
+          onAddSeed={addSeedEntity}
           isLaunching={loading}
           terminalOpen={terminalOpen}
           setTerminalOpen={setTerminalOpen}

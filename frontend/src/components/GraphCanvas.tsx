@@ -84,6 +84,7 @@ type GraphCanvasProps = {
   reconMode?: "passive" | "standard" | "aggressive";
   setReconMode?: Dispatch<SetStateAction<"passive" | "standard" | "aggressive">>;
   onLaunch?: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+  onAddSeed?: (value: string, mode: "passive" | "standard" | "aggressive") => void | Promise<void>;
   isLaunching?: boolean;
   terminalOpen?: boolean;
   setTerminalOpen?: Dispatch<SetStateAction<boolean>>;
@@ -228,12 +229,21 @@ function cloneState(nodes: GraphNode[], edges: GraphEdge[]) {
 }
 
 function transformsFor(node: GraphNode): TransformAction[] {
-  if (["username", "name", "profile", "profile_candidate", "email"].includes(node.nodeType)) {
+  if (["username", "name", "profile", "profile_candidate"].includes(node.nodeType)) {
     return [
+      { id: "username_to_email", label: "Username -> Email", description: "Generate mailbox candidates and public email pivots from this handle" },
+      { id: "username_to_accounts", label: "Username -> Accounts", description: "Resolve confirmed public account/profile surfaces" },
       { id: "tier_1_major_socials", label: "Major Socials", description: "Facebook, Instagram, LinkedIn, X, Threads, TikTok" },
       { id: "tier_2_tech_dev", label: "Tech & Dev", description: "GitHub, GitLab, StackOverflow, HackTheBox" },
       { id: "tier_3_gaming_forums", label: "Gaming & Forums", description: "Steam, Discord, Reddit, Twitch" },
       { id: "tier_4_deep_sweep", label: "Deep Sweep", description: "Full 100+ site Maigret/Sherlock execution" },
+    ];
+  }
+  if (node.nodeType === "email") {
+    return [
+      { id: "email_to_account", label: "Email -> Accounts", description: "Public signup response signatures, workspace posture and local-part profile pivots" },
+      { id: "email_to_domain", label: "Email -> Domain", description: "Extract mail domain, MX, DMARC, SPF, BIMI and DNS records" },
+      { id: "full_identity_pipeline", label: "Email -> Full Pivot", description: "Mailbox to username, account surfaces, domain, DNS and workspace nodes" },
     ];
   }
   if (node.nodeType === "domain") {
@@ -251,6 +261,8 @@ function transformsFor(node: GraphNode): TransformAction[] {
   }
   if (node.nodeType === "phone") {
     return [
+      { id: "phone_to_email", label: "Phone -> Email", description: "Create conservative public contact/email pivot candidates from numbering metadata" },
+      { id: "phone_to_account", label: "Phone -> Accounts", description: "Resolve public deep-link and account metadata candidates" },
       { id: "phone_recon", label: "Numbering Plan", description: "Validate E.164 and map public numbering-plan hints" },
       { id: "carrier_lookup", label: "Carrier Hint", description: "Create public line-type and region signals" },
     ];
@@ -440,6 +452,7 @@ export default function GraphCanvas({
   reconMode,
   setReconMode,
   onLaunch,
+  onAddSeed,
   isLaunching,
   terminalOpen,
   setTerminalOpen,
@@ -1069,9 +1082,24 @@ export default function GraphCanvas({
             <option value="standard">Standard</option>
             <option value="aggressive">Aggressive</option>
           </select>
+          <button
+            className="graph-add-button"
+            type="button"
+            disabled={Boolean(isLaunching) || !effectiveSearchTarget.trim()}
+            onClick={() => {
+              if (!onAddSeed) {
+                onError("Add Entity is only available inside the Command Center graph route.");
+                return;
+              }
+              void onAddSeed(effectiveSearchTarget.trim(), effectiveReconMode);
+            }}
+          >
+            <Plus size={14} />
+            <span>Add Entity</span>
+          </button>
           <button className="graph-launch-button" type="submit" disabled={Boolean(isLaunching)}>
             <Radio size={14} />
-            <span>{isLaunching ? "Running" : "Launch"}</span>
+            <span>{isLaunching ? "Running" : "Lookup"}</span>
           </button>
         </form>
 

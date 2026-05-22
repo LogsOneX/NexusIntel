@@ -3197,7 +3197,7 @@ select:focus {
 
 .graph-launcher {
   display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) 118px auto;
+  grid-template-columns: auto minmax(120px, 1fr) 118px auto auto;
   align-items: center;
   gap: 6px;
   min-height: 36px;
@@ -3225,6 +3225,7 @@ select:focus {
   color: #888888 !important;
 }
 
+.graph-add-button,
 .graph-launch-button {
   display: inline-flex;
   align-items: center;
@@ -3240,6 +3241,13 @@ select:focus {
   text-transform: uppercase;
 }
 
+.graph-add-button {
+  border-color: #333333 !important;
+  background: #111111 !important;
+  color: #ffffff !important;
+}
+
+.graph-add-button:disabled,
 .graph-launch-button:disabled {
   opacity: 0.55;
   cursor: progress;

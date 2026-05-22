@@ -40,26 +40,29 @@ Network Graph sekarang memakai layout Maltego-purity: canvas memenuhi seluruh ar
 
 ## Graph Workflow
 
-1. Pilih case dari lifecycle dock, klik New untuk blank investigation, atau submit target dari integrated launcher di master toolbar.
-2. Worker membuat node root dan entity hasil recon jika launch scan dipakai.
-3. Klik node untuk inspect data di collapsible data panel.
-4. Right-click node untuk menjalankan transform atau Ask Oracle.
-5. Drag username/email/domain/IP/phone dari entity palette untuk menambah pivot manual.
-6. Terminal HUD tetap menerima telemetry meskipun panel disembunyikan.
-7. Graph refresh otomatis saat task berjalan tanpa mereset pan/zoom.
-8. Delete investigation tersedia di Graph lifecycle dock dan Workspace case folders; delete menghapus case beserta graph data lewat API.
-9. Health strip menampilkan Case Hygiene score, risk score, source reliability, cluster count, dan rekomendasi next action.
-10. Time-Machine slider di bawah canvas memfilter node/edge berdasarkan `created_at` untuk replay investigation.
-11. Correlation heatmap flat memberi border amber/red pada node dengan banyak koneksi; passive auto-tagging memberi `[INTERNAL]` pada IP private/bogon dan `[SUSPICIOUS]` pada domain ber-keyword phishing.
+1. Pilih case dari lifecycle dock, klik New untuk blank investigation, atau ketik target dari integrated launcher di master toolbar.
+2. Klik `Add Entity` untuk membuat entity manual di canvas tanpa lookup/worker.
+3. Klik `Lookup` untuk menjalankan scan public-source eksplisit pada target toolbar.
+4. Worker membuat node root dan entity hasil recon jika lookup scan dipakai.
+5. Klik node untuk inspect data di collapsible data panel.
+6. Right-click node untuk menjalankan transform atau Ask Oracle.
+7. Drag username/email/domain/IP/phone dari entity palette untuk menambah pivot manual.
+8. Terminal HUD tetap menerima telemetry meskipun panel disembunyikan.
+9. Graph refresh otomatis saat task berjalan tanpa mereset pan/zoom dan tanpa perlu pindah ke Workspace.
+10. Delete investigation tersedia di Graph lifecycle dock dan Workspace case folders; delete menghapus case beserta graph data lewat API.
+11. Health strip menampilkan Case Hygiene score, risk score, source reliability, cluster count, dan rekomendasi next action.
+12. Time-Machine slider di bawah canvas memfilter node/edge berdasarkan `created_at` untuk replay investigation.
+13. Correlation heatmap flat memberi border amber/red pada node dengan banyak koneksi; passive auto-tagging memberi `[INTERNAL]` pada IP private/bogon dan `[SUSPICIOUS]` pada domain ber-keyword phishing.
 
 ## Context Transforms
 
 Transform yang tersedia berubah mengikuti tipe node:
 
-- `username`/`email`: empat cluster wajib `tier_1_major_socials`, `tier_2_tech_dev`, `tier_3_gaming_forums`, `tier_4_deep_sweep`.
+- `username`: `username_to_email`, `username_to_accounts`, serta empat cluster `tier_1_major_socials`, `tier_2_tech_dev`, `tier_3_gaming_forums`, `tier_4_deep_sweep`.
+- `email`: `email_to_account`, `email_to_domain`, dan `full_identity_pipeline`.
 - `domain`: DNS/domain recon, RDAP/crt.sh, workspace recon, website surface.
 - `ip`: IP recon, reverse DNS, RDAP allocation, GeoIP/ASN hint.
-- `phone`: E.164 validation dan public numbering-plan hint.
+- `phone`: `phone_to_email`, `phone_to_account`, E.164 validation, deep-link metadata, dan public numbering-plan hint.
 - `profile/platform`: host/domain pivot dan identity sweep ulang.
 
 Dashboard tidak menampilkan include/exclude atau module picker. UI dibuat agar investigator memilih entity dan transform, bukan memilih modul internal.
