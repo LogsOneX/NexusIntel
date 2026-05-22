@@ -3979,6 +3979,7 @@ select:focus {
 
 .graph-context-menu {
   position: fixed !important;
+  inset: auto auto auto auto !important;
   width: 342px !important;
   max-height: min(430px, calc(100vh - 20px)) !important;
   overflow: auto !important;
@@ -3989,7 +3990,8 @@ select:focus {
   border-radius: 0 !important;
   box-shadow: none !important;
   padding: 0 !important;
-  will-change: transform;
+  transform: none !important;
+  will-change: left, top;
 }
 
 .graph-context-menu button:hover,

@@ -1,4 +1,5 @@
 import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import cytoscape from "cytoscape";
 import { Clock3, Crosshair, Download, GitBranch, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2 } from "lucide-react";
 import { EntityPaletteItem, platformMark } from "./CustomNode";
@@ -944,12 +945,28 @@ export default function GraphCanvas({
     cy.on("cxttap", "node", (event) => {
       const strict = graphNodesRef.current.find((item) => item.id === event.target.id());
       if (!strict || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
+
       const original = event.originalEvent as MouseEvent | undefined;
-      const rendered = event.renderedPosition || (original ? { x: original.clientX - rect.left, y: original.clientY - rect.top } : { x: rect.width / 2, y: rect.height / 2 });
+      original?.preventDefault?.();
+      original?.stopPropagation?.();
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const renderedPosition = event.renderedPosition;
+      const hasRenderedPosition =
+        renderedPosition &&
+        Number.isFinite(renderedPosition.x) &&
+        Number.isFinite(renderedPosition.y);
+
+      const viewportX = hasRenderedPosition
+        ? rect.left + renderedPosition.x
+        : original?.clientX ?? rect.left + rect.width / 2;
+      const viewportY = hasRenderedPosition
+        ? rect.top + renderedPosition.y
+        : original?.clientY ?? rect.top + rect.height / 2;
+
       selectStrictNode(strict);
       setContextTab("transforms");
-      setContextMenu({ x: rect.left + rendered.x, y: rect.top + rendered.y, node: strict });
+      setContextMenu({ x: viewportX, y: viewportY, node: strict });
     });
     cy.on("dragfree", "node", (event) => {
       const id = event.target.id();
@@ -1124,15 +1141,18 @@ export default function GraphCanvas({
   }, [redoGraph, undoGraph]);
 
   const contextPosition = useMemo(() => {
-    if (!contextMenu) return { x: 0, y: 0 };
-    const width = 342;
-    const height = 430;
-    const margin = 10;
-    const x = contextMenu.x + width + margin > window.innerWidth ? contextMenu.x - width : contextMenu.x;
-    const y = contextMenu.y + height + margin > window.innerHeight ? contextMenu.y - height : contextMenu.y;
+    if (!contextMenu) return { left: 0, top: 0 };
+    const menuWidth = 342;
+    const menuHeight = 430;
+    const viewportMargin = 10;
+    const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
+    const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
+    const preferredLeft = contextMenu.x + menuWidth + viewportMargin > viewportWidth ? contextMenu.x - menuWidth : contextMenu.x;
+    const preferredTop = contextMenu.y + menuHeight + viewportMargin > viewportHeight ? contextMenu.y - menuHeight : contextMenu.y;
+
     return {
-      x: Math.max(margin, Math.min(x, window.innerWidth - width - margin)),
-      y: Math.max(margin, Math.min(y, window.innerHeight - height - margin)),
+      left: Math.max(viewportMargin, Math.min(preferredLeft, viewportWidth - menuWidth - viewportMargin)),
+      top: Math.max(viewportMargin, Math.min(preferredTop, viewportHeight - viewportMargin - Math.min(menuHeight, viewportHeight - viewportMargin * 2))),
     };
   }, [contextMenu]);
 
@@ -1282,11 +1302,12 @@ export default function GraphCanvas({
         </div>
       )}
 
-      {contextMenu && (
+      {contextMenu && typeof document !== "undefined" && createPortal(
         <div
           className="graph-context-menu"
-          style={{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }}
+          style={{ left: contextPosition.left, top: contextPosition.top }}
           onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
         >
           <div className="context-node-card">
             <div className="context-node-mark">{contextMenu.node.nodeIcon || "NX"}</div>
@@ -1335,7 +1356,8 @@ export default function GraphCanvas({
               </span>
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );
