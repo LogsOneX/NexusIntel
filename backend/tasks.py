@@ -461,10 +461,15 @@ def run_nexusrecon_task(
         mark_investigation(db, investigation_id, "running")
         db.commit()
         tier = transform if transform in {"tier_1_major_socials", "tier_2_tech_dev", "tier_3_gaming_forums", "tier_4_deep_sweep"} else None
-        username_source = target.split("@", 1)[0] if "@" in target else target
+        raw_target = str(target or "").strip()
+        username_source = raw_target
+        if "@" in raw_target and not raw_target.startswith("@"):
+            local_part, domain_part = raw_target.split("@", 1)
+            if local_part and "." in domain_part:
+                username_source = local_part
         username = normalize_username(username_source)
         if not username:
-            raise ValueError("Username target is empty after normalization")
+            raise ValueError(f"Username target is empty after normalization: {raw_target!r}")
         emit(
             task_id,
             "info",
