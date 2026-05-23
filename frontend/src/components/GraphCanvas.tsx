@@ -1,4 +1,4 @@
-import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import cytoscape from "cytoscape";
 import { Clock3, Crosshair, Download, GitBranch, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2 } from "lucide-react";
@@ -1150,14 +1150,19 @@ export default function GraphCanvas({
     const menuWidth = 342;
     const menuHeight = 430;
     const viewportMargin = 10;
+    const nodeGap = 50;
+    const toolbarSafeTop = 76;
     const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
     const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-    const preferredLeft = contextMenu.x + menuWidth + viewportMargin > viewportWidth ? contextMenu.x - menuWidth : contextMenu.x;
-    const preferredTop = contextMenu.y + menuHeight + viewportMargin > viewportHeight ? contextMenu.y - menuHeight : contextMenu.y;
+
+    const rightSideLeft = contextMenu.x + nodeGap;
+    const leftSideLeft = contextMenu.x - menuWidth - nodeGap;
+    const preferredLeft = rightSideLeft + menuWidth + viewportMargin > viewportWidth ? leftSideLeft : rightSideLeft;
+    const preferredTop = contextMenu.y - 72;
 
     return {
       left: Math.max(viewportMargin, Math.min(preferredLeft, viewportWidth - menuWidth - viewportMargin)),
-      top: Math.max(viewportMargin, Math.min(preferredTop, viewportHeight - viewportMargin - Math.min(menuHeight, viewportHeight - viewportMargin * 2))),
+      top: Math.max(toolbarSafeTop, Math.min(preferredTop, viewportHeight - viewportMargin - Math.min(menuHeight, viewportHeight - viewportMargin * 2))),
     };
   }, [contextMenu]);
 
@@ -1310,7 +1315,7 @@ export default function GraphCanvas({
       {contextMenu && typeof document !== "undefined" && createPortal(
         <div
           className="graph-context-menu"
-          style={{ left: contextPosition.left, top: contextPosition.top }}
+          style={{ "--context-x": `${contextPosition.left}px`, "--context-y": `${contextPosition.top}px` } as CSSProperties}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >

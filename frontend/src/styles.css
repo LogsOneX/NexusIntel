@@ -4244,3 +4244,33 @@ select:focus {
     overflow-y: hidden !important;
   }
 }
+
+
+/* Absolute final fix: React-owned transform tray coordinates must beat old left/top !important rules. */
+.graph-context-menu {
+  position: fixed !important;
+  left: var(--context-x, 10px) !important;
+  top: var(--context-y, 76px) !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 99999 !important;
+  width: 342px !important;
+  max-width: calc(100vw - 20px) !important;
+  transform: none !important;
+}
+
+.graph-operational-grid .tactical-graph-shell {
+  padding-left: 0 !important;
+}
+
+.tactical-graph-toolbar {
+  left: 8px !important;
+  right: max(8px, min(390px, 22vw)) !important;
+  width: auto !important;
+  box-sizing: border-box !important;
+}
+
+.entity-spec.closed + .graph-terminal,
+.entity-spec.closed ~ .graph-terminal {
+  right: 0 !important;
+}
