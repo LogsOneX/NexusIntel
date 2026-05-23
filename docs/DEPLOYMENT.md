@@ -279,11 +279,11 @@ Compose menjalankan service tambahan:
 Environment penting:
 
 ```bash
-NEXUS_ENV=development
+NEXUS_ENV=production
 NEXUS_PROXY_POOL=http://proxy1:8080,http://proxy2:8080
 WATCHLIST_SWEEP_SECONDS=1800
 YJS_HOST=127.0.0.1
 YJS_PORT=1234
 ```
 
-`NEXUS_ENV=development` mengaktifkan dry-run untuk modul berpotensi memakai API eksternal seperti crypto tracker dan serverless invoker.
+`NEXUS_ENV=production` adalah mode default. NexusIntel tidak membuat dummy graph artifacts; modul eksternal tanpa sumber terverifikasi selesai sebagai `verified=false` dan graph tetap bersih.

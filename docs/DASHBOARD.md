@@ -137,4 +137,4 @@ GraphCanvas memakai Cytoscape node cards flat: `#111111` background, `1px solid 
 
 ## Censored and Google Entities
 
-Schema graph mengenali `censored_email`, `censored_phone`, `google_profile`, `google_review`, dan `location`. Censored nodes memakai border dashed flat `#888888`; review/location nodes memakai solid flat card dan secondary labels `[REVIEW]` / `[LOCATION]`. Google footprint transform default memakai development dry-run atau explicit public Maps profile URL; tidak ada internal Google account probing.
+Schema graph mengenali `censored_email`, `censored_phone`, `google_profile`, `google_review`, dan `location`. Censored nodes memakai border dashed flat `#888888`; review/location nodes memakai solid flat card dan secondary labels `[REVIEW]` / `[LOCATION]`. Google footprint transform hanya memakai explicit public Maps profile URL; tidak ada dry-run, dummy review/location, atau internal Google account probing.

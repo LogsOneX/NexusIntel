@@ -282,14 +282,14 @@ POST /api/v1/collaboration/presence
 
 Bridges Yjs/Zustand workspace changes to Redis Pub/Sub channels `workspace:{id}`.
 
-### Crypto and Serverless Dry-Run
+### Crypto and Serverless Verified Mode
 
 ```text
 POST /api/v1/crypto/wallet
 POST /api/v1/serverless/invoke
 ```
 
-Both run on `network_io`. If `NEXUS_ENV=development`, external calls return deterministic dummy JSON for safe testing. Graph context menu maps crypto wallet nodes to `check_wallet_balance` and `trace_transactions`.
+Both run on `network_io`. NexusIntel no longer returns deterministic dummy JSON. If no verified public explorer/RPC/serverless endpoint is available, the task completes with `verified=false` and graph state is unchanged. Graph context menu maps crypto wallet nodes to `check_wallet_balance` and `trace_transactions`.
 
 ### Proxy Governance
 
@@ -303,4 +303,4 @@ Manages approved Redis-backed proxy pool for read-only collection. This is gover
 
 ## Google Footprint
 
-`google_footprint_lookup` runs on `network_io`. In `NEXUS_ENV=development`, it returns deterministic synthetic `google_profile`, `google_review`, and `location` graph artifacts. In production it does not probe internal Google endpoints by email; it only parses an explicit public Maps profile URL supplied through `NEXUS_GOOGLE_PUBLIC_PROFILE_URL`.
+`google_footprint_lookup` runs on `network_io`. It does not create synthetic `google_profile`, `google_review`, or `location` artifacts. It does not probe internal Google endpoints by email; it only parses an explicit public Maps profile URL supplied through `NEXUS_GOOGLE_PUBLIC_PROFILE_URL`. Without that verified source, graph state is unchanged.

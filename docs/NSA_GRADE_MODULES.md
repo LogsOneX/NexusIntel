@@ -15,7 +15,7 @@ Fitur:
 - Redis-backed round-robin proxy pool dari `NEXUS_PROXY_POOL` atau `NEXUS_EGRESS_PROXY`.
 - Randomized network jitter 1.2 sampai 4.7 detik.
 - Exponential backoff untuk status transient/rate-limit.
-- Serverless invoker aman dengan dry-run saat `NEXUS_ENV=development`.
+- Serverless invoker aman tanpa simulasi; jika endpoint tidak dikonfigurasi, task selesai tanpa artefak graph.
 
 Queue Celery: `network_io`.
 
@@ -94,7 +94,7 @@ Fitur:
 
 - Bitcoin wallet lookup via free public Blockstream API.
 - Ethereum/address lain tidak dipaksakan jika explorer gratis tidak dikonfigurasi.
-- `NEXUS_ENV=development` mengembalikan dummy JSON agar testing tidak memakai kuota/API eksternal.
+- `NEXUS_ENV=production` adalah default; modul tidak mengembalikan dummy JSON dan tidak membuat node dari sumber yang tidak terverifikasi.
 
 Queue Celery: `network_io`.
 
@@ -131,4 +131,4 @@ Crypto wallets are rendered as flat `crypto_wallet` node cards with wallet SVG i
 
 ## Google Footprint Guardrail
 
-`backend/modules/google_recon.py` intentionally avoids account recovery, People API hinting, Calendar invite probing, and internal endpoint enumeration. Development mode returns dummy review/location data. Production mode requires an explicit public Maps profile URL before parsing public review documents.
+`backend/modules/google_recon.py` intentionally avoids account recovery, People API hinting, Calendar invite probing, and internal endpoint enumeration. No mode returns dummy review/location data. The module requires an explicit public Maps profile URL before parsing public review documents.

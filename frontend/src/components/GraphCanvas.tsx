@@ -278,7 +278,7 @@ function transformsFor(node: GraphNode): TransformAction[] {
   if (node.nodeType === "email") {
     return [
       { id: "check_email_registrations", label: "Check Registrations", description: "Analyze public registration response signatures without stripping the domain" },
-      { id: "google_footprint_lookup", label: "Google Footprint", description: "Development dry-run or explicit public Maps profile review expansion" },
+      { id: "google_footprint_lookup", label: "Google Footprint", description: "Verified public Maps profile URL review expansion only" },
       { id: "email_to_domain", label: "Email -> Domain", description: "Extract mail domain, MX, DMARC, SPF, BIMI and DNS records" },
     ];
   }

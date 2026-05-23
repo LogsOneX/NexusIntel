@@ -29,6 +29,7 @@ from backend.modules.identity_recon import IdentityResolver
 from backend.modules.google_recon import lookup_google_footprint
 from backend.modules.phone_recon import PhoneResolver
 from backend.modules.crypto_recon import lookup_wallet
+from backend.modules.evidence_quality import evidence_grade, verified_public_result
 from backend.modules.entity_resolution import EntityResolutionEngine
 from backend.modules.serverless_invoker import invoke_serverless
 from backend.modules.watchlist_engine import diff_graph, graph_signature
@@ -1439,12 +1440,14 @@ def run_serverless_invoker_task(self, task_id: str, investigation_id: str, paylo
         mark_task(db, task_id, "running")
         mark_investigation(db, investigation_id, "running")
         db.commit()
-        emit(task_id, "info", "Starting authorized serverless collection invocation", {"dry_run": os.getenv("NEXUS_ENV") == "development"}, investigation_id)
+        emit(task_id, "info", "Starting authorized serverless collection invocation", {"synthetic": False}, investigation_id)
         result = asyncio.run(invoke_serverless(payload))
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
         db.commit()
-        emit(task_id, "success", "Serverless invocation completed", result, investigation_id)
+        level = "success" if verified_public_result(result) else "warning"
+        message = "Serverless invocation completed with verified response" if verified_public_result(result) else "Serverless invoker did not run: no verified endpoint configured"
+        emit(task_id, level, message, result, investigation_id)
         return result
     except Exception as exc:
         db.rollback()
@@ -1464,20 +1467,29 @@ def run_crypto_wallet_task(self, task_id: str, investigation_id: str, address: s
         mark_task(db, task_id, "running")
         mark_investigation(db, investigation_id, "running")
         db.commit()
-        emit(task_id, "info", f"Starting crypto wallet tracker for {address}", {"dry_run": os.getenv("NEXUS_ENV") == "development"}, investigation_id)
+        emit(task_id, "info", f"Starting crypto wallet tracker for {address}", {"synthetic": False}, investigation_id)
         result = asyncio.run(lookup_wallet(address))
         parent = db.get(Entity, parent_node_id) if parent_node_id else None
-        wallet = upsert_entity(db, investigation_id, type_="crypto_wallet", label=address, value=address, source="crypto_recon", confidence="high" if not result.get("error") else "low", data=result)
+        if not verified_public_result(result):
+            mark_task(db, task_id, "completed", result=result)
+            mark_investigation(db, investigation_id, "completed")
+            db.commit()
+            emit(task_id, "warning", "Crypto tracker produced no verified public-source evidence; graph unchanged", result, investigation_id)
+            return result
+
+        wallet = upsert_entity(db, investigation_id, type_="crypto_wallet", label=address, value=address, source="crypto_recon", confidence="confirmed", data={**result, "evidence_grade": evidence_grade(result)})
         if parent and parent.id != wallet.id:
-            upsert_relationship(db, investigation_id, source_id=parent.id, target_id=wallet.id, type_="HAS_WALLET", source="crypto_recon", confidence="medium")
+            upsert_relationship(db, investigation_id, source_id=parent.id, target_id=wallet.id, type_="HAS_WALLET", source="crypto_recon", confidence="high")
         for tx in result.get("transactions", [])[:10]:
-            tx_hash = str(tx.get("txid") or tx.get("hash") or tx.get("id") or "unknown")
-            tx_node = upsert_entity(db, investigation_id, type_="crypto_transaction", label=tx_hash[:18], value=tx_hash, source="crypto_recon", confidence="medium", data=tx)
-            upsert_relationship(db, investigation_id, source_id=wallet.id, target_id=tx_node.id, type_="HAS_TRANSACTION", source="crypto_recon", confidence="medium")
+            tx_hash = str(tx.get("txid") or tx.get("hash") or tx.get("id") or "").strip()
+            if not tx_hash:
+                continue
+            tx_node = upsert_entity(db, investigation_id, type_="crypto_transaction", label=tx_hash[:18], value=tx_hash, source="crypto_recon", confidence="high", data={**tx, "source_url": result.get("source_url"), "evidence_grade": evidence_grade(result)})
+            upsert_relationship(db, investigation_id, source_id=wallet.id, target_id=tx_node.id, type_="HAS_TRANSACTION", source="crypto_recon", confidence="high")
         mark_task(db, task_id, "completed", result=result)
         mark_investigation(db, investigation_id, "completed")
         db.commit()
-        emit(task_id, "success", "Crypto wallet tracker completed", {"address": address, "chain": result.get("chain")}, investigation_id)
+        emit(task_id, "success", "Crypto wallet tracker completed with verified public evidence", {"address": address, "chain": result.get("chain"), "evidence_grade": evidence_grade(result)}, investigation_id)
         return result
     except Exception as exc:
         db.rollback()
@@ -1540,13 +1552,19 @@ def run_google_footprint_task(self, task_id: str, investigation_id: str, email: 
         mark_task(db, task_id, "running")
         mark_investigation(db, investigation_id, "running")
         db.commit()
-        emit(task_id, "info", f"Starting safe Google footprint lookup for {email}", {"dry_run": os.getenv("NEXUS_ENV") == "development"}, investigation_id)
+        emit(task_id, "info", f"Starting safe Google footprint lookup for {email}", {"synthetic": False}, investigation_id)
         result = asyncio.run(lookup_google_footprint(email))
         parent = db.get(Entity, parent_node_id) if parent_node_id else None
+        if not verified_public_result(result):
+            mark_task(db, task_id, "completed", result=result)
+            mark_investigation(db, investigation_id, "completed")
+            db.commit()
+            emit(task_id, "warning", "No verified public Google footprint evidence; graph unchanged", result, investigation_id)
+            return result
         if not parent:
             parent = upsert_entity(db, investigation_id, type_="email", label=email, value=email, source="google_footprint", confidence="confirmed", data={"role": "pivot"})
 
-        profile_value = result.get("gaia_id") or f"google_profile:{email}"
+        profile_value = result.get("gaia_id") or result.get("source_url")
         profile = upsert_entity(
             db,
             investigation_id,
@@ -1554,10 +1572,10 @@ def run_google_footprint_task(self, task_id: str, investigation_id: str, email: 
             label=str(result.get("display_name") or email),
             value=str(profile_value),
             source="google_footprint",
-            confidence="medium" if result.get("gaia_id") else "low",
-            data={"gaia_id": result.get("gaia_id"), "avatar_url": result.get("avatar_url"), "guardrail": result.get("guardrail"), "dry_run": result.get("dry_run", False)},
+            confidence="high" if result.get("gaia_id") else "medium",
+            data={"gaia_id": result.get("gaia_id"), "avatar_url": result.get("avatar_url"), "guardrail": result.get("guardrail"), "source_url": result.get("source_url"), "payload_sha256": result.get("payload_sha256"), "evidence_grade": evidence_grade(result)},
         )
-        upsert_relationship(db, investigation_id, source_id=parent.id, target_id=profile.id, type_="HAS_GOOGLE_PROFILE", source="google_footprint", confidence="medium" if result.get("gaia_id") else "low")
+        upsert_relationship(db, investigation_id, source_id=parent.id, target_id=profile.id, type_="HAS_GOOGLE_PROFILE", source="google_footprint", confidence="high" if result.get("gaia_id") else "medium")
 
         review_count = 0
         for index, review in enumerate(result.get("reviews") or []):
@@ -1570,7 +1588,7 @@ def run_google_footprint_task(self, task_id: str, investigation_id: str, email: 
                 value=f"google_review:{profile.id}:{index}:{place}",
                 source="google_footprint",
                 confidence="medium",
-                data={"snippet": review.get("snippet"), "rating": review.get("rating"), "timestamp": review.get("timestamp"), "raw": review},
+                data={"snippet": review.get("snippet"), "rating": review.get("rating"), "timestamp": review.get("timestamp"), "raw": review, "source_url": result.get("source_url"), "evidence_grade": evidence_grade(result)},
             )
             upsert_relationship(db, investigation_id, source_id=profile.id, target_id=review_node.id, type_="POSTED", source="google_footprint", confidence="medium")
             location_node = upsert_entity(
@@ -1581,7 +1599,7 @@ def run_google_footprint_task(self, task_id: str, investigation_id: str, email: 
                 value=f"location:{place}:{review.get('address') or ''}",
                 source="google_footprint",
                 confidence="medium",
-                data={"address": review.get("address"), "coordinates": review.get("coordinates") or {}, "place_name": place},
+                data={"address": review.get("address"), "coordinates": review.get("coordinates") or {}, "place_name": place, "source_url": result.get("source_url"), "evidence_grade": evidence_grade(result)},
             )
             upsert_relationship(db, investigation_id, source_id=review_node.id, target_id=location_node.id, type_="REVIEWED_AT", source="google_footprint", confidence="medium")
             review_count += 1
@@ -1589,7 +1607,7 @@ def run_google_footprint_task(self, task_id: str, investigation_id: str, email: 
         mark_task(db, task_id, "completed", result={"email": email, "reviews": review_count, "guardrail": result.get("guardrail")})
         mark_investigation(db, investigation_id, "completed")
         db.commit()
-        emit(task_id, "success", f"Google footprint lookup completed: {review_count} review/location pivots", {"reviews": review_count, "guardrail": result.get("guardrail")}, investigation_id)
+        emit(task_id, "success", f"Google footprint lookup completed: {review_count} verified public review/location pivots", {"reviews": review_count, "guardrail": result.get("guardrail"), "evidence_grade": evidence_grade(result)}, investigation_id)
         return result
     except Exception as exc:
         db.rollback()

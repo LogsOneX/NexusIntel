@@ -76,7 +76,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
-      NEXUS_ENV: ${NEXUS_ENV:-development}
+      NEXUS_ENV: ${NEXUS_ENV:-production}
       NEXUS_EGRESS_PROXY: ${NEXUS_EGRESS_PROXY:-}
       NEXUS_PROXY_POOL: ${NEXUS_PROXY_POOL:-}
       NEXUS_PLATFORM_CATALOG: ${NEXUS_PLATFORM_CATALOG:-}
@@ -101,7 +101,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
-      NEXUS_ENV: ${NEXUS_ENV:-development}
+      NEXUS_ENV: ${NEXUS_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -121,7 +121,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus}@postgres:5432/${POSTGRES_DB:-nexusintel}
       REDIS_URL: redis://redis:6379/0
-      NEXUS_ENV: ${NEXUS_ENV:-development}
+      NEXUS_ENV: ${NEXUS_ENV:-production}
     depends_on:
       redis:
         condition: service_healthy

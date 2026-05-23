@@ -219,12 +219,12 @@ Folder `data/` di-ignore dari git.
 
 NexusIntel sekarang memiliki foundation 6 modul lanjutan yang tetap read-only dan public-source:
 
-- Egress governance: Redis proxy rotator, jitter 1.2-4.7 detik, exponential backoff, dan serverless invoker dengan dry-run.
+- Egress governance: Redis proxy rotator, jitter 1.2-4.7 detik, exponential backoff, dan serverless invoker tanpa simulasi; jika endpoint tidak dikonfigurasi, tidak ada artefak graph dibuat.
 - Chain of Custody: RAW payload store, SHA-256 provenance, verify endpoint, dan audit middleware.
 - Watchlist Engine: persistent surveillance on/off, Celery Beat, dan `SYSTEM_ALERT` saat graph signature berubah.
 - Deep Entity Resolution: queue `ml_gpu`, scoring identity, permanent/hypothetical edge decision.
 - Multiplayer Canvas: Yjs + y-websocket + Zustand + Redis Pub/Sub patch/presence.
-- Crypto Wallet Tracker: wallet node + transaction edges dengan `NEXUS_ENV=development` dry-run.
+- Crypto Wallet Tracker: wallet node + transaction edges hanya dari explorer/RPC publik yang terverifikasi; tidak ada transaksi dummy.
 
 Detail lengkap ada di `docs/NSA_GRADE_MODULES.md`.
 
@@ -256,9 +256,19 @@ Transform utama:
 - Time-Machine slider: replay graph berdasarkan `created_at` node/edge tanpa remount canvas.
 - Passive auto-tagging: IP private/bogon diberi `[INTERNAL]`, domain dengan phishing keywords diberi `[SUSPICIOUS]`, dan node ber-degree tinggi diberi border amber/red flat.
 
+
+## Evidence Quality Gate
+
+NexusIntel memakai prinsip **no synthetic intelligence by default**:
+
+- Tidak ada node/edge dari dry-run, dummy, synthetic, simulated, atau placeholder payload.
+- Worker yang tidak menemukan sumber publik terverifikasi akan selesai sebagai `verified=false` dan graph tidak berubah.
+- Artefak yang masuk graph membawa metadata `evidence_grade`, `source`, `source_url`, dan/atau `payload_sha256` jika tersedia.
+- Grade `A1` hanya dipakai untuk respons publik terverifikasi dengan sumber yang bisa diaudit; hasil lain harus dianggap `UNVERIFIED`.
+
 ## Safe Pivot Policy
 
-NexusIntel tidak menjalankan password-reset probing, recovery-flow scraping, contact-sync simulation, 2FA triggering, atau endpoint internal Google untuk mengungkap data akun. Pivot email/phone/Google dibatasi ke public-source, dry-run development, atau explicit public profile URL yang diberikan operator. Censored entity types (`censored_email`, `censored_phone`) hanya dipakai untuk menandai hint parsial yang sudah tersedia secara authorized, bukan untuk memicu recovery flow.
+NexusIntel tidak menjalankan password-reset probing, recovery-flow scraping, contact-sync simulation, 2FA triggering, atau endpoint internal Google untuk mengungkap data akun. Pivot email/phone/Google dibatasi ke public-source yang bisa diverifikasi atau explicit public profile URL yang diberikan operator. Tidak ada dry-run/dummy intelligence yang boleh menambah node ke graph. Censored entity types (`censored_email`, `censored_phone`) hanya dipakai untuk menandai hint parsial yang sudah tersedia secara authorized, bukan untuk memicu recovery flow.
 
 ## High-Density Terminal Graph Polish
 
