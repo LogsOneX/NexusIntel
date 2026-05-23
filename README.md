@@ -285,6 +285,20 @@ Network Graph sekarang memakai node card flat dengan SVG data-uri iconography un
 
 NexusIntel tidak melakukan password-reset probing, OTP trigger, account creation, private API usage, contact-sync, SMTP VRFY/RCPT, atau rate-limit evasion.
 
+## Analyst Enrichment Pipeline
+
+Network Graph sekarang punya pipeline enrichment untuk selected entity dan pending entity input. Panel ini menampilkan tipe entity, transform yang tersedia, transform rekomendasi, transform disabled beserta alasan, source coverage, confidence baseline, lead queue, coverage matrix, noise killer, correlation engine, dan export analyst packet. Node drawer wajib menampilkan source URL, timestamp, raw hash/evidence ref, confidence reason, dan legal note ketika tersedia.
+
+Endpoint utama:
+
+```text
+GET  /api/v1/investigations/{id}/analyst-pipeline
+POST /api/v1/investigations/{id}/correlate
+GET  /api/v1/investigations/{id}/exports/analyst-packet?format=html|pdf|json|csv|graph_json
+```
+
+Detail: [Analyst Enrichment Pipeline](docs/analyst-enrichment-pipeline.md).
+
 ## OSINT Adapter SDK dan Evidence Vault
 
 NexusIntel sekarang punya adapter SDK di `backend/osint/` untuk transform public-source yang evidence-first. Registry tersedia di `GET /api/v1/transforms/registry`, execution path baru di `POST /api/v1/transforms/run`, dan setiap artifact yang dipersist membawa `source`, `source_url`, `fetched_at`, `confidence_score`, `confidence_reason`, `evidence_grade`, `raw_evidence_ref`, `legal_basis`, dan `public_source_note`.
@@ -299,6 +313,7 @@ Dokumentasi operator dan developer:
 - [Confidence Scoring](docs/osint-confidence-scoring.md)
 - [Google Maps Public Evidence](docs/google-maps-public-evidence.md)
 - [Impersonation Investigation Mode](docs/impersonation-investigation-mode.md)
+- [Analyst Enrichment Pipeline](docs/analyst-enrichment-pipeline.md)
 - [Operator Playbook](docs/operator-playbook.md)
 
 ## API Utama
@@ -318,6 +333,9 @@ POST /api/v1/transforms/run
 GET  /api/v1/transforms/runs/{run_id}
 GET  /api/v1/evidence/{id}
 GET  /api/v1/investigations/{id}/evidence
+GET  /api/v1/investigations/{id}/analyst-pipeline
+POST /api/v1/investigations/{id}/correlate
+GET  /api/v1/investigations/{id}/exports/analyst-packet
 POST /api/v1/importers/preview
 GET  /api/v1/tasks/{task_id}
 GET  /api/v1/tasks/{task_id}/graph

@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 import redis.asyncio as aioredis
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint, create_engine, select
@@ -31,6 +31,7 @@ from backend.modules.proxy_rotator import ProxyRotator
 from backend.osint.importers.csv_importers import preview_csv, spiderfoot_mapping
 from backend.osint.registry import registry
 from backend.osint.types import EntityInput, RawEvidenceObject, RunContext
+from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, html_packet, ioc_csv, json_packet, minimal_pdf
 
 
 DATABASE_URL = os.getenv(
@@ -666,6 +667,40 @@ def persist_adapter_result(db: Session, investigation_id: str, parent: Entity | 
         "evidence": [serialize_provenance_record(record) for record in evidence_records],
         "warnings": list(result.warnings),
     }
+
+
+def serialize_task_record_compact(task: TaskRecord) -> dict[str, Any]:
+    return {
+        "id": task.id,
+        "investigation_id": task.investigation_id,
+        "task_name": task.task_name,
+        "status": task.status,
+        "target": task.target,
+        "started_at": task.started_at.isoformat() + "Z" if task.started_at else None,
+        "finished_at": task.finished_at.isoformat() + "Z" if task.finished_at else None,
+        "error": task.error,
+        "result": task.result or {},
+    }
+
+
+def analyst_pipeline_payload(db: Session, investigation_id: str, selected_entity_id: str | None = None) -> dict[str, Any]:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    graph = graph_payload(db, investigation_id)
+    evidence_rows = db.execute(select(DataProvenance).where(DataProvenance.investigation_id == investigation_id).order_by(DataProvenance.created_at.desc())).scalars().all()
+    task_rows = db.execute(select(TaskRecord).where(TaskRecord.investigation_id == investigation_id).order_by(TaskRecord.started_at.desc().nullslast(), TaskRecord.id.desc())).scalars().all()
+    transforms = registry.list_transforms(configured_osint_key_names(db))
+    evidence = [serialize_provenance_record(row) for row in evidence_rows]
+    pipeline = build_analyst_pipeline(
+        nodes=graph["nodes"],
+        edges=graph["edges"],
+        evidence=evidence,
+        task_records=[serialize_task_record_compact(row) for row in task_rows],
+        transforms=transforms,
+        selected_entity_id=selected_entity_id,
+    )
+    return {"case": serialize_case(investigation), "graph": graph, "evidence": evidence, "task_records": [serialize_task_record_compact(row) for row in task_rows], "analyst_pipeline": pipeline}
 
 
 def enqueue_nexus(record: TaskRecord, investigation_id: str, target: str, mode: str) -> str:
@@ -1318,6 +1353,12 @@ async def run_registered_transform(payload: TransformRunRequest, db: Session = D
     context = RunContext(investigation_id=payload.investigation_id, run_id=record.id, api_keys=api_keys, options=payload.options, operator=operator)
     try:
         result = await adapter.run(entity_input, context)
+        await publish_log(record.id, {"task_id": record.id, "level": "info", "message": f"Source queried: {adapter.name} ({adapter.id})", "payload": {"source": adapter.id, "result_count": len(result.artifacts)}, "time": now_iso()})
+        await publish_log(record.id, {"task_id": record.id, "level": "info", "message": f"Raw evidence captured: {len(result.raw_evidence)} object(s)", "payload": {"raw_evidence_count": len(result.raw_evidence)}, "time": now_iso()})
+        if result.artifacts:
+            average_confidence = int(sum(item.confidence_score for item in result.artifacts) / len(result.artifacts))
+            noise_filtered = len([item for item in result.artifacts if item.confidence_score < 40])
+            await publish_log(record.id, {"task_id": record.id, "level": "info", "message": f"Confidence baseline updated: avg={average_confidence}% noise_filtered={noise_filtered}", "payload": {"average_confidence": average_confidence, "noise_filtered": noise_filtered}, "time": now_iso()})
         persisted = persist_adapter_result(db, payload.investigation_id, parent, result)
         record.status = "completed"
         record.finished_at = datetime.utcnow()
@@ -1360,6 +1401,73 @@ def list_investigation_evidence(investigation_id: str, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Investigation not found")
     rows = db.execute(select(DataProvenance).where(DataProvenance.investigation_id == investigation_id).order_by(DataProvenance.created_at.desc())).scalars().all()
     return ApiResponse(ok=True, data={"items": [serialize_provenance_record(row) for row in rows]})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/analyst-pipeline", response_model=ApiResponse)
+def analyst_pipeline(investigation_id: str, entity_id: str | None = None, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data=analyst_pipeline_payload(db, investigation_id, entity_id))
+
+
+@app.post("/api/v1/investigations/{investigation_id}/correlate", response_model=ApiResponse)
+def correlate_investigation(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    graph = graph_payload(db, investigation_id)
+    correlations = build_correlations(graph["nodes"], graph["edges"])
+    created = []
+    for item in correlations:
+        if int(item.get("confidence_level") or 0) < 50:
+            continue
+        edge = upsert_relationship(
+            db,
+            investigation_id,
+            source_id=str(item["source"]),
+            target_id=str(item["target"]),
+            type_="possible_same_actor",
+            source="correlation_engine",
+            confidence="probable" if int(item["confidence_level"]) >= 70 else "weak",
+            data={
+                "confidence_level": int(item["confidence_level"]),
+                "confidence_reason": "; ".join(item.get("reasons") or []),
+                "shared_features": item.get("shared_features") or {},
+                "legal_basis": item.get("legal_basis"),
+                "requires_analyst_confirmation": True,
+            },
+        )
+        created.append(serialize_relationship(edge))
+    db.commit()
+    return ApiResponse(ok=True, data={"created": created, "graph": graph_payload(db, investigation_id)})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/exports/analyst-packet")
+def export_analyst_packet(investigation_id: str, format: Literal["html", "pdf", "json", "csv", "graph_json"] = "html", db: Session = Depends(get_db), _: str = Depends(current_operator)) -> Response:
+    payload = analyst_pipeline_payload(db, investigation_id)
+    case = payload["case"]
+    graph = payload["graph"]
+    pipeline = payload["analyst_pipeline"]
+    evidence = payload["evidence"]
+    filename_base = f"nexusintel-{investigation_id}-analyst-packet"
+    if format == "json":
+        return Response(json_packet(case, graph, pipeline, evidence), media_type="application/json", headers={"Content-Disposition": f"attachment; filename={filename_base}.json"})
+    if format == "graph_json":
+        return Response(json.dumps(graph, indent=2, default=str), media_type="application/json", headers={"Content-Disposition": f"attachment; filename={filename_base}-graph.json"})
+    if format == "csv":
+        return Response(ioc_csv(graph), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename_base}-iocs.csv"})
+    if format == "pdf":
+        lines = [
+            f"Case: {case.get('target')}",
+            f"Entities: {len(graph.get('nodes') or [])}",
+            f"Relationships: {len(graph.get('edges') or [])}",
+            f"Evidence objects: {len(evidence)}",
+            f"Generated: {pipeline.get('generated_at')}",
+            "Lead Queue:",
+        ]
+        for group, items in (pipeline.get("lead_queue") or {}).items():
+            lines.append(str(group).upper())
+            for item in items[:8] if isinstance(items, list) else []:
+                lines.append(str(item))
+        return Response(minimal_pdf("NexusIntel Analyst Packet", lines), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename_base}.pdf"})
+    return Response(html_packet(case, graph, pipeline, evidence), media_type="text/html", headers={"Content-Disposition": f"attachment; filename={filename_base}.html"})
 
 
 @app.post("/api/v1/importers/preview", response_model=ApiResponse)

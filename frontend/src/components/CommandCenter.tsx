@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Database,
   FileJson,
+  GitBranch,
   FolderOpen,
   Home,
   KeyRound,
@@ -109,6 +110,44 @@ type CaseHealth = {
   intelligence?: GraphIntelligence;
 };
 
+type CoverageMatrix = {
+  columns: string[];
+  rows: string[];
+  matrix: Record<string, Record<string, number>>;
+};
+
+type AnalystPipeline = {
+  generated_at: string;
+  selected_entity: {
+    entity_id?: string;
+    entity_type: string;
+    confidence_baseline: number;
+    confidence_label?: string;
+    source?: string;
+    source_url?: string;
+    timestamp?: string;
+    raw_evidence_ref?: string;
+    confidence_reason?: string;
+    legal_note?: string;
+    source_coverage_status: string[];
+    available_transforms: TransformDefinition[];
+    recommended_transforms: TransformDefinition[];
+    disabled_transforms: TransformDefinition[];
+    noise?: { is_noise: boolean; noise_score: number; reasons: string[] };
+  };
+  coverage_matrix: CoverageMatrix;
+  noise_killer: { filtered_count: number; items: Array<Record<string, unknown>> };
+  correlations: Array<Record<string, unknown>>;
+  lead_queue: {
+    strongest_pivots: Array<Record<string, unknown>>;
+    unverified_interesting_pivots: Array<Record<string, unknown>>;
+    possible_same_actor_links: Array<Record<string, unknown>>;
+    contradictions: Array<Record<string, unknown>>;
+    high_value_next_actions: Array<Record<string, unknown>>;
+  };
+  evidence_summary: { count: number; sources: Record<string, number>; hashes: string[] };
+};
+
 type TerminalLine = {
   task_id?: string;
   level: string;
@@ -174,6 +213,23 @@ async function apiJson(path: string, options?: RequestInit, token?: string | nul
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) throw new Error(payload.detail || payload.message || `Request failed: ${response.status}`);
   return payload;
+}
+
+async function downloadFile(path: string, token: string | null, fallbackName: string) {
+  const response = await fetch(`${API_BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename=([^;]+)/i);
+  const fileName = match ? match[1].replaceAll('"', '') : fallbackName;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function terminalPrefix(level: string): string {
@@ -344,6 +400,7 @@ function GraphHub({ token, navigate }: PageProps) {
   const [target, setTarget] = useState("");
   const [mode, setMode] = useState<"passive" | "standard" | "aggressive">("standard");
   const [caseHealth, setCaseHealth] = useState<CaseHealth | null>(null);
+  const [analystPipeline, setAnalystPipeline] = useState<AnalystPipeline | null>(null);
   const [transformRegistry, setTransformRegistry] = useState<TransformDefinition[]>([]);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceRecord[]>([]);
   const [evidenceDrawer, setEvidenceDrawer] = useState<EvidenceRecord | null>(null);
@@ -384,6 +441,12 @@ function GraphHub({ token, navigate }: PageProps) {
     setEvidenceItems(payload.data.items || []);
   }, [token]);
 
+  const loadAnalystPipeline = useCallback(async (id: string, entityId?: string | null) => {
+    const suffix = entityId ? `?entity_id=${encodeURIComponent(entityId)}` : "";
+    const payload = await apiJson(`/api/v1/investigations/${id}/analyst-pipeline${suffix}`, undefined, token);
+    setAnalystPipeline(payload.data.analyst_pipeline || null);
+  }, [token]);
+
   const loadGraph = useCallback(async (id: string) => {
     const payload = await apiJson(`/api/v1/investigations/${id}/graph`, undefined, token);
     setActiveInvestigationId(id);
@@ -393,7 +456,8 @@ function GraphHub({ token, navigate }: PageProps) {
     setEvidenceDrawer(null);
     await loadCaseHealth(id);
     await loadEvidence(id);
-  }, [loadCaseHealth, loadEvidence, token]);
+    await loadAnalystPipeline(id, null);
+  }, [loadAnalystPipeline, loadCaseHealth, loadEvidence, token]);
 
   const clearActiveInvestigation = useCallback(() => {
     setActiveInvestigationId(null);
@@ -401,6 +465,7 @@ function GraphHub({ token, navigate }: PageProps) {
     setSelectedNode(null);
     setOracleNode(null);
     setCaseHealth(null);
+    setAnalystPipeline(null);
     setEvidenceItems([]);
     setEvidenceDrawer(null);
     setCurrentTaskId(null);
@@ -445,6 +510,15 @@ function GraphHub({ token, navigate }: PageProps) {
     const timer = window.setTimeout(() => void loadCaseHealth(activeInvestigationId), 350);
     return () => window.clearTimeout(timer);
   }, [activeInvestigationId, graph.edges.length, graph.nodes.length, loadCaseHealth]);
+
+  useEffect(() => {
+    if (!activeInvestigationId) {
+      setAnalystPipeline(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => void loadAnalystPipeline(activeInvestigationId, selectedNode?.id || null).catch(() => undefined), 420);
+    return () => window.clearTimeout(timer);
+  }, [activeInvestigationId, graph.edges.length, graph.nodes.length, loadAnalystPipeline, selectedNode?.id]);
 
   useEffect(() => {
     if (!currentTaskId) return undefined;
@@ -553,6 +627,7 @@ function GraphHub({ token, navigate }: PageProps) {
         await loadInvestigations();
         await loadCaseHealth(id);
         await loadEvidence(id);
+        await loadAnalystPipeline(id, payload.data.root_node?.id || null);
         return;
       }
 
@@ -578,6 +653,7 @@ function GraphHub({ token, navigate }: PageProps) {
       setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Added ${kind} entity without lookup: ${clean}`, time: new Date().toISOString() }]);
       await loadCaseHealth(activeInvestigationId);
       await loadEvidence(activeInvestigationId);
+      await loadAnalystPipeline(activeInvestigationId, payload.data.node?.id || selectedNode?.id || null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to add entity");
     } finally {
@@ -658,6 +734,34 @@ function GraphHub({ token, navigate }: PageProps) {
     }
   }, [activeInvestigationId, loadCaseHealth, loadEvidence, mode, selectedNode, token]);
 
+  const pendingEntityType = useMemo(() => classifyEntityValue(target), [target]);
+
+  const pendingTransforms = useMemo(() => {
+    if (!target.trim()) return [] as TransformDefinition[];
+    return transformRegistry.filter((item) => item.input_types.includes(pendingEntityType) || item.input_types.includes("*"));
+  }, [pendingEntityType, target, transformRegistry]);
+
+  const runCorrelationEngine = useCallback(async () => {
+    if (!activeInvestigationId) return;
+    try {
+      const payload = await apiJson(`/api/v1/investigations/${activeInvestigationId}/correlate`, { method: "POST" }, token);
+      setGraph(payload.data.graph || { nodes: [], edges: [] });
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "success", message: `Correlation engine created ${(payload.data.created || []).length} possible_same_actor edge(s)`, time: new Date().toISOString() }]);
+      await loadAnalystPipeline(activeInvestigationId, selectedNode?.id || null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Correlation engine failed");
+    }
+  }, [activeInvestigationId, loadAnalystPipeline, selectedNode?.id, token]);
+
+  const exportPacket = useCallback(async (format: "html" | "pdf" | "json" | "csv" | "graph_json") => {
+    if (!activeInvestigationId) return;
+    try {
+      await downloadFile(`/api/v1/investigations/${activeInvestigationId}/exports/analyst-packet?format=${format}`, token, `nexusintel-${activeInvestigationId}.${format}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Export failed");
+    }
+  }, [activeInvestigationId, token]);
+
   const rows = useMemo(() => {
     if (!selectedNode) return [];
     return flattenData({
@@ -718,6 +822,41 @@ function GraphHub({ token, navigate }: PageProps) {
             <>
               <h2>{selectedNode.label}</h2>
               <code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code>
+              <div className="entity-drawer-section analyst-enrichment-panel">
+                <strong>Analyst Enrichment</strong>
+                <div className="analyst-kpi-grid">
+                  <span><b>{analystPipeline?.selected_entity?.entity_type || selectedNode.type}</b><small>Type</small></span>
+                  <span><b>{analystPipeline?.selected_entity?.confidence_baseline ?? "--"}%</b><small>Baseline</small></span>
+                  <span><b>{analystPipeline?.evidence_summary?.count ?? evidenceItems.length}</b><small>Evidence</small></span>
+                </div>
+                <p>{analystPipeline?.selected_entity?.confidence_reason || "Run an evidence-backed transform to calculate confidence and source coverage."}</p>
+                <code>{analystPipeline?.selected_entity?.source_url || "source_url pending"}</code>
+                <code>{analystPipeline?.selected_entity?.raw_evidence_ref ? `raw:${analystPipeline.selected_entity.raw_evidence_ref}` : "raw evidence pending"}</code>
+                <small>{analystPipeline?.selected_entity?.legal_note || "Legal note pending evidence-backed collection."}</small>
+                <div className="coverage-status-list">{(analystPipeline?.selected_entity?.source_coverage_status || []).map((item) => <span key={item}>{item}</span>)}</div>
+              </div>
+              <div className="entity-drawer-section lead-queue-panel">
+                <strong>Lead Queue</strong>
+                {(analystPipeline?.lead_queue?.strongest_pivots || []).slice(0, 3).map((item) => <span key={`strong-${String(item.node_id)}`}>Strong: {String(item.label)} / {String(item.reason)}</span>)}
+                {(analystPipeline?.lead_queue?.unverified_interesting_pivots || []).slice(0, 3).map((item) => <span key={`weak-${String(item.node_id)}`}>Verify: {String(item.label)} / {String(item.reason)}</span>)}
+                {(analystPipeline?.lead_queue?.possible_same_actor_links || []).slice(0, 3).map((item, index) => <span key={`same-${index}`}>Possible same actor: {String(item.confidence_level)}% / {String((item.reasons as unknown[])?.[0] || "shared feature")}</span>)}
+                {(analystPipeline?.lead_queue?.contradictions || []).slice(0, 3).map((item, index) => <span className="danger-line" key={`contra-${index}`}>Contradiction: {String(item.label)} / {String(item.reason)}</span>)}
+                <button type="button" onClick={() => void runCorrelationEngine()} disabled={!activeInvestigationId}><GitBranch size={13} /> Build possible_same_actor links</button>
+              </div>
+              <div className="entity-drawer-section coverage-matrix-panel">
+                <strong>OSINT Coverage Matrix</strong>
+                <div className="coverage-matrix-scroll"><table><tbody>{(analystPipeline?.coverage_matrix?.rows || []).map((row) => <tr key={row}><th>{row}</th>{(analystPipeline?.coverage_matrix?.columns || []).map((column) => <td key={`${row}-${column}`}>{analystPipeline?.coverage_matrix?.matrix?.[row]?.[column] || 0}</td>)}</tr>)}</tbody></table></div>
+              </div>
+              <div className="entity-drawer-section export-packet-panel">
+                <strong>Export Analyst Packet</strong>
+                <div className="packet-buttons">
+                  <button type="button" onClick={() => void exportPacket("pdf")}>PDF</button>
+                  <button type="button" onClick={() => void exportPacket("html")}>HTML</button>
+                  <button type="button" onClick={() => void exportPacket("json")}>JSON Evidence</button>
+                  <button type="button" onClick={() => void exportPacket("csv")}>CSV IOCs</button>
+                  <button type="button" onClick={() => void exportPacket("graph_json")}>Graph JSON</button>
+                </div>
+              </div>
               <div className="entity-drawer-section">
                 <strong>Evidence</strong>
                 {selectedEvidenceRefs.length ? selectedEvidenceRefs.map((item) => (
@@ -751,7 +890,21 @@ function GraphHub({ token, navigate }: PageProps) {
             <>
               <h2>{activeCase?.target || "No active entity"}</h2>
               <code>{activeCase ? `${activeCase.target_type} / ${activeCase.status}` : "no investigation loaded"}</code>
-              <p>Select a case from the investigation dock, create a blank investigation, or launch a new target scan from the toolbar.</p>
+              {target.trim() ? (
+                <div className="entity-drawer-section analyst-enrichment-panel">
+                  <strong>Pending Entity Preview</strong>
+                  <div className="analyst-kpi-grid">
+                    <span><b>{pendingEntityType}</b><small>Type</small></span>
+                    <span><b>40%</b><small>Baseline</small></span>
+                    <span><b>{pendingTransforms.filter((item) => item.enabled).length}</b><small>Available</small></span>
+                  </div>
+                  <p>Adding the entity will not run lookup. Choose an evidence-backed transform after it exists on the graph.</p>
+                  <strong>Recommended</strong>
+                  {pendingTransforms.filter((item) => item.enabled).slice(0, 4).map((item) => <span key={item.id}>{item.label}: {item.output_types.join(", ")}</span>)}
+                  <strong>Disabled</strong>
+                  {pendingTransforms.filter((item) => !item.enabled).slice(0, 4).map((item) => <span key={item.id}>{item.label}: {item.disabled_reason}</span>)}
+                </div>
+              ) : <p>Select a case from the investigation dock, create a blank investigation, or launch a new target scan from the toolbar.</p>}
             </>
           )}
         </aside>

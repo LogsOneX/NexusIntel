@@ -7,6 +7,7 @@ from backend.osint.importers.csv_importers import preview_csv, spiderfoot_mappin
 from backend.osint.registry import registry
 from backend.osint.reporting import build_html_report
 from backend.osint.scoring.confidence import assess, evidence_grade
+from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations
 from backend.osint.types import OSINTArtifact, SourceReliability, utc_now
 
 
@@ -56,6 +57,26 @@ class OSINTSDKTests(unittest.TestCase):
         html = build_html_report(title="Unit Report", graph={"nodes": [{"type": "domain", "label": "example.com", "data": {}}], "edges": []}, evidence=[{"source": "unit", "sha256": "abc", "created_at": "now"}])
         self.assertIn("Unit Report", html)
         self.assertIn("abc", html)
+
+    def test_analyst_pipeline_builds_coverage_and_leads(self) -> None:
+        nodes = [
+            {"id": "1", "type": "email", "label": "alpha@example.com", "value": "alpha@example.com", "confidence": "confirmed", "source": "investigator", "data": {"source_url": "mailto:alpha@example.com"}},
+            {"id": "2", "type": "username", "label": "alpha", "value": "alpha", "confidence": "weak", "source": "email.username_candidates", "data": {"confidence_score": 42}},
+        ]
+        edges = [{"id": "e1", "source": "1", "target": "2", "type": "HAS_USERNAME_CANDIDATE", "confidence_level": 42}]
+        pipeline = build_analyst_pipeline(nodes=nodes, edges=edges, evidence=[], task_records=[], transforms=registry.list_transforms(set()), selected_entity_id="1")
+        self.assertEqual(pipeline["selected_entity"]["entity_type"], "email")
+        self.assertIn("Email", pipeline["coverage_matrix"]["columns"])
+        self.assertIn("lead_queue", pipeline)
+
+    def test_correlation_engine_detects_shared_features(self) -> None:
+        nodes = [
+            {"id": "a", "type": "profile", "label": "A", "value": "A", "data": {"avatar_hash": "hash1", "external_link": "https://example.com"}},
+            {"id": "b", "type": "profile", "label": "B", "value": "B", "data": {"avatar_hash": "hash1", "external_link": "https://example.com"}},
+        ]
+        correlations = build_correlations(nodes, [])
+        self.assertTrue(correlations)
+        self.assertEqual(correlations[0]["type"], "possible_same_actor")
 
 
 if __name__ == "__main__":

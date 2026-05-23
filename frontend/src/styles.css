@@ -4346,3 +4346,100 @@ select:focus {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Analyst enrichment pipeline panels */
+.analyst-enrichment-panel,
+.lead-queue-panel,
+.coverage-matrix-panel,
+.export-packet-panel {
+  background: #000000;
+}
+
+.analyst-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.analyst-kpi-grid span {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #333333;
+  background: #111111;
+  padding: 8px;
+}
+
+.analyst-kpi-grid b {
+  color: #ffffff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.coverage-status-list,
+.packet-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.coverage-status-list span,
+.lead-queue-panel span {
+  display: block;
+  border-left: 1px solid #333333;
+  padding-left: 7px;
+  color: #aaaaaa;
+  overflow-wrap: anywhere;
+}
+
+.lead-queue-panel .danger-line {
+  color: #ff8a8a;
+  border-left-color: #ff5555;
+}
+
+.lead-queue-panel button,
+.packet-buttons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #333333;
+  background: #000000;
+  color: #ffffff;
+  padding: 8px 9px;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.lead-queue-panel button:hover,
+.packet-buttons button:hover {
+  border-color: #ffffff;
+  background: #111111;
+}
+
+.coverage-matrix-scroll {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid #333333;
+}
+
+.coverage-matrix-scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.coverage-matrix-scroll th,
+.coverage-matrix-scroll td {
+  border: 1px solid #333333;
+  padding: 5px 7px;
+  color: #ffffff;
+  text-align: right;
+}
+
+.coverage-matrix-scroll th {
+  color: #888888;
+  text-align: left;
+  text-transform: uppercase;
+}
