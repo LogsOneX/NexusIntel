@@ -127,7 +127,10 @@ function cyShape(shape: GraphNode["nodeShape"]): string {
 }
 
 function svgDataUri(svg: string): string {
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  const cleanSvg = svg
+    .replace(/<rect width="64" height="64" fill="#111111"\/>/g, "")
+    .replace(/stroke-width="4"/g, 'stroke-width="5"');
+  return `data:image/svg+xml;utf8,${encodeURIComponent(cleanSvg)}`;
 }
 
 const CY_NODE_ICONS: Record<string, string> = {
@@ -820,8 +823,8 @@ export default function GraphCanvas({
             "background-opacity": 1,
             "background-image": "data(icon)",
             "background-fit": "contain",
-            "background-width": "42px",
-            "background-height": "42px",
+            "background-width": "48px",
+            "background-height": "48px",
             "background-position-x": "50%",
             "background-position-y": "50%",
             "border-width": 2,
@@ -952,17 +955,19 @@ export default function GraphCanvas({
 
       const rect = containerRef.current.getBoundingClientRect();
       const renderedPosition = event.renderedPosition;
+      const nodeRenderedPosition = event.target.renderedPosition();
       const hasRenderedPosition =
         renderedPosition &&
         Number.isFinite(renderedPosition.x) &&
         Number.isFinite(renderedPosition.y);
+      const hasNodeRenderedPosition =
+        nodeRenderedPosition &&
+        Number.isFinite(nodeRenderedPosition.x) &&
+        Number.isFinite(nodeRenderedPosition.y);
 
-      const viewportX = hasRenderedPosition
-        ? rect.left + renderedPosition.x
-        : original?.clientX ?? rect.left + rect.width / 2;
-      const viewportY = hasRenderedPosition
-        ? rect.top + renderedPosition.y
-        : original?.clientY ?? rect.top + rect.height / 2;
+      const anchor = hasNodeRenderedPosition ? nodeRenderedPosition : hasRenderedPosition ? renderedPosition : null;
+      const viewportX = anchor ? rect.left + anchor.x + 12 : original?.clientX ?? rect.left + rect.width / 2;
+      const viewportY = anchor ? rect.top + anchor.y - 18 : original?.clientY ?? rect.top + rect.height / 2;
 
       selectStrictNode(strict);
       setContextTab("transforms");
