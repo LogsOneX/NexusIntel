@@ -8,6 +8,7 @@ import os
 import time
 import uuid
 import ipaddress
+from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Literal
@@ -27,6 +28,9 @@ from backend.modules.graph_intel import build_graph_intelligence
 from backend.modules.collaboration_bus import CollaborationBus
 from backend.modules.provenance_store import ProvenanceStore
 from backend.modules.proxy_rotator import ProxyRotator
+from backend.osint.importers.csv_importers import preview_csv, spiderfoot_mapping
+from backend.osint.registry import registry
+from backend.osint.types import EntityInput, RawEvidenceObject, RunContext
 
 
 DATABASE_URL = os.getenv(
@@ -183,6 +187,19 @@ class TransformRequest(BaseModel):
     node_id: str
     transform: str = Field(..., min_length=2, max_length=128)
     mode: Literal["passive", "standard", "aggressive"] = "standard"
+
+
+class TransformRunRequest(BaseModel):
+    investigation_id: str
+    transform_id: str = Field(..., min_length=2, max_length=128)
+    node_id: str | None = None
+    input: dict[str, Any] | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ImportPreviewRequest(BaseModel):
+    format: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv"] = "spiderfoot_csv"
+    content: str = Field(..., min_length=1, max_length=5_000_000)
 
 
 class ManualEntityRequest(BaseModel):
@@ -471,6 +488,186 @@ def create_task_record(db: Session, investigation_id: str, task_name: str, targe
     return record
 
 
+API_KEY_ALIASES = {
+    "GITHUB_TOKEN": ("github", "github_token"),
+    "HIBP_API_KEY": ("hibp", "haveibeenpwned"),
+    "URLSCAN_API_KEY": ("urlscan",),
+    "GOOGLE_MAPS_API_KEY": ("google_maps", "google_places"),
+    "SHODAN_API_KEY": ("shodan",),
+    "CENSYS_API_KEY": ("censys",),
+    "VIRUSTOTAL_API_KEY": ("virustotal", "vt"),
+    "TWILIO_LOOKUP_API_KEY": ("twilio",),
+    "NUMVERIFY_API_KEY": ("numverify",),
+}
+
+
+def osint_api_keys(db: Session) -> dict[str, str]:
+    settings = get_settings(db)
+    configured = settings.get("api_keys") or {}
+    keys: dict[str, str] = {}
+    for canonical, aliases in API_KEY_ALIASES.items():
+        env_value = os.getenv(canonical, "")
+        value = env_value or ""
+        for alias in aliases:
+            value = value or str(configured.get(alias) or "")
+        if value:
+            keys[canonical] = value
+    return keys
+
+
+def configured_osint_key_names(db: Session) -> set[str]:
+    return set(osint_api_keys(db).keys())
+
+
+def confidence_label_from_score(score: int) -> str:
+    if score >= 95:
+        return "confirmed"
+    if score >= 80:
+        return "high"
+    if score >= 60:
+        return "probable"
+    if score >= 40:
+        return "weak"
+    return "noise"
+
+
+def serialize_provenance_record(record: DataProvenance, include_payload: bool = False) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "id": record.id,
+        "investigation_id": record.investigation_id,
+        "entity_id": record.entity_id,
+        "source": record.source,
+        "uri": record.uri,
+        "sha256": record.sha256,
+        "content_type": record.content_type,
+        "size_bytes": int(record.size_bytes or 0),
+        "meta": record.meta or {},
+        "created_at": record.created_at.isoformat() + "Z",
+    }
+    if include_payload:
+        path = Path(record.uri)
+        if path.exists() and path.is_file():
+            raw = path.read_bytes()
+            data["payload_preview"] = raw[:80_000].decode("utf-8", errors="replace")
+            data["payload_truncated"] = len(raw) > 80_000
+        else:
+            data["payload_preview"] = None
+            data["payload_truncated"] = False
+    return data
+
+
+def store_raw_evidence(db: Session, investigation_id: str, raw: RawEvidenceObject, entity_id: str | None = None) -> DataProvenance:
+    stored = ProvenanceStore().put(investigation_id=investigation_id, source=raw.source, content=raw.payload)
+    existing = db.execute(
+        select(DataProvenance).where(
+            DataProvenance.investigation_id == investigation_id,
+            DataProvenance.sha256 == stored["sha256"],
+            DataProvenance.source == raw.source,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        if entity_id and not existing.entity_id:
+            existing.entity_id = entity_id
+        return existing
+    record = DataProvenance(
+        id=str(uuid.uuid4()),
+        investigation_id=investigation_id,
+        entity_id=entity_id,
+        source=raw.source,
+        uri=stored["uri"],
+        sha256=stored["sha256"],
+        content_type=raw.content_type or stored["content_type"],
+        size_bytes=str(stored["size"]),
+        meta={
+            "storage": stored["storage"],
+            "source_url": raw.source_url,
+            "fetched_at": raw.fetched_at,
+            "headers": raw.headers,
+            "public_source_note": "Raw payload was collected from a public read-only source or official BYOK API.",
+        },
+    )
+    db.add(record)
+    db.flush()
+    raw.evidence_id = record.id
+    return record
+
+
+def persist_adapter_result(db: Session, investigation_id: str, parent: Entity | None, result) -> dict[str, Any]:
+    evidence_by_key: dict[tuple[str, str | None], DataProvenance] = {}
+    evidence_records: list[DataProvenance] = []
+    for raw in result.raw_evidence:
+        record = store_raw_evidence(db, investigation_id, raw)
+        evidence_records.append(record)
+        evidence_by_key[(raw.source, raw.source_url)] = record
+        evidence_by_key.setdefault((raw.source, None), record)
+
+    created_nodes: list[dict[str, Any]] = []
+    created_edges: list[dict[str, Any]] = []
+    for artifact in result.artifacts:
+        evidence = None
+        if artifact.raw_evidence_ref:
+            evidence = db.get(DataProvenance, artifact.raw_evidence_ref)
+        if not evidence:
+            evidence = evidence_by_key.get((artifact.source, artifact.source_url)) or evidence_by_key.get((artifact.source, None))
+        if evidence:
+            artifact.raw_evidence_ref = evidence.id
+        artifact_dict = artifact.to_dict()
+        artifact_dict.setdefault("public_source_note", artifact.public_source_note)
+        entity = upsert_entity(
+            db,
+            investigation_id,
+            type_=artifact.type,
+            label=artifact.label,
+            value=artifact.value,
+            source=artifact.source,
+            confidence=confidence_label_from_score(artifact.confidence_score),
+            data={
+                **artifact.data,
+                "artifact": artifact_dict,
+                "artifact_id": artifact.artifact_id,
+                "source": artifact.source,
+                "source_url": artifact.source_url,
+                "fetched_at": artifact.fetched_at,
+                "confidence_score": artifact.confidence_score,
+                "confidence_reason": artifact.confidence_reason,
+                "evidence_grade": artifact.evidence_grade,
+                "raw_evidence_ref": artifact.raw_evidence_ref,
+                "legal_basis": artifact.legal_basis,
+                "public_source_note": artifact.public_source_note,
+            },
+        )
+        db.flush()
+        if evidence and not evidence.entity_id:
+            evidence.entity_id = entity.id
+        created_nodes.append(serialize_entity(entity))
+        if parent and parent.id != entity.id:
+            relationship = upsert_relationship(
+                db,
+                investigation_id,
+                source_id=parent.id,
+                target_id=entity.id,
+                type_=artifact.relationship or "OSINT_OBSERVED",
+                source=artifact.source,
+                confidence=confidence_label_from_score(artifact.confidence_score),
+                data={
+                    "confidence_level": artifact.confidence_score,
+                    "confidence_reason": artifact.confidence_reason,
+                    "evidence_grade": artifact.evidence_grade,
+                    "raw_evidence_ref": artifact.raw_evidence_ref,
+                    "source_url": artifact.source_url,
+                    "legal_basis": artifact.legal_basis,
+                    "public_source_note": artifact.public_source_note,
+                },
+            )
+            created_edges.append(serialize_relationship(relationship))
+    return {
+        "nodes": created_nodes,
+        "edges": created_edges,
+        "evidence": [serialize_provenance_record(record) for record in evidence_records],
+        "warnings": list(result.warnings),
+    }
+
+
 def enqueue_nexus(record: TaskRecord, investigation_id: str, target: str, mode: str) -> str:
     celery = run_nexusrecon_task.delay(record.id, investigation_id, target, mode)
     return celery.id
@@ -555,9 +752,16 @@ def default_settings() -> dict[str, Any]:
             "api_key": os.getenv("NEXUS_LLM_API_KEY", ""),
         },
         "api_keys": {
+            "github": os.getenv("GITHUB_TOKEN", ""),
+            "hibp": os.getenv("HIBP_API_KEY", ""),
+            "urlscan": os.getenv("URLSCAN_API_KEY", ""),
+            "google_maps": os.getenv("GOOGLE_MAPS_API_KEY", ""),
             "shodan": os.getenv("SHODAN_API_KEY", ""),
+            "censys": os.getenv("CENSYS_API_KEY", ""),
             "intelx": os.getenv("INTELX_API_KEY", ""),
             "virustotal": os.getenv("VIRUSTOTAL_API_KEY", ""),
+            "twilio": os.getenv("TWILIO_LOOKUP_API_KEY", ""),
+            "numverify": os.getenv("NUMVERIFY_API_KEY", ""),
         },
     }
 
@@ -1064,6 +1268,105 @@ def task_graph(task_id: str, db: Session = Depends(get_db)) -> ApiResponse:
     return ApiResponse(ok=True, data=graph_payload(db, task.investigation_id))
 
 
+
+
+@app.get("/api/v1/transforms/registry", response_model=ApiResponse)
+def transform_registry(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    configured = configured_osint_key_names(db)
+    return ApiResponse(ok=True, data={"adapters": registry.list_adapters(), "transforms": registry.list_transforms(configured)})
+
+
+@app.post("/api/v1/transforms/run", response_model=ApiResponse)
+async def run_registered_transform(payload: TransformRunRequest, db: Session = Depends(get_db), operator: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, payload.investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    transform = registry.get_transform(payload.transform_id)
+    if not transform:
+        raise HTTPException(status_code=404, detail="Transform not found")
+    adapter = registry.get_adapter(transform.adapter_id)
+    if not adapter:
+        raise HTTPException(status_code=501, detail=f"Adapter not implemented: {transform.adapter_id}")
+    api_keys = osint_api_keys(db)
+    missing = [key for key in transform.required_keys if key not in api_keys]
+    if missing:
+        raise HTTPException(status_code=409, detail=f"Missing required API key(s): {', '.join(missing)}")
+
+    parent: Entity | None = None
+    if payload.node_id:
+        parent = db.get(Entity, payload.node_id)
+        if not parent or parent.investigation_id != payload.investigation_id:
+            raise HTTPException(status_code=404, detail="Node not found")
+        entity_input = EntityInput(type=parent.type, value=parent.value, label=parent.label, entity_id=parent.id, data=parent.data or {})
+    else:
+        raw_input = payload.input or {}
+        input_type = str(raw_input.get("type") or "").strip()
+        input_value = str(raw_input.get("value") or "").strip()
+        if not input_type or not input_value:
+            raise HTTPException(status_code=422, detail="Transform input requires type and value when node_id is omitted")
+        entity_input = EntityInput(type=input_type, value=input_value, label=str(raw_input.get("label") or input_value), data=raw_input.get("data") or {})
+
+    if entity_input.type not in transform.input_types and "*" not in transform.input_types:
+        raise HTTPException(status_code=422, detail=f"Transform {transform.id} does not accept input type {entity_input.type}")
+
+    record = create_task_record(db, payload.investigation_id, transform.id, entity_input.value)
+    record.status = "running"
+    record.started_at = datetime.utcnow()
+    db.flush()
+    await publish_log(record.id, {"task_id": record.id, "level": "info", "message": f"Running registered transform {transform.id} via {adapter.id}", "time": now_iso()})
+
+    context = RunContext(investigation_id=payload.investigation_id, run_id=record.id, api_keys=api_keys, options=payload.options, operator=operator)
+    try:
+        result = await adapter.run(entity_input, context)
+        persisted = persist_adapter_result(db, payload.investigation_id, parent, result)
+        record.status = "completed"
+        record.finished_at = datetime.utcnow()
+        record.result = {"adapter_result": result.to_dict(), "persisted": persisted}
+        investigation.updated_at = datetime.utcnow()
+        db.commit()
+        await publish_log(record.id, {"task_id": record.id, "level": "success", "message": f"Transform {transform.id} completed with {len(result.artifacts)} artifact(s) and {len(result.raw_evidence)} evidence object(s)", "time": now_iso()})
+        return ApiResponse(ok=True, data={"run_id": record.id, "status": record.status, "result": record.result, "graph": graph_payload(db, payload.investigation_id)})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        record.status = "failed"
+        record.finished_at = datetime.utcnow()
+        record.error = str(exc)
+        db.commit()
+        await publish_log(record.id, {"task_id": record.id, "level": "error", "message": f"Transform {transform.id} failed: {exc}", "time": now_iso()})
+        raise HTTPException(status_code=500, detail=f"Transform failed: {exc}") from exc
+
+
+@app.get("/api/v1/transforms/runs/{run_id}", response_model=ApiResponse)
+def transform_run_status(run_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    task = db.get(TaskRecord, run_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Transform run not found")
+    return task_status(run_id, db)
+
+
+@app.get("/api/v1/evidence/{evidence_id}", response_model=ApiResponse)
+def read_evidence(evidence_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    record = db.get(DataProvenance, evidence_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Evidence record not found")
+    verification = ProvenanceStore().verify(record.uri, record.sha256)
+    return ApiResponse(ok=True, data={"evidence": serialize_provenance_record(record, include_payload=True), "verification": verification})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/evidence", response_model=ApiResponse)
+def list_investigation_evidence(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    rows = db.execute(select(DataProvenance).where(DataProvenance.investigation_id == investigation_id).order_by(DataProvenance.created_at.desc())).scalars().all()
+    return ApiResponse(ok=True, data={"items": [serialize_provenance_record(row) for row in rows]})
+
+
+@app.post("/api/v1/importers/preview", response_model=ApiResponse)
+def preview_import(payload: ImportPreviewRequest, _: str = Depends(current_operator)) -> ApiResponse:
+    preview = preview_csv(payload.content)
+    mapping = spiderfoot_mapping(preview["headers"]) if payload.format == "spiderfoot_csv" else {"columns": preview["headers"], "mapping": {}, "confidence": "analyst_review_required"}
+    return ApiResponse(ok=True, data={"preview": preview, "mapping": mapping, "legal_basis": "Analyst-provided import preview; no graph write until operator confirms import."})
 
 
 @app.post("/api/v1/provenance", response_model=ApiResponse)

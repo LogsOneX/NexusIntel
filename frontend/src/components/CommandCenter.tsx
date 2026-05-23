@@ -47,6 +47,35 @@ type ApiEdge = {
 
 type GraphPayload = { nodes: ApiNode[]; edges: ApiEdge[] };
 
+type TransformDefinition = {
+  id: string;
+  label: string;
+  description: string;
+  input_types: string[];
+  output_types: string[];
+  adapter_id: string;
+  requires_api_key: boolean;
+  required_keys?: string[];
+  enabled: boolean;
+  disabled_reason?: string | null;
+  legal_note?: string;
+};
+
+type EvidenceRecord = {
+  id: string;
+  investigation_id: string;
+  entity_id?: string | null;
+  source: string;
+  uri: string;
+  sha256: string;
+  content_type: string;
+  size_bytes: number;
+  meta?: Record<string, unknown>;
+  created_at: string;
+  payload_preview?: string | null;
+  payload_truncated?: boolean;
+};
+
 type Investigation = {
   id: string;
   target: string;
@@ -315,6 +344,10 @@ function GraphHub({ token, navigate }: PageProps) {
   const [target, setTarget] = useState("");
   const [mode, setMode] = useState<"passive" | "standard" | "aggressive">("standard");
   const [caseHealth, setCaseHealth] = useState<CaseHealth | null>(null);
+  const [transformRegistry, setTransformRegistry] = useState<TransformDefinition[]>([]);
+  const [evidenceItems, setEvidenceItems] = useState<EvidenceRecord[]>([]);
+  const [evidenceDrawer, setEvidenceDrawer] = useState<EvidenceRecord | null>(null);
+  const [transformLoading, setTransformLoading] = useState<string | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [taskLabel, setTaskLabel] = useState("idle");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
@@ -341,14 +374,26 @@ function GraphHub({ token, navigate }: PageProps) {
     }
   }, [token]);
 
+  const loadTransformRegistry = useCallback(async () => {
+    const payload = await apiJson("/api/v1/transforms/registry", undefined, token);
+    setTransformRegistry(payload.data.transforms || []);
+  }, [token]);
+
+  const loadEvidence = useCallback(async (id: string) => {
+    const payload = await apiJson(`/api/v1/investigations/${id}/evidence`, undefined, token);
+    setEvidenceItems(payload.data.items || []);
+  }, [token]);
+
   const loadGraph = useCallback(async (id: string) => {
     const payload = await apiJson(`/api/v1/investigations/${id}/graph`, undefined, token);
     setActiveInvestigationId(id);
     setGraph(payload.data);
     setSelectedNode(null);
     setOracleNode(null);
+    setEvidenceDrawer(null);
     await loadCaseHealth(id);
-  }, [loadCaseHealth, token]);
+    await loadEvidence(id);
+  }, [loadCaseHealth, loadEvidence, token]);
 
   const clearActiveInvestigation = useCallback(() => {
     setActiveInvestigationId(null);
@@ -356,6 +401,8 @@ function GraphHub({ token, navigate }: PageProps) {
     setSelectedNode(null);
     setOracleNode(null);
     setCaseHealth(null);
+    setEvidenceItems([]);
+    setEvidenceDrawer(null);
     setCurrentTaskId(null);
     setTaskLabel("idle");
     navigate("/graph");
@@ -385,6 +432,10 @@ function GraphHub({ token, navigate }: PageProps) {
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load investigations"));
   }, [loadInvestigations, selectInvestigation]);
+
+  useEffect(() => {
+    loadTransformRegistry().catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load transform registry"));
+  }, [loadTransformRegistry]);
 
   useEffect(() => {
     if (!activeInvestigationId) {
@@ -501,6 +552,7 @@ function GraphHub({ token, navigate }: PageProps) {
         navigate(`/graph?case=${id}`);
         await loadInvestigations();
         await loadCaseHealth(id);
+        await loadEvidence(id);
         return;
       }
 
@@ -525,6 +577,7 @@ function GraphHub({ token, navigate }: PageProps) {
       setTaskLabel(`manual entity / ${clean}`);
       setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Added ${kind} entity without lookup: ${clean}`, time: new Date().toISOString() }]);
       await loadCaseHealth(activeInvestigationId);
+      await loadEvidence(activeInvestigationId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to add entity");
     } finally {
@@ -552,12 +605,58 @@ function GraphHub({ token, navigate }: PageProps) {
       navigate(`/graph?case=${id}`);
       await loadInvestigations();
       await loadCaseHealth(id);
+      await loadEvidence(id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to start investigation");
     } finally {
       setLoading(false);
     }
   };
+
+  const selectedTransforms = useMemo(() => {
+    if (!selectedNode) return [];
+    return transformRegistry.filter((item) => item.input_types.includes(selectedNode.type) || item.input_types.includes("*"));
+  }, [selectedNode, transformRegistry]);
+
+  const selectedEvidenceRefs = useMemo(() => {
+    if (!selectedNode) return [] as EvidenceRecord[];
+    const data = selectedNode.data || {};
+    const artifact = (data.artifact || {}) as Record<string, unknown>;
+    const refIds = new Set([data.raw_evidence_ref, artifact.raw_evidence_ref].filter(Boolean).map(String));
+    return evidenceItems.filter((item) => item.entity_id === selectedNode.id || refIds.has(item.id));
+  }, [evidenceItems, selectedNode]);
+
+  const openEvidence = useCallback(async (id: string) => {
+    try {
+      const payload = await apiJson(`/api/v1/evidence/${id}`, undefined, token);
+      setEvidenceDrawer(payload.data.evidence || null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to load raw evidence");
+    }
+  }, [token]);
+
+  const runRegisteredTransform = useCallback(async (transformId: string) => {
+    if (!activeInvestigationId || !selectedNode) return;
+    setTransformLoading(transformId);
+    setError(null);
+    try {
+      const payload = await apiJson(
+        "/api/v1/transforms/run",
+        { method: "POST", body: JSON.stringify({ investigation_id: activeInvestigationId, node_id: selectedNode.id, transform_id: transformId, options: { mode } }) },
+        token,
+      );
+      setGraph(payload.data.graph || { nodes: [], edges: [] });
+      setCurrentTaskId(payload.data.run_id || null);
+      setTaskLabel(`${transformId} / ${selectedNode.label}`);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "success", message: `Registered transform completed: ${transformId}`, time: new Date().toISOString() }]);
+      await loadCaseHealth(activeInvestigationId);
+      await loadEvidence(activeInvestigationId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Registered transform failed");
+    } finally {
+      setTransformLoading(null);
+    }
+  }, [activeInvestigationId, loadCaseHealth, loadEvidence, mode, selectedNode, token]);
 
   const rows = useMemo(() => {
     if (!selectedNode) return [];
@@ -615,7 +714,46 @@ function GraphHub({ token, navigate }: PageProps) {
         />
         <aside className={dataPanelOpen ? "entity-spec" : "entity-spec closed"}>
           <div className="nx-panel-title"><FileJson size={15} />Entity Data</div>
-          {selectedNode ? <><h2>{selectedNode.label}</h2><code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code><div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div></> : <><h2>{activeCase?.target || "No active entity"}</h2><code>{activeCase ? `${activeCase.target_type} / ${activeCase.status}` : "no investigation loaded"}</code><p>Select a case from the investigation dock, create a blank investigation, or launch a new target scan from the toolbar.</p></>}
+          {selectedNode ? (
+            <>
+              <h2>{selectedNode.label}</h2>
+              <code>{selectedNode.type} / {selectedNode.confidence || "medium"}</code>
+              <div className="entity-drawer-section">
+                <strong>Evidence</strong>
+                {selectedEvidenceRefs.length ? selectedEvidenceRefs.map((item) => (
+                  <button className="evidence-ref-button" key={item.id} type="button" onClick={() => void openEvidence(item.id)}>
+                    <span>{item.source}</span>
+                    <code>{item.sha256.slice(0, 16)}</code>
+                  </button>
+                )) : <p>No raw evidence linked yet. Run a registry transform to collect proof-backed artifacts.</p>}
+              </div>
+              {evidenceDrawer && (
+                <div className="entity-drawer-section raw-evidence-preview">
+                  <strong>Raw Evidence Preview</strong>
+                  <span>{evidenceDrawer.source} / {evidenceDrawer.content_type}</span>
+                  <code>sha256:{evidenceDrawer.sha256}</code>
+                  <pre>{evidenceDrawer.payload_preview || "No preview available"}</pre>
+                </div>
+              )}
+              <div className="entity-drawer-section transform-library-panel">
+                <strong>Transform Library</strong>
+                {selectedTransforms.length ? selectedTransforms.map((item) => (
+                  <button key={item.id} type="button" disabled={!item.enabled || transformLoading === item.id} onClick={() => void runRegisteredTransform(item.id)}>
+                    <span>{item.label}</span>
+                    <small>{item.description}</small>
+                    <code>{item.enabled ? item.output_types.join(", ") : item.disabled_reason || "disabled"}</code>
+                  </button>
+                )) : <p>No registered transform accepts this entity type yet.</p>}
+              </div>
+              <div className="nx-data-table">{rows.map(([key, value]) => <div className="nx-row" key={`${key}:${value}`}><span>{key}</span><code>{value}</code></div>)}</div>
+            </>
+          ) : (
+            <>
+              <h2>{activeCase?.target || "No active entity"}</h2>
+              <code>{activeCase ? `${activeCase.target_type} / ${activeCase.status}` : "no investigation loaded"}</code>
+              <p>Select a case from the investigation dock, create a blank investigation, or launch a new target scan from the toolbar.</p>
+            </>
+          )}
         </aside>
         <section className={terminalOpen ? "graph-terminal" : "graph-terminal closed"}><header><Terminal size={15} /><strong>Live Terminal</strong><span>{taskLabel}</span></header><div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Waiting for telemetry...</code></p>}</div></section>
         {oracleNode && <div className="graph-oracle-popover"><button type="button" onClick={() => setOracleNode(null)}>Close Oracle</button><OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode} title="Node Oracle" /></div>}
@@ -713,7 +851,7 @@ function SettingsPage({ token }: PageProps) {
   useEffect(() => { apiJson("/api/v1/settings", undefined, token).then((payload) => setSettings(payload.data.settings || settings)).catch(() => undefined); }, [token]);
   const update = (path: string[], value: string) => setSettings((current) => { const next = { ...current, llm: { ...(current.llm || {}) }, api_keys: { ...(current.api_keys || {}) } }; let target = next as any; path.slice(0, -1).forEach((part) => { target[part] = { ...(target[part] || {}) }; target = target[part]; }); target[path[path.length - 1]] = value; return next; });
   const save = async () => { await apiJson("/api/v1/settings", { method: "PUT", body: JSON.stringify({ settings }) }, token); setSaved(true); window.setTimeout(() => setSaved(false), 1800); };
-  return <section className="settings-page"><header className="page-header"><div><span className="micro-label">Settings</span><h1>BYOK and LLM Engine</h1></div><button className="nx-primary" type="button" onClick={save}>Save Settings</button></header><div className="settings-grid"><div className="command-card"><h2>AI Engine Config</h2><label>Provider<select value={settings.llm?.provider || "local"} onChange={(event) => update(["llm", "provider"], event.target.value)}><option value="local">Rule-based local</option><option value="ollama">Ollama</option><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic</option></select></label><label>Endpoint<input value={settings.llm?.endpoint || ""} onChange={(event) => update(["llm", "endpoint"], event.target.value)} placeholder="http://localhost:11434" /></label><label>Model<input value={settings.llm?.model || ""} onChange={(event) => update(["llm", "model"], event.target.value)} placeholder="llama3.1" /></label><label>Remote API Key<input type="password" value={settings.llm?.api_key || ""} onChange={(event) => update(["llm", "api_key"], event.target.value)} /></label></div><div className="command-card"><h2>Third-Party API Keys</h2>{["shodan", "intelx", "virustotal"].map((key) => <label key={key}>{key.toUpperCase()}<input type="password" value={settings.api_keys?.[key] || ""} onChange={(event) => update(["api_keys", key], event.target.value)} /></label>)}<p>Keys are optional. Core NexusIntel recon remains free/public-source.</p></div></div>{saved && <div className="save-toast">Settings saved locally.</div>}</section>;
+  return <section className="settings-page"><header className="page-header"><div><span className="micro-label">Settings</span><h1>BYOK and LLM Engine</h1></div><button className="nx-primary" type="button" onClick={save}>Save Settings</button></header><div className="settings-grid"><div className="command-card"><h2>AI Engine Config</h2><label>Provider<select value={settings.llm?.provider || "local"} onChange={(event) => update(["llm", "provider"], event.target.value)}><option value="local">Rule-based local</option><option value="ollama">Ollama</option><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic</option></select></label><label>Endpoint<input value={settings.llm?.endpoint || ""} onChange={(event) => update(["llm", "endpoint"], event.target.value)} placeholder="http://localhost:11434" /></label><label>Model<input value={settings.llm?.model || ""} onChange={(event) => update(["llm", "model"], event.target.value)} placeholder="llama3.1" /></label><label>Remote API Key<input type="password" value={settings.llm?.api_key || ""} onChange={(event) => update(["llm", "api_key"], event.target.value)} /></label></div><div className="command-card"><h2>Third-Party API Keys</h2>{["github", "hibp", "urlscan", "google_maps", "shodan", "censys", "intelx", "virustotal", "twilio", "numverify"].map((key) => <label key={key}>{key.toUpperCase()}<input type="password" value={settings.api_keys?.[key] || ""} onChange={(event) => update(["api_keys", key], event.target.value)} /></label>)}<p>Keys are optional. Core NexusIntel recon remains free/public-source.</p></div></div>{saved && <div className="save-toast">Settings saved locally.</div>}</section>;
 }
 
 function OraclePage({ token }: PageProps) {

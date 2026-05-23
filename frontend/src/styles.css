@@ -4274,3 +4274,75 @@ select:focus {
 .entity-spec.closed ~ .graph-terminal {
   right: 0 !important;
 }
+
+/* Evidence-first entity drawer and transform library. */
+.entity-drawer-section {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid #333333;
+  background: #050505;
+}
+
+.entity-drawer-section > strong {
+  color: #ffffff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.entity-drawer-section p,
+.entity-drawer-section small,
+.entity-drawer-section span {
+  color: #888888;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.evidence-ref-button,
+.transform-library-panel button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid #333333;
+  background: #000000;
+  color: #ffffff;
+  padding: 9px;
+  text-align: left;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.evidence-ref-button:hover,
+.transform-library-panel button:hover:not(:disabled) {
+  background: #111111;
+  border-color: #ffffff;
+}
+
+.transform-library-panel button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.evidence-ref-button code,
+.transform-library-panel code,
+.raw-evidence-preview code {
+  color: #888888;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.raw-evidence-preview pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid #333333;
+  background: #000000;
+  color: #ffffff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

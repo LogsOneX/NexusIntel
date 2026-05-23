@@ -285,6 +285,22 @@ Network Graph sekarang memakai node card flat dengan SVG data-uri iconography un
 
 NexusIntel tidak melakukan password-reset probing, OTP trigger, account creation, private API usage, contact-sync, SMTP VRFY/RCPT, atau rate-limit evasion.
 
+## OSINT Adapter SDK dan Evidence Vault
+
+NexusIntel sekarang punya adapter SDK di `backend/osint/` untuk transform public-source yang evidence-first. Registry tersedia di `GET /api/v1/transforms/registry`, execution path baru di `POST /api/v1/transforms/run`, dan setiap artifact yang dipersist membawa `source`, `source_url`, `fetched_at`, `confidence_score`, `confidence_reason`, `evidence_grade`, `raw_evidence_ref`, `legal_basis`, dan `public_source_note`.
+
+Evidence vault menyimpan raw HTML/JSON/text/header metadata dengan SHA-256 deduplication dan dapat dibuka dari Entity Data drawer. Tidak ada synthetic/dummy intelligence yang boleh dimasukkan ke case graph.
+
+Dokumentasi operator dan developer:
+
+- [OSINT Adapter SDK](docs/osint-adapter-sdk.md)
+- [OSINT Connectors](docs/osint-connectors.md)
+- [Evidence Vault](docs/osint-evidence-vault.md)
+- [Confidence Scoring](docs/osint-confidence-scoring.md)
+- [Google Maps Public Evidence](docs/google-maps-public-evidence.md)
+- [Impersonation Investigation Mode](docs/impersonation-investigation-mode.md)
+- [Operator Playbook](docs/operator-playbook.md)
+
 ## API Utama
 
 ```text
@@ -297,6 +313,12 @@ GET  /api/v1/investigations/{id}/graph
 POST /api/v1/entities
 DELETE /api/v1/investigations/{id}/entities/{node_id}
 POST /api/v1/transforms
+GET  /api/v1/transforms/registry
+POST /api/v1/transforms/run
+GET  /api/v1/transforms/runs/{run_id}
+GET  /api/v1/evidence/{id}
+GET  /api/v1/investigations/{id}/evidence
+POST /api/v1/importers/preview
 GET  /api/v1/tasks/{task_id}
 GET  /api/v1/tasks/{task_id}/graph
 WS   /api/v1/ws/logs/{task_id}
@@ -310,6 +332,7 @@ WS   /api/v1/ws/logs/{task_id}
 │   ├── main.py          # canonical FastAPI gateway
 │   ├── tasks.py         # canonical Celery OSINT workers
 │   ├── recon_validators.py
+│   ├── osint/           # adapter SDK, registry, evidence/scoring/importer/reporting packages
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
@@ -391,7 +414,7 @@ NEXUS_LLM_ENDPOINT=http://localhost:11434
 NEXUS_LLM_MODEL=llama3.1
 ```
 
-Optional BYOK keys tersedia untuk Shodan, IntelX, dan VirusTotal di Settings. Core OSINT tetap berjalan tanpa paid API.
+Optional BYOK keys tersedia untuk GitHub, HIBP, URLScan, Google Maps Places, Shodan, Censys, IntelX, VirusTotal, Twilio, dan NumVerify di Settings. Core OSINT tetap berjalan tanpa paid API.
 
 
 ## Ghost Engine: Async Public Presence Resolution
