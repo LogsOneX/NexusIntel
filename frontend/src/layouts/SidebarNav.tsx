@@ -1,9 +1,13 @@
-import { Bot, Briefcase, ChevronLeft, ChevronRight, Home, LogOut, Network, Settings, Shield, UserCircle } from "lucide-react";
+import { Bot, Briefcase, ChevronLeft, ChevronRight, Database, GitBranch, Home, LogOut, Network, Radar, Search, Settings, Shield, UserCircle } from "lucide-react";
 
 const ROUTES = [
   { path: "/dashboard", label: "Dashboard", icon: Home },
+  { path: "/identity", label: "Identity Search", icon: Search },
   { path: "/workspace", label: "Workspace", icon: Briefcase },
   { path: "/graph", label: "Network Graph", icon: Network },
+  { path: "/watchlist", label: "Threat Watchlist", icon: Radar },
+  { path: "/evidence", label: "Evidence Vault", icon: Database },
+  { path: "/transforms", label: "Transforms", icon: GitBranch },
   { path: "/oracle", label: "AI Oracle", icon: Bot },
   { path: "/settings", label: "Settings", icon: Settings },
   { path: "/account", label: "Account", icon: UserCircle },
@@ -27,4 +31,3 @@ export default function SidebarNav({ route, user, collapsed, setCollapsed, navig
     </aside>
   );
 }
-

@@ -9,6 +9,10 @@ import SettingsPage from "../pages/SettingsPage";
 import OraclePage from "../pages/OraclePage";
 import AccountPage from "../pages/AccountPage";
 import GraphPage from "../pages/GraphPage";
+import IdentitySearchPage from "../pages/IdentitySearchPage";
+import EvidenceVaultPage from "../pages/EvidenceVaultPage";
+import ThreatWatchlistPage from "../pages/ThreatWatchlistPage";
+import TransformLibraryPage from "../pages/TransformLibraryPage";
 import CaseDock from "./cases/CaseDock";
 import EntityInspector from "./entity/EntityInspector";
 import EvidenceDrawer from "./evidence/EvidenceDrawer";
@@ -594,9 +598,10 @@ function GraphHub({ token, navigate }: PageProps) {
             setTerminalOpen={setTerminalOpen}
             dataPanelOpen={dataPanelOpen}
             setDataPanelOpen={setDataPanelOpen}
+            onOpenAddEntity={(kind) => { setAddDialogType(kind || "username"); setAddDialogOpen(true); }}
             hideToolbar
           />
-          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onAdd={(value) => void addTypedEntity(value, classifyEntityValue(value), false)} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} />}
+          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onOpenAdd={(kind) => { setAddDialogType(kind); setAddDialogOpen(true); }} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} />}
         </GraphCanvasStage>
         <CaseDockDrawer open={caseDockOpen} onClose={() => setCaseDockOpen(false)}>
           <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} leads={graph.leads || []} noise={graph.noise || []} compliance={graph.compliance || []} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} onPromoteLead={(id) => void promoteLead(id)} onRestoreNoise={(id) => void restoreNoise(id)} loading={loading} />
@@ -671,8 +676,12 @@ export default function CommandCenter() {
 
   const props: PageProps = { token: session.token, user: session.user || "operator", navigate };
   let page = <DashboardPage {...props} />;
+  if (route === "/identity") page = <IdentitySearchPage {...props} />;
   if (route === "/workspace") page = <WorkspacePage {...props} />;
   if (route === "/graph") page = <GraphHub {...props} />;
+  if (route === "/watchlist") page = <ThreatWatchlistPage {...props} />;
+  if (route === "/evidence") page = <EvidenceVaultPage {...props} />;
+  if (route === "/transforms") page = <TransformLibraryPage {...props} />;
   if (route === "/oracle") page = <OraclePage {...props} />;
   if (route === "/settings") page = <SettingsPage {...props} />;
   if (route === "/account") page = <AccountPage {...props} />;

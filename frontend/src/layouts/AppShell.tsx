@@ -8,8 +8,12 @@ export default function AppShell({ route, user, collapsed, setCollapsed, navigat
   const allCommands = useMemo<CommandItem[]>(() => [
     { id: "new-investigation", label: "New Investigation", description: "Open the graph workspace and focus target input", shortcut: "G", group: "Cases", action: () => navigate("/graph") },
     { id: "dashboard", label: "Open Dashboard", group: "Navigation", action: () => navigate("/dashboard") },
+    { id: "identity", label: "Open Identity Search", group: "Navigation", action: () => navigate("/identity") },
     { id: "workspace", label: "Open Workspace", group: "Navigation", action: () => navigate("/workspace") },
     { id: "graph", label: "Open Network Graph", group: "Navigation", action: () => navigate("/graph") },
+    { id: "watchlist", label: "Open Threat Watchlist", group: "Navigation", action: () => navigate("/watchlist") },
+    { id: "evidence", label: "Open Evidence Vault", group: "Navigation", action: () => navigate("/evidence") },
+    { id: "transforms", label: "Open Transform Library", group: "Navigation", action: () => navigate("/transforms") },
     { id: "oracle", label: "Ask Oracle", group: "Navigation", action: () => navigate("/oracle") },
     { id: "settings", label: "Open Connector Center", group: "Navigation", action: () => navigate("/settings") },
     ...commands,
@@ -34,4 +38,3 @@ export default function AppShell({ route, user, collapsed, setCollapsed, navigat
     </main>
   );
 }
-

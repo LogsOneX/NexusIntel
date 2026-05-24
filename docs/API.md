@@ -51,6 +51,7 @@ GET   /api/v1/settings
 PUT   /api/v1/settings
 POST  /api/v1/oracle/chat
 POST  /api/v1/oracle/briefing
+GET   /api/v1/evidence
 ```
 
 Oracle chat body:
@@ -258,9 +259,13 @@ Returns recent internal operator actions captured by FastAPI audit middleware.
 ### Watchlist
 
 ```text
+POST /api/v1/watchlist
+GET /api/v1/watchlist
+DELETE /api/v1/watchlist/{watchlist_id}
 POST /api/v1/watchlists
 GET /api/v1/watchlists
 PATCH /api/v1/watchlists/{watchlist_id}/toggle
+DELETE /api/v1/watchlists/{watchlist_id}
 ```
 
 Persistent surveillance state. Celery Beat runs watchlist sweeps on queue `network_io` and emits `SYSTEM_ALERT` when graph signatures change.

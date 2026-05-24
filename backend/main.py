@@ -1147,12 +1147,12 @@ async def llm_oracle(settings: dict[str, Any], prompt: str, graph_state: dict[st
 
     system = (
         "You are the NexusIntel Tactical Oracle, an elite Cyber Intelligence Analyst and OSINT investigator. "
-        "You do not act like an AI assistant. Analyze graph data, identify OPSEC failures, map centers of gravity, and brief tersely. "
+        "You are an analyst assistant, not a judge. Analyze graph data, identify OPSEC failures, map centers of gravity, and brief tersely. "
         "Use military-style intelligence language with concise bullets for tactical recommendations. "
         "Highlight Centers of Gravity: nodes with many relationships or high-confidence infrastructure. "
         "Suggest specific lawful OSINT pivots from the provided graph only, such as MX/workspace enumeration when mail posture appears important, "
         "or technical background assessment when usernames overlap on developer/security platforms. "
-        "Do not invent findings, do not claim private access, do not recommend password-reset or notification-triggering actions, and do not use emojis. "
+        "Do not invent findings, do not declare guilt, do not assert identity certainty without direct corroborated evidence, do not claim private access, do not recommend password-reset or notification-triggering actions, and do not use emojis. "
         "Return strict JSON with keys reply and commands. "
         "Commands may include {type:'highlight_type', nodeType:'ip|domain|email|username|profile|crypto_wallet|location', minConfidence?:number}, "
         "{type:'clear_highlight'}, or {type:'suggest_transform', transform:'domain_recon|email_footprint|check_email_registrations|google_footprint_lookup|maigret_username|phone_recon|full_identity_pipeline|check_wallet_balance|trace_transactions', reason:string}. "
@@ -1711,6 +1711,12 @@ def list_investigation_evidence(investigation_id: str, db: Session = Depends(get
     return ApiResponse(ok=True, data={"items": [serialize_provenance_record(row) for row in rows]})
 
 
+@app.get("/api/v1/evidence", response_model=ApiResponse)
+def list_all_evidence(limit: int = 250, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    rows = db.execute(select(DataProvenance).order_by(DataProvenance.created_at.desc()).limit(max(1, min(1000, limit)))).scalars().all()
+    return ApiResponse(ok=True, data={"items": [serialize_provenance_record(row) for row in rows]})
+
+
 @app.get("/api/v1/investigations/{investigation_id}/analyst-pipeline", response_model=ApiResponse)
 def analyst_pipeline(investigation_id: str, entity_id: str | None = None, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     return ApiResponse(ok=True, data=analyst_pipeline_payload(db, investigation_id, entity_id))
@@ -1820,6 +1826,7 @@ def list_audit(limit: int = 100, db: Session = Depends(get_db), _: str = Depends
     return ApiResponse(ok=True, data={"items": [{"id": row.id, "user_id": row.user_id, "action": row.action, "target_entity": row.target_entity, "ip_address": row.ip_address, "status_code": row.status_code, "created_at": row.created_at.isoformat() + "Z"} for row in rows]})
 
 
+@app.post("/api/v1/watchlist", response_model=ApiResponse)
 @app.post("/api/v1/watchlists", response_model=ApiResponse)
 def create_watchlist(payload: WatchlistCreate, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     investigation = db.get(Investigation, payload.investigation_id)
@@ -1831,6 +1838,7 @@ def create_watchlist(payload: WatchlistCreate, db: Session = Depends(get_db), _:
     return ApiResponse(ok=True, data={"watchlist": {"id": item.id, "investigation_id": item.investigation_id, "target": item.target, "target_type": item.target_type, "enabled": item.enabled == "true", "interval_hours": int(item.interval_hours)}})
 
 
+@app.get("/api/v1/watchlist", response_model=ApiResponse)
 @app.get("/api/v1/watchlists", response_model=ApiResponse)
 def list_watchlists(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     rows = db.execute(select(Watchlist).order_by(Watchlist.updated_at.desc())).scalars().all()
@@ -1846,6 +1854,17 @@ def toggle_watchlist(watchlist_id: str, db: Session = Depends(get_db), _: str = 
     item.updated_at = datetime.utcnow()
     db.commit()
     return ApiResponse(ok=True, data={"id": item.id, "enabled": item.enabled == "true"})
+
+
+@app.delete("/api/v1/watchlist/{watchlist_id}", response_model=ApiResponse)
+@app.delete("/api/v1/watchlists/{watchlist_id}", response_model=ApiResponse)
+def delete_watchlist(watchlist_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    item = db.get(Watchlist, watchlist_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Watchlist item not found")
+    db.delete(item)
+    db.commit()
+    return ApiResponse(ok=True, data={"deleted": watchlist_id})
 
 
 @app.post("/api/v1/entity-resolution/score", response_model=ApiResponse)

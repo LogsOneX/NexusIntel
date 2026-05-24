@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Database, Download, FileUp, FolderOpen, Network } from "lucide-react";
+import { Database, Download, FileUp, FolderOpen, Network, Search } from "lucide-react";
 import type { CaseHealth, Investigation, PageProps } from "../lib/types";
 import { apiJson } from "../lib/api";
 import { caseTitle, formatDate } from "../lib/format";
@@ -17,6 +17,7 @@ export default function DashboardPage({ token, navigate }: PageProps) {
   const [health, setHealth] = useState<HealthMap>({});
   const [error, setError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [selector, setSelector] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +53,11 @@ export default function DashboardPage({ token, navigate }: PageProps) {
   return (
     <section className="dashboard-page premium-page">
       <header className="page-header premium-page-header"><div><span className="micro-label">Investigation Cockpit</span><h1>Analyst Command Dashboard</h1></div><div className="page-actions"><button className="nx-secondary" type="button" onClick={() => setShowImport((open) => !open)}><FileUp size={15} />Import</button><button className="nx-primary" type="button" onClick={() => navigate("/graph")}><Network size={15} />Open Graph</button></div></header>
+      <form className="dashboard-selector premium-card" onSubmit={(event) => { event.preventDefault(); if (selector.trim()) navigate(`/identity?seed=${encodeURIComponent(selector.trim())}`); }}>
+        <Search size={18} />
+        <input value={selector} onChange={(event) => setSelector(event.target.value)} placeholder="Search email, phone, username, domain, IP, or wallet" />
+        <button className="nx-primary" type="submit" disabled={!selector.trim()}>Investigate</button>
+      </form>
       <TopIntelBar totalCases={cases.length} activeTasks={totals.active} highRiskCases={totals.highRisk} evidenceCount={totals.evidence} connectorSummary="BYOK" />
       {error && <div className="nx-alert"><span>{error}</span></div>}
       {showImport && <ImportWizard token={token} />}
@@ -65,4 +71,3 @@ export default function DashboardPage({ token, navigate }: PageProps) {
     </section>
   );
 }
-
