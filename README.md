@@ -22,6 +22,28 @@ NexusIntel dirancang untuk public-source reconnaissance dan target yang kamu mil
 - Tidak ada register/forgot-password/password-reset probing yang mengirim email, mengunci akun, memicu OTP/2FA, membuat sesi target, atau mengubah state layanan pihak ketiga.
 - Tidak ada bypass, spam, scraping tertutup, private API abuse, credential stuffing, atau rate-limit evasion.
 
+## Professional OSINT Platform Upgrade
+
+NexusIntel sekarang diarahkan sebagai OSINT Command Center evidence-first, bukan sekadar scanner. Riset produk internal `Riset Mendalam Platform OSINT & Intelijen.pdf` dipakai sebagai referensi utama untuk menggabungkan pola kerja profesional berikut:
+
+- **OSINT Industries style selector workflow:** satu input email/phone/username/domain/IP/wallet, feedback cepat, kandidat dipisahkan dari temuan terverifikasi, dan zero false-positive mindset.
+- **Maltego style graph transforms:** setiap entity bisa dipivot, relasi punya confidence dan alasan, graph tetap menjadi ruang link-analysis utama.
+- **Social Links style workspace:** case folder, evidence coverage, lead queue, noise bin, compliance log, dan export analyst packet.
+- **StealthMole/SOCRadar style posture:** watchlist monitoring pasif, CTI connector BYOK/legal, alert berbasis delta, tanpa illegal dark-web crawling atau raw credential storage.
+- **Palantir style lineage:** entity resolution, provenance, audit trail, confidence explainability, dan AI Oracle yang hanya merangkum/triage evidence.
+
+Core pages:
+
+- `Dashboard`: investigation cockpit, universal selector, coverage gaps, recent cases, next actions.
+- `Identity Search`: OSINT Industries-style lookup untuk email, phone, username, domain, IP, dan crypto wallet.
+- `Network Graph`: Maltego-style visual graph canvas dengan transforms, drawers, evidence-first inspector, dan telemetry.
+- `Workspace`: case management, notes, operator assignment, AI briefing.
+- `Threat Watchlist`: passive monitoring untuk authorized targets dan connector-backed CTI indicators.
+- `Evidence Vault`: raw proof browser dengan hash, source URL, timestamp, dan legal note.
+- `Transform Library`: registry transform yang menampilkan input/output, passive status, API-key requirement, dan disabled reason.
+
+Safety model tetap ketat: tidak ada password reset probing, OTP triggering, credential stuffing, private API abuse, CAPTCHA bypass, illegal scraping, raw stolen credential storage, atau synthetic intelligence di graph.
+
 ## Stack
 
 ```text

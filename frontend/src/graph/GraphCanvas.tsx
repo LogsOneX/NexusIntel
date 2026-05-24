@@ -96,6 +96,7 @@ type GraphCanvasProps = {
   dataPanelOpen?: boolean;
   setDataPanelOpen?: Dispatch<SetStateAction<boolean>>;
   hideToolbar?: boolean;
+  onOpenAddEntity?: (kind?: string) => void;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
@@ -506,6 +507,7 @@ export default function GraphCanvas({
   dataPanelOpen,
   setDataPanelOpen,
   hideToolbar = false,
+  onOpenAddEntity,
 }: GraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
@@ -758,39 +760,17 @@ export default function GraphCanvas({
         onError("Create or select an investigation before adding an entity.");
         return;
       }
-      const value = window.prompt(`Value for ${kind}`);
-      if (!value?.trim()) return;
-      pushHistory();
-      try {
-        const payload = await apiJson("/api/v1/entities", {
-          method: "POST",
-          body: JSON.stringify({
-            investigation_id: investigationId,
-            type: kind,
-            label: value.trim(),
-            value: value.trim(),
-            source_id: selectedNode?.id || null,
-            relationship_type: selectedNode ? "manual_pivot" : "manual_seed",
-            data: { created_from: "graph_drag_drop", x: point.x, y: point.y, parent: selectedNode?.id || null },
-          }),
-        });
-        onGraphUpdate(normalizeGraphPayload(payload.data.graph));
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "Failed to add dropped entity");
-      }
+      void point;
+      if (onOpenAddEntity) onOpenAddEntity(kind);
+      else onError("Open Add Entity from the command bar to create a node.");
     },
-    [investigationId, onError, onGraphUpdate, pushHistory, selectedNode?.id],
+    [investigationId, onError, onOpenAddEntity],
   );
 
   const addEntityFromToolbar = useCallback(() => {
-    const kind = window.prompt("Entity type", "username")?.trim().toLowerCase();
-    if (!kind) return;
-    const pan = cyRef.current?.pan() || { x: 0, y: 0 };
-    const zoom = cyRef.current?.zoom() || 1;
-    const rect = containerRef.current?.getBoundingClientRect();
-    const renderedCenter = { x: (rect?.width || 900) / 2, y: (rect?.height || 560) / 2 };
-    addEntityFromDrop(kind, { x: (renderedCenter.x - pan.x) / zoom, y: (renderedCenter.y - pan.y) / zoom });
-  }, [addEntityFromDrop]);
+    if (onOpenAddEntity) onOpenAddEntity("username");
+    else onError("Open Add Entity from the command bar to create a node.");
+  }, [onError, onOpenAddEntity]);
 
   const exportReport = useCallback(() => {
     const image = cyRef.current?.png({ full: true, scale: 2, bg: "#000000" }) || "";
