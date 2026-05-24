@@ -1,6 +1,6 @@
 # Dashboard
 
-Dashboard terbaru adalah multi-page Intelligence Command Center berbasis React + Cytoscape. Entry point-nya `frontend/src/components/CommandCenter.tsx`; canvas link analysis utama ada di `frontend/src/components/GraphCanvas.tsx`, sementara `FlowCanvas.tsx` hanya compatibility wrapper.
+Dashboard terbaru adalah multi-page Intelligence Command Center berbasis React + Cytoscape. Entry point-nya `frontend/src/components/CommandCenter.tsx`; canvas link analysis aktif ada di `frontend/src/components/GraphCanvas.tsx`.
 
 ## Run
 

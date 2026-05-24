@@ -244,14 +244,21 @@ Core runtime yang harus ikut ter-deploy:
 backend/main.py
 backend/tasks.py
 backend/recon_validators.py
-frontend/src/components/Dashboard.tsx
-frontend/src/components/FlowCanvas.tsx
-frontend/src/components/CustomNode.tsx
+backend/modules/
+backend/osint/
+frontend/src/App.jsx
+frontend/src/components/CommandCenter.tsx
 frontend/src/components/GraphCanvas.tsx
+frontend/src/components/CustomNode.tsx
+frontend/src/components/OraclePanel.tsx
+frontend/src/layouts/
+frontend/src/pages/
+frontend/src/components/{cases,common,entity,evidence,import,transforms}/
+frontend/src/lib/
 frontend/src/styles.css
 ```
 
-`GraphCanvas.tsx` dipertahankan sebagai compatibility wrapper. Canvas aktif adalah `FlowCanvas.tsx`.
+`GraphCanvas.tsx` adalah canvas aktif untuk visual link analysis.
 
 ## Local Legacy Mode
 

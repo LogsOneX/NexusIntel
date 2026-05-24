@@ -350,21 +350,31 @@ WS   /api/v1/ws/logs/{task_id}
 │   ├── main.py          # canonical FastAPI gateway
 │   ├── tasks.py         # canonical Celery OSINT workers
 │   ├── recon_validators.py
-│   ├── osint/           # adapter SDK, registry, evidence/scoring/importer/reporting packages
+│   ├── queues.py
+│   ├── modules/         # async OSINT runtime modules used by API/workers
+│   ├── osint/           # adapter SDK, registry, evidence/scoring/importers/reporting
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
-│   ├── src/components/Dashboard.tsx
-│   ├── src/components/FlowCanvas.tsx
-│   ├── src/components/CustomNode.tsx
-│   ├── src/components/GraphCanvas.tsx  # compatibility wrapper
 │   ├── src/App.jsx
+│   ├── src/components/CommandCenter.tsx
+│   ├── src/components/GraphCanvas.tsx
+│   ├── src/components/CustomNode.tsx
+│   ├── src/components/OraclePanel.tsx
+│   ├── src/components/PresenceBar.tsx
+│   ├── src/components/TimelineView.tsx
+│   ├── src/components/{cases,common,entity,evidence,import,transforms}/
+│   ├── src/layouts/
+│   ├── src/pages/
+│   ├── src/lib/
 │   └── src/styles.css
-├── core/                # legacy-compatible local engine, graph, flows, reports
-├── modules/             # public-source OSINT modules
+├── core/                # legacy-compatible local CLI engine, graph, flows, reports
+├── modules/             # legacy CLI public-source OSINT modules
 ├── nexusrecon/          # NexusRecon class bridge used by backend/tasks.py
 ├── recon/               # platform registry and standalone scanners
+├── dashboard/           # legacy local dashboard served by python3 main.py dashboard
 ├── docs/
+├── tests/
 ├── docker-compose.yml
 ├── Makefile
 └── start.sh

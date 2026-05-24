@@ -70,21 +70,25 @@ Validator ini bersifat public-source/read-only. Ia tidak menjalankan register/fo
 
 Frontend canonical:
 
-- `frontend/src/components/Dashboard.tsx`
-- `frontend/src/components/FlowCanvas.tsx`
-- `frontend/src/components/CustomNode.tsx`
-- `frontend/src/components/GraphCanvas.tsx` sebagai compatibility wrapper
-- `frontend/src/App.jsx`
-- `frontend/src/styles.css`
+- `frontend/src/App.jsx` mounts `CommandCenter`.
+- `frontend/src/components/CommandCenter.tsx` owns local routing/session and graph hub orchestration.
+- `frontend/src/components/GraphCanvas.tsx` is the active Cytoscape visual link-analysis engine.
+- `frontend/src/components/CustomNode.tsx`, `OraclePanel.tsx`, `PresenceBar.tsx`, and `TimelineView.tsx` are active graph/support components.
+- `frontend/src/layouts/` contains shell/navigation/top intel bar components.
+- `frontend/src/pages/` contains Dashboard, Workspace, Graph, Oracle, Settings, and Account pages.
+- `frontend/src/components/{cases,common,entity,evidence,import,transforms}/` contains reusable analyst UI.
+- `frontend/src/lib/` contains shared API, types, graph, confidence, format, and session helpers.
+- `frontend/src/styles.css` contains the current premium graphite intelligence UI system.
 
 Dashboard menyediakan:
 
-- left console untuk target acquisition, recon mode, manual entity, dan investigation list,
-- central Cytoscape graph canvas sebagai workspace utama,
-- drag-and-drop entity pipeline untuk username, email, domain, IP, dan phone,
-- right deep data drawer untuk structured JSON intelligence,
-- bottom terminal HUD yang subscribe ke WebSocket task log,
-- right-click context menu untuk menjalankan transform dari node.
+- persistent left navigation and command palette,
+- investigation cockpit with recent cases, lead queue, and coverage matrix,
+- Cytoscape graph canvas as the main visual workspace,
+- drag-and-drop entity pipeline for username, email, domain, IP, phone, and wallet,
+- evidence-first entity inspector with overview, evidence, transforms, timeline, raw JSON, and notes,
+- bottom live telemetry HUD subscribed to WebSocket task logs,
+- right-click context menu for node transforms/playbooks.
 
 ## Legacy Compatibility
 

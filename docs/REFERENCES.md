@@ -16,7 +16,7 @@ Pola yang diadaptasi:
 Implementasi NexusIntel:
 
 - `frontend/src/components/GraphCanvas.tsx` menjadi canvas link-analysis besar.
-- `frontend/src/components/Dashboard.tsx` menyediakan transform-driven dashboard.
+- `frontend/src/components/CommandCenter.tsx`, `frontend/src/pages/`, dan `frontend/src/components/GraphCanvas.tsx` menyediakan command center dan transform-driven graph workspace.
 - `backend/main.py` dan `backend/tasks.py` membuat API/worker transform.
 - `core/graph.py` tetap dipakai untuk workflow CLI legacy.
 

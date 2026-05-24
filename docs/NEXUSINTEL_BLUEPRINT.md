@@ -5,13 +5,19 @@ NexusIntel adalah OSINT investigation platform standalone yang menggabungkan gra
 ## Canonical Runtime
 
 ```text
-frontend/src/components/Dashboard.tsx
-frontend/src/components/FlowCanvas.tsx
-frontend/src/components/CustomNode.tsx
+frontend/src/App.jsx
+frontend/src/components/CommandCenter.tsx
 frontend/src/components/GraphCanvas.tsx
+frontend/src/components/CustomNode.tsx
+frontend/src/layouts/
+frontend/src/pages/
+frontend/src/components/{cases,common,entity,evidence,import,transforms}/
+frontend/src/lib/
 backend/main.py
 backend/tasks.py
 backend/recon_validators.py
+backend/modules/
+backend/osint/
 docker-compose.yml
 ```
 

@@ -1,0 +1,19 @@
+import { Play, ShieldCheck, Timer } from "lucide-react";
+import type { ApiNode, TransformDefinition } from "../../lib/types";
+import StatusChip from "../common/StatusChip";
+
+export default function TransformCard({ transform, selectedNode, onRun, loading }: { transform: TransformDefinition; selectedNode?: ApiNode | null; onRun?: (id: string) => void; loading?: boolean }) {
+  const compatible = !selectedNode || transform.input_types.includes(selectedNode.type) || transform.input_types.includes("*");
+  const disabledReason = !compatible ? `Requires ${transform.input_types.join(", ")}` : !transform.enabled ? transform.disabled_reason || "Disabled" : "";
+  return (
+    <article className={compatible && transform.enabled ? "transform-card" : "transform-card disabled"}>
+      <header><strong>{transform.label}</strong><div>{transform.requires_api_key && <StatusChip label="API key" tone="key" />}{transform.passive !== false && <StatusChip label="passive" tone="ok" />}</div></header>
+      <p>{transform.description}</p>
+      <div className="transform-meta"><span><ShieldCheck size={12} />{transform.confidence_profile || "evidence-scored"}</span><span><Timer size={12} />{transform.estimated_runtime || "variable"}</span></div>
+      <code>{transform.input_types.join(", ")} {"->"} {transform.output_types.join(", ")}</code>
+      {disabledReason && <small>{disabledReason}</small>}
+      {onRun && <button type="button" disabled={loading || Boolean(disabledReason)} onClick={() => onRun(transform.id)}><Play size={13} />{loading ? "Running" : "Run"}</button>}
+    </article>
+  );
+}
+

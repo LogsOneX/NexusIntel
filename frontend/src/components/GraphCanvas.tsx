@@ -819,7 +819,7 @@ export default function GraphCanvas({
             width: 54,
             height: 54,
             shape: "data(nodeShape)",
-            "background-color": "#111111",
+            "background-color": "#151a20",
             "background-opacity": 1,
             "background-image": "data(icon)",
             "background-fit": "contain",
@@ -828,8 +828,8 @@ export default function GraphCanvas({
             "background-position-x": "50%",
             "background-position-y": "50%",
             "border-width": 2,
-            "border-color": "#555555",
-            color: "#ffffff",
+            "border-color": "#46515d",
+            color: "#f3f5f7",
             label: "data(label)",
             "font-family": "JetBrains Mono, SFMono-Regular, Consolas, monospace",
             "font-size": 11,
@@ -839,7 +839,7 @@ export default function GraphCanvas({
             "text-valign": "bottom",
             "text-halign": "center",
             "text-margin-y": 8,
-            "text-background-color": "#000000",
+            "text-background-color": "#07080a",
             "text-background-opacity": 1,
             "text-background-padding": 3,
             "overlay-opacity": 0,
@@ -850,57 +850,57 @@ export default function GraphCanvas({
           selector: "node:selected",
           style: {
             "border-width": 2,
-            "border-color": "#ffffff",
-            "background-color": "#111111",
+            "border-color": "#7fb3d8",
+            "background-color": "#18202a",
           },
         },
         {
           selector: "node.low-confidence",
-          style: { "border-style": "dashed", "border-color": "#888888", color: "#888888" },
+          style: { "border-style": "dashed", "border-color": "#778291", color: "#a9b1bb" },
         },
         {
           selector: "node.censored-entity",
-          style: { "border-style": "dashed", "border-color": "#888888", "background-color": "#111111" },
+          style: { "border-style": "dashed", "border-color": "#778291", "background-color": "#151a20" },
         },
         {
           selector: "node.location-entity",
-          style: { "background-color": "#151515", "border-color": "#ffffff" },
+          style: { "background-color": "#171d24", "border-color": "#7fb3d8" },
         },
         {
           selector: "node.processing",
-          style: { "border-width": 4, "border-color": "#ffffff" },
+          style: { "border-width": 4, "border-color": "#7fb3d8" },
         },
         {
           selector: "node.hub-amber",
-          style: { "border-width": 4, "border-color": "#f59e0b" },
+          style: { "border-width": 4, "border-color": "#c7924b" },
         },
         {
           selector: "node.hub-red",
-          style: { "border-width": 5, "border-color": "#ef4444" },
+          style: { "border-width": 5, "border-color": "#d14b4b" },
         },
         {
           selector: "node.tag-internal",
-          style: { "border-color": "#facc15", color: "#facc15" },
+          style: { "border-color": "#c7924b", color: "#c7924b" },
         },
         {
           selector: "node.tag-suspicious",
-          style: { "border-color": "#ef4444", "background-color": "#171111" },
+          style: { "border-color": "#d14b4b", "background-color": "#211718" },
         },
         {
           selector: "edge",
           style: {
             width: 1,
-            "line-color": "#333333",
+            "line-color": "#3a4450",
             "target-arrow-shape": "triangle",
-            "target-arrow-color": "#555555",
+            "target-arrow-color": "#647180",
             "target-arrow-width": 6,
             "arrow-scale": 0.72,
             "curve-style": "bezier",
             label: "data(label)",
-            color: "#888888",
+            color: "#a9b1bb",
             "font-family": "JetBrains Mono, SFMono-Regular, Consolas, monospace",
             "font-size": 8,
-            "text-background-color": "#000000",
+            "text-background-color": "#07080a",
             "text-background-opacity": 1,
             "text-background-padding": 2,
             "overlay-opacity": 0,
@@ -908,7 +908,7 @@ export default function GraphCanvas({
         },
         {
           selector: "edge.low-confidence",
-          style: { "line-style": "dashed", "line-color": "#444444", "target-arrow-color": "#444444" },
+          style: { "line-style": "dashed", "line-color": "#52606e", "target-arrow-color": "#52606e" },
         },
 
         {
@@ -924,8 +924,8 @@ export default function GraphCanvas({
           style: {
             "line-style": "dashed",
             "line-dash-pattern": [8, 6],
-            "line-color": "#ffffff",
-            "target-arrow-color": "#ffffff",
+            "line-color": "#7fb3d8",
+            "target-arrow-color": "#7fb3d8",
             width: 1.4,
           },
         },
@@ -954,24 +954,17 @@ export default function GraphCanvas({
       original?.stopPropagation?.();
 
       const rect = containerRef.current.getBoundingClientRect();
-      const renderedPosition = event.renderedPosition;
-      const nodeRenderedPosition = event.target.renderedPosition();
-      const hasRenderedPosition =
-        renderedPosition &&
-        Number.isFinite(renderedPosition.x) &&
-        Number.isFinite(renderedPosition.y);
-      const hasNodeRenderedPosition =
-        nodeRenderedPosition &&
-        Number.isFinite(nodeRenderedPosition.x) &&
-        Number.isFinite(nodeRenderedPosition.y);
-
-      const anchor = hasNodeRenderedPosition ? nodeRenderedPosition : hasRenderedPosition ? renderedPosition : null;
-      const viewportX = anchor ? rect.left + anchor.x + 12 : original?.clientX ?? rect.left + rect.width / 2;
-      const viewportY = anchor ? rect.top + anchor.y - 18 : original?.clientY ?? rect.top + rect.height / 2;
+      const rendered = event.renderedPosition;
+      const nodeRendered = event.target.renderedPosition();
+      const anchor = rendered && Number.isFinite(rendered.x) && Number.isFinite(rendered.y)
+        ? rendered
+        : nodeRendered && Number.isFinite(nodeRendered.x) && Number.isFinite(nodeRendered.y)
+          ? nodeRendered
+          : { x: (original?.clientX || rect.left + rect.width / 2) - rect.left, y: (original?.clientY || rect.top + rect.height / 2) - rect.top };
 
       selectStrictNode(strict);
       setContextTab("transforms");
-      setContextMenu({ x: viewportX, y: viewportY, node: strict });
+      setContextMenu({ x: rect.left + anchor.x, y: rect.top + anchor.y, node: strict });
     });
     cy.on("dragfree", "node", (event) => {
       const id = event.target.id();
@@ -1133,17 +1126,42 @@ export default function GraphCanvas({
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
       const key = event.key.toLowerCase();
-      if (!["t", "z", "y"].includes(key)) return;
-      event.preventDefault();
-      if (key === "t") setTimelineMode((open) => !open);
-      if (key === "z") undoGraph();
-      if (key === "y") redoGraph();
+      if (event.ctrlKey || event.metaKey) {
+        if (!["t", "z", "y"].includes(key)) return;
+        event.preventDefault();
+        if (key === "t") setTimelineMode((open) => !open);
+        if (key === "z") undoGraph();
+        if (key === "y") redoGraph();
+        return;
+      }
+      if (typing) return;
+      if (key === "f") {
+        event.preventDefault();
+        cyRef.current?.fit(undefined, 90);
+      }
+      if (key === "i") {
+        event.preventDefault();
+        effectiveSetDataPanelOpen((open) => !open);
+      }
+      if (key === "t") {
+        event.preventDefault();
+        setTimelineMode((open) => !open);
+      }
+      if (key === "l") {
+        event.preventDefault();
+        setLayoutMode((current) => (current === "force" ? "tree" : current === "tree" ? "circular" : "force"));
+      }
+      if (event.key === "Delete" && selectedStrictNode) {
+        event.preventDefault();
+        void deleteNode(selectedStrictNode);
+      }
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [redoGraph, undoGraph]);
+  }, [deleteNode, effectiveSetDataPanelOpen, redoGraph, selectedStrictNode, undoGraph]);
 
   const contextPosition = useMemo(() => {
     if (!contextMenu) return { left: 0, top: 0 };
