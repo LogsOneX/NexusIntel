@@ -2,7 +2,6 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { KeyRound, Shield, Terminal } from "lucide-react";
 import GraphCanvas from "./GraphCanvas";
 import OraclePanel from "./OraclePanel";
-import PresenceBar from "./PresenceBar";
 import AppShell from "../layouts/AppShell";
 import DashboardPage from "../pages/DashboardPage";
 import WorkspacePage from "../pages/WorkspacePage";
@@ -14,12 +13,22 @@ import CaseDock from "./cases/CaseDock";
 import EntityInspector from "./entity/EntityInspector";
 import EvidenceDrawer from "./evidence/EvidenceDrawer";
 import ConfirmDialog from "./common/ConfirmDialog";
+import CommandPalette from "./common/CommandPalette";
+import GraphWorkspaceLayout from "../layouts/GraphWorkspaceLayout";
+import GraphTopBar from "./graph/GraphTopBar";
+import GraphCanvasStage from "./graph/GraphCanvasStage";
+import GraphEmptyLaunch from "./graph/GraphEmptyLaunch";
+import CaseDockDrawer from "./cases/CaseDockDrawer";
+import InspectorDrawer from "./entity/InspectorDrawer";
+import TelemetryDrawer from "./terminal/TelemetryDrawer";
+import EntityPaletteDrawer from "./entity/EntityPaletteDrawer";
+import AddEntityDialog from "./entity/AddEntityDialog";
 import { FALLBACK_TRANSFORMS } from "./transforms/TransformLibrary";
 import { apiJson, downloadFile, wsUrl } from "../lib/api";
-import { clearSession, readSession, saveSession } from "../lib/storage";
+import { clearSession, readLocalJson, readSession, saveSession, writeLocalJson } from "../lib/storage";
 import { caseTitle, terminalPrefix } from "../lib/format";
 import { classifyEntityValue, evidenceRefsForNode } from "../lib/graph";
-import type { AnalystPipeline, ApiNode, CaseHealth, EvidenceRecord, GraphPayload, Investigation, PageProps, SessionState, TerminalLine, TransformDefinition } from "../lib/types";
+import type { AnalystPipeline, ApiNode, CaseHealth, CommandItem, EvidenceRecord, GraphPayload, Investigation, PageProps, SessionState, TerminalLine, TransformDefinition } from "../lib/types";
 
 function LoginPage({ onLogin }: { onLogin: (session: SessionState) => void }) {
   const [username, setUsername] = useState("admin");
@@ -57,7 +66,14 @@ function LoginPage({ onLogin }: { onLogin: (session: SessionState) => void }) {
 }
 
 function normalizeGraphPayload(payload: any): GraphPayload {
-  return { nodes: Array.isArray(payload?.nodes) ? payload.nodes : [], edges: Array.isArray(payload?.edges) ? payload.edges : [] };
+  return {
+    nodes: Array.isArray(payload?.nodes) ? payload.nodes : [],
+    edges: Array.isArray(payload?.edges) ? payload.edges : [],
+    leads: Array.isArray(payload?.leads) ? payload.leads : [],
+    noise: Array.isArray(payload?.noise) ? payload.noise : [],
+    compliance: Array.isArray(payload?.compliance) ? payload.compliance : [],
+    metadata: payload?.metadata || {},
+  };
 }
 
 function GraphHub({ token, navigate }: PageProps) {
@@ -77,8 +93,13 @@ function GraphHub({ token, navigate }: PageProps) {
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [taskLabel, setTaskLabel] = useState("idle");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
-  const [terminalOpen, setTerminalOpen] = useState(true);
-  const [dataPanelOpen, setDataPanelOpen] = useState(true);
+  const [terminalOpen, setTerminalOpen] = useState(() => readLocalJson("nexus.graph.terminalOpen", false));
+  const [dataPanelOpen, setDataPanelOpen] = useState(() => readLocalJson("nexus.graph.inspectorOpen", false));
+  const [caseDockOpen, setCaseDockOpen] = useState(() => readLocalJson("nexus.graph.caseDockOpen", false));
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addDialogType, setAddDialogType] = useState("username");
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleteCase, setDeleteCase] = useState<Investigation | null>(null);
@@ -316,23 +337,23 @@ function GraphHub({ token, navigate }: PageProps) {
     }
   };
 
-  const startInvestigation = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!target.trim()) return;
+  const startLookupValue = async (value: string, lookupMode: "passive" | "standard" | "aggressive" = mode) => {
+    const clean = value.trim();
+    if (!clean) return;
     setLoading(true);
     setError(null);
     try {
-      const payload = await apiJson<any>("/api/v1/scans/nexusrecon", { method: "POST", body: JSON.stringify({ target: target.trim(), mode }) }, token);
+      const payload = await apiJson<any>("/api/v1/scans/nexusrecon", { method: "POST", body: JSON.stringify({ target: clean, mode: lookupMode }) }, token);
       const id = payload.data.investigation_id;
       setActiveInvestigationId(id);
       setGraph(normalizeGraphPayload(payload.data.graph));
       setCurrentTaskId(payload.data.task_id);
-      setTaskLabel(`pipeline / ${target.trim()}`);
+      setTaskLabel(`pipeline / ${clean}`);
       setSelectedNode(null);
       setOracleNode(null);
       setTerminalLines([]);
       setTerminalOpen(true);
-      setDataPanelOpen(true);
+      setDataPanelOpen(false);
       navigate(`/graph?case=${id}`);
       await loadInvestigations();
       await loadCaseHealth(id);
@@ -342,6 +363,11 @@ function GraphHub({ token, navigate }: PageProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const startInvestigation = async (event: FormEvent) => {
+    event.preventDefault();
+    await startLookupValue(target, mode);
   };
 
   const selectedTransforms = useMemo(() => {
@@ -402,6 +428,48 @@ function GraphHub({ token, navigate }: PageProps) {
     }
   }, [activeInvestigationId, loadAnalystPipeline, selectedNode?.id, token]);
 
+  const promoteLead = useCallback(async (leadId: string) => {
+    if (!activeInvestigationId) return;
+    try {
+      const payload = await apiJson<any>(`/api/v1/investigations/${activeInvestigationId}/leads/${leadId}/promote`, { method: "POST" }, token);
+      setGraph(normalizeGraphPayload(payload.data.graph));
+      setSelectedNode(payload.data.node || null);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "success", message: `Promoted candidate lead ${leadId} to main graph`, time: new Date().toISOString() }]);
+      await loadCaseHealth(activeInvestigationId);
+      await loadAnalystPipeline(activeInvestigationId, payload.data.node?.id || selectedNode?.id || null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Lead promotion failed");
+    }
+  }, [activeInvestigationId, loadAnalystPipeline, loadCaseHealth, selectedNode?.id, token]);
+
+  const restoreNoise = useCallback(async (noiseId: string) => {
+    if (!activeInvestigationId) return;
+    try {
+      const payload = await apiJson<any>(`/api/v1/investigations/${activeInvestigationId}/noise/${noiseId}/restore`, { method: "POST" }, token);
+      setGraph(normalizeGraphPayload(payload.data.graph));
+      setSelectedNode(payload.data.node || null);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "success", message: `Restored noise item ${noiseId} to main graph`, time: new Date().toISOString() }]);
+      await loadCaseHealth(activeInvestigationId);
+      await loadAnalystPipeline(activeInvestigationId, payload.data.node?.id || selectedNode?.id || null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Noise restore failed");
+    }
+  }, [activeInvestigationId, loadAnalystPipeline, loadCaseHealth, selectedNode?.id, token]);
+
+  const markSelectedNoise = useCallback(async () => {
+    if (!activeInvestigationId || !selectedNode) return;
+    try {
+      const payload = await apiJson<any>(`/api/v1/investigations/${activeInvestigationId}/entities/${selectedNode.id}/mark-noise`, { method: "POST", body: JSON.stringify({ reason: "Analyst removed this entity from the main graph as noise." }) }, token);
+      setGraph(normalizeGraphPayload(payload.data.graph));
+      setSelectedNode(null);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Marked ${selectedNode.label} as graph noise`, time: new Date().toISOString() }]);
+      await loadCaseHealth(activeInvestigationId);
+      await loadAnalystPipeline(activeInvestigationId, null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Mark noise failed");
+    }
+  }, [activeInvestigationId, loadAnalystPipeline, loadCaseHealth, selectedNode, token]);
+
   const exportPacket = useCallback(async (format: "html" | "pdf" | "json" | "csv" | "graph_json") => {
     if (!activeInvestigationId) return;
     try {
@@ -411,64 +479,164 @@ function GraphHub({ token, navigate }: PageProps) {
     }
   }, [activeInvestigationId, token]);
 
+  const addTypedEntity = useCallback(async (value: string, type: string, lookup: boolean) => {
+    const clean = value.trim();
+    if (!clean) return;
+    if (lookup) {
+      setTarget(clean);
+      await startLookupValue(clean, mode);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      if (!activeInvestigationId) {
+        const payload = await apiJson<any>("/api/v1/investigations", { method: "POST", body: JSON.stringify({ target: clean, mode, target_type: type }) }, token);
+        const id = payload.data.investigation_id || payload.data.investigation;
+        setActiveInvestigationId(id);
+        setGraph(normalizeGraphPayload(payload.data.graph));
+        setSelectedNode(payload.data.root_node || null);
+        navigate(`/graph?case=${id}`);
+        await loadInvestigations();
+        await loadCaseHealth(id);
+        await loadEvidence(id);
+        return;
+      }
+      const payload = await apiJson<any>("/api/v1/entities", { method: "POST", body: JSON.stringify({ investigation_id: activeInvestigationId, type, label: clean, value: clean, source_id: selectedNode?.id || null, relationship_type: selectedNode ? "manual_pivot" : "manual_seed", data: { created_from: "add_entity_dialog", mode } }) }, token);
+      setGraph(normalizeGraphPayload(payload.data.graph));
+      setSelectedNode(payload.data.node || null);
+      await loadCaseHealth(activeInvestigationId);
+      await loadEvidence(activeInvestigationId);
+      await loadAnalystPipeline(activeInvestigationId, payload.data.node?.id || selectedNode?.id || null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to add entity");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeInvestigationId, loadAnalystPipeline, loadCaseHealth, loadEvidence, loadInvestigations, mode, navigate, selectedNode, startLookupValue, token]);
+
+  const dispatchGraphEvent = useCallback((name: string, detail?: Record<string, unknown>) => {
+    window.dispatchEvent(new CustomEvent(`nexus:${name}`, { detail }));
+  }, []);
+
+  const graphCommands = useMemo<CommandItem[]>(() => [
+    { id: "add-entity", label: "Add Entity", description: "Create a seed entity", shortcut: "A", action: () => setAddDialogOpen(true) },
+    { id: "palette", label: "Open Entity Palette", description: "Browse entity types", action: () => setPaletteOpen(true) },
+    { id: "lookup", label: "Run Lookup", description: "Run lookup for the current search value", disabled: !target.trim(), action: () => void startLookupValue(target, mode) },
+    { id: "case-dock", label: caseDockOpen ? "Hide Case Dock" : "Open Case Dock", shortcut: "D", action: () => setCaseDockOpen((open) => !open) },
+    { id: "inspector", label: dataPanelOpen ? "Hide Inspector" : "Open Inspector", shortcut: "I", action: () => setDataPanelOpen((open) => !open) },
+    { id: "terminal", label: "Toggle Telemetry", action: () => setTerminalOpen((open) => !open) },
+    { id: "fit", label: "Fit Graph", shortcut: "F", action: () => dispatchGraphEvent("graph-fit") },
+    { id: "layout", label: "Switch Layout", shortcut: "L", action: () => dispatchGraphEvent("graph-layout", { mode: "force" }) },
+    { id: "export", label: "Export Report", action: () => dispatchGraphEvent("graph-export") },
+    { id: "new-case", label: "New Investigation", action: () => void createBlankInvestigation() },
+  ], [caseDockOpen, createBlankInvestigation, dataPanelOpen, dispatchGraphEvent, mode, startLookupValue, target]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const targetElement = event.target as HTMLElement | null;
+      const typing = targetElement?.tagName === "INPUT" || targetElement?.tagName === "TEXTAREA" || targetElement?.tagName === "SELECT" || targetElement?.isContentEditable;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setCommandPaletteOpen(true); return; }
+      if (typing) return;
+      if (event.key.toLowerCase() === "d") { event.preventDefault(); setCaseDockOpen((open) => !open); }
+      if (event.key.toLowerCase() === "i") { event.preventDefault(); setDataPanelOpen((open) => !open); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const activeCase = useMemo(() => investigations.find((item) => item.id === activeInvestigationId) || null, [activeInvestigationId, investigations]);
 
   return (
     <GraphPage>
-      {error && <div className="nx-alert graph-alert"><span>{error}</span><button type="button" onClick={() => setError(null)}>Dismiss</button></div>}
-      <div className="graph-operational-grid premium-graph-grid">
-        <PresenceBar />
-        <GraphCanvas
-          investigationId={activeInvestigationId}
-          nodes={graph.nodes}
-          edges={graph.edges}
-          selectedNode={selectedNode}
-          onSelectNode={setSelectedNode}
-          onGraphUpdate={setGraph}
-          onTaskStart={(taskId, transform, node) => { setCurrentTaskId(taskId); setTaskLabel(`${transform} / ${node.label}`); setTerminalLines([]); setTerminalOpen(true); }}
-          onError={setError}
-          onSystemLog={(message) => setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message, time: new Date().toISOString() }])}
-          onOracleNode={setOracleNode}
-          searchTarget={target}
-          setSearchTarget={setTarget}
-          reconMode={mode}
-          setReconMode={setMode}
-          onLaunch={startInvestigation}
-          onAddSeed={addSeedEntity}
-          isLaunching={loading}
-          terminalOpen={terminalOpen}
-          setTerminalOpen={setTerminalOpen}
-          dataPanelOpen={dataPanelOpen}
-          setDataPanelOpen={setDataPanelOpen}
-        />
-        <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} loading={loading} />
-        <EntityInspector
-          open={dataPanelOpen}
-          selectedNode={selectedNode}
+      <GraphWorkspaceLayout>
+        {error && <div className="nx-alert graph-alert"><span>{error}</span><button type="button" onClick={() => setError(null)}>Dismiss</button></div>}
+        <GraphTopBar
           activeCase={activeCase}
+          entities={graph.nodes.length}
+          relationships={graph.edges.length}
           target={target}
-          pendingEntityType={pendingEntityType}
-          pendingTransforms={pendingTransforms}
-          selectedTransforms={selectedTransforms}
-          analystPipeline={analystPipeline}
-          evidenceItems={evidenceItems}
-          selectedEvidenceRefs={selectedEvidenceRefs}
-          transformLoading={transformLoading}
-          onOpenEvidence={(id) => void openEvidence(id)}
-          onRunRegisteredTransform={(id) => void runRegisteredTransform(id)}
-          onRunCorrelationEngine={() => void runCorrelationEngine()}
-          onExportPacket={(format) => void exportPacket(format)}
+          setTarget={setTarget}
+          detectedType={pendingEntityType}
+          mode={mode}
+          setMode={setMode}
+          loading={loading}
+          onLookup={startInvestigation}
+          onAddEntity={() => setAddDialogOpen(true)}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onToggleDock={() => setCaseDockOpen((open) => !open)}
+          onToggleInspector={() => setDataPanelOpen((open) => !open)}
+          onToggleTerminal={() => setTerminalOpen((open) => !open)}
+          onExport={() => dispatchGraphEvent("graph-export")}
+          onFit={() => dispatchGraphEvent("graph-fit")}
+          onLayout={(layout) => dispatchGraphEvent("graph-layout", { mode: layout })}
         />
-        <section className={terminalOpen ? "graph-terminal premium-terminal" : "graph-terminal premium-terminal closed"}>
-          <header><Terminal size={15} /><strong>Live Telemetry</strong><span>{taskLabel}</span></header>
-          <div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Waiting for telemetry...</code></p>}</div>
-        </section>
+        <GraphCanvasStage>
+          <GraphCanvas
+            investigationId={activeInvestigationId}
+            nodes={graph.nodes}
+            edges={graph.edges}
+            selectedNode={selectedNode}
+            onSelectNode={setSelectedNode}
+            onGraphUpdate={setGraph}
+            onTaskStart={(taskId, transform, node) => { setCurrentTaskId(taskId); setTaskLabel(`${transform} / ${node.label}`); setTerminalLines([]); setTerminalOpen(true); }}
+            onError={setError}
+            onSystemLog={(message) => setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message, time: new Date().toISOString() }])}
+            onOracleNode={setOracleNode}
+            searchTarget={target}
+            setSearchTarget={setTarget}
+            reconMode={mode}
+            setReconMode={setMode}
+            onLaunch={startInvestigation}
+            onAddSeed={addSeedEntity}
+            isLaunching={loading}
+            terminalOpen={terminalOpen}
+            setTerminalOpen={setTerminalOpen}
+            dataPanelOpen={dataPanelOpen}
+            setDataPanelOpen={setDataPanelOpen}
+            hideToolbar
+          />
+          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onAdd={(value) => void addTypedEntity(value, classifyEntityValue(value), false)} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} />}
+        </GraphCanvasStage>
+        <CaseDockDrawer open={caseDockOpen} onClose={() => setCaseDockOpen(false)}>
+          <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} leads={graph.leads || []} noise={graph.noise || []} compliance={graph.compliance || []} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} onPromoteLead={(id) => void promoteLead(id)} onRestoreNoise={(id) => void restoreNoise(id)} loading={loading} />
+        </CaseDockDrawer>
+        <InspectorDrawer open={dataPanelOpen} onClose={() => setDataPanelOpen(false)}>
+          <EntityInspector
+            open
+            selectedNode={selectedNode}
+            activeCase={activeCase}
+            target={target}
+            pendingEntityType={pendingEntityType}
+            pendingTransforms={pendingTransforms}
+            selectedTransforms={selectedTransforms}
+            analystPipeline={analystPipeline}
+            evidenceItems={evidenceItems}
+            selectedEvidenceRefs={selectedEvidenceRefs}
+            transformLoading={transformLoading}
+            onOpenEvidence={(id) => void openEvidence(id)}
+            onRunRegisteredTransform={(id) => void runRegisteredTransform(id)}
+            onRunCorrelationEngine={() => void runCorrelationEngine()}
+            onExportPacket={(format) => void exportPacket(format)}
+            onMarkNoise={() => void markSelectedNoise()}
+          />
+        </InspectorDrawer>
+        <TelemetryDrawer open={terminalOpen}>
+          <section className="graph-terminal premium-terminal">
+            <header><Terminal size={15} /><strong>Live Telemetry</strong><span>{taskLabel || "idle"}</span></header>
+            <div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Telemetry idle. Run a lookup or transform to stream events.</code></p>}</div>
+          </section>
+        </TelemetryDrawer>
         {oracleNode && <div className="graph-oracle-popover"><button type="button" onClick={() => setOracleNode(null)}>Close Oracle</button><OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode} title="Node Oracle" /></div>}
-      </div>
-      <EvidenceDrawer open={Boolean(evidenceDrawer)} evidence={evidenceDrawer} onClose={() => setEvidenceDrawer(null)} />
-      <ConfirmDialog open={Boolean(deleteCase)} title="Delete Investigation" message={deleteCase ? `Delete investigation ${caseTitle(deleteCase)} and all graph data?` : "Delete investigation?"} confirmLabel="Delete" onCancel={() => setDeleteCase(null)} onConfirm={() => void confirmDeleteActive()} />
+        <EntityPaletteDrawer open={paletteOpen} onClose={() => setPaletteOpen(false)} onPick={(kind) => { setAddDialogType(kind); setPaletteOpen(false); setAddDialogOpen(true); }} />
+        <AddEntityDialog open={addDialogOpen} initialType={addDialogType} onClose={() => setAddDialogOpen(false)} onAdd={(value, type, lookup) => void addTypedEntity(value, type, lookup)} />
+        <CommandPalette open={commandPaletteOpen} commands={graphCommands} onClose={() => setCommandPaletteOpen(false)} />
+        <EvidenceDrawer open={Boolean(evidenceDrawer)} evidence={evidenceDrawer} onClose={() => setEvidenceDrawer(null)} />
+        <ConfirmDialog open={Boolean(deleteCase)} title="Delete Investigation" message={deleteCase ? `Delete investigation ${caseTitle(deleteCase)} and all graph data?` : "Delete investigation?"} confirmLabel="Delete" onCancel={() => setDeleteCase(null)} onConfirm={() => void confirmDeleteActive()} />
+      </GraphWorkspaceLayout>
     </GraphPage>
   );
+
 }
 
 function routeFromLocation(): string {

@@ -21,7 +21,38 @@ export type ApiEdge = {
   created_at?: string;
 };
 
-export type GraphPayload = { nodes: ApiNode[]; edges: ApiEdge[] };
+export type GraphPayload = { nodes: ApiNode[]; edges: ApiEdge[]; leads?: ArtifactBinItem[]; noise?: ArtifactBinItem[]; compliance?: ArtifactBinItem[]; metadata?: GraphResponseMetadata };
+
+export type ArtifactBinItem = {
+  id?: string;
+  classification?: string;
+  artifact_class?: string;
+  graph_visibility?: string;
+  promotion_status?: string;
+  type?: string;
+  label?: string;
+  value?: string;
+  source?: string;
+  source_url?: string | null;
+  confidence?: string | number | null;
+  confidence_score?: number | null;
+  confidence_reason?: string | null;
+  noise_reason?: string | null;
+  relationship?: string | null;
+  raw_evidence_ref?: string | null;
+  legal_basis?: string | null;
+  public_source_note?: string | null;
+  parent_id?: string | null;
+  created_at?: string | null;
+  data?: Record<string, unknown>;
+};
+
+export type GraphResponseMetadata = {
+  created_entity_ids?: string[];
+  candidate_count?: number;
+  noise_count?: number;
+  compliance_count?: number;
+};
 
 export type TransformDefinition = {
   id: string;

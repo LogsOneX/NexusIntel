@@ -34,6 +34,7 @@ from backend.modules.entity_resolution import EntityResolutionEngine
 from backend.modules.serverless_invoker import invoke_serverless
 from backend.modules.watchlist_engine import diff_graph, graph_signature
 from backend.queues import TASK_ROUTES, ML_GPU_QUEUE, NETWORK_IO_QUEUE
+from backend.artifact_classifier import append_artifact_to_meta, artifact_record, route_artifact
 
 
 DATABASE_URL = os.getenv(
@@ -285,15 +286,104 @@ def upsert_relationship(
     return edge
 
 
+
+class PersistedArtifactIds(list[str]):
+    def __init__(self) -> None:
+        super().__init__()
+        self.candidate_count = 0
+        self.noise_count = 0
+        self.compliance_count = 0
+
+    @property
+    def created_entity_ids(self) -> list[str]:
+        return list(self)
+
+    def as_metadata(self) -> dict[str, Any]:
+        return {
+            "created_entity_ids": self.created_entity_ids,
+            "candidate_count": self.candidate_count,
+            "noise_count": self.noise_count,
+            "compliance_count": self.compliance_count,
+        }
+
+
+def store_non_entity_artifact(
+    db: Session,
+    investigation_id: str,
+    *,
+    bucket: str,
+    artifact: dict[str, Any],
+    classification: str,
+    default_source: str,
+    parent_id: str | None = None,
+) -> None:
+    record = artifact_record(artifact, classification, default_source=default_source, parent_id=parent_id)
+    investigation = db.get(Investigation, investigation_id)
+    if investigation:
+        investigation.meta = append_artifact_to_meta(investigation.meta or {}, bucket, record)
+        investigation.updated_at = datetime.utcnow()
+    if bucket == "compliance":
+        db.add(
+            Event(
+                id=str(uuid.uuid4()),
+                investigation_id=investigation_id,
+                task_id=None,
+                level="info",
+                message=f"Compliance artifact captured: {record.get('label') or record.get('type')}",
+                payload=record,
+            )
+        )
+
+
+def attach_signal_to_parent(
+    parent: Entity,
+    artifact: dict[str, Any],
+    classification: str,
+    *,
+    default_source: str,
+) -> None:
+    record = artifact_record(artifact, classification, default_source=default_source, parent_id=parent.id)
+    data = dict(parent.data or {})
+    signals = [item for item in (data.get("signals") or []) if isinstance(item, dict)]
+    existing_ids = {str(item.get("id")) for item in signals if item.get("id")}
+    if str(record.get("id")) not in existing_ids:
+        signals.append(record)
+    data["signals"] = signals[-100:]
+    data["signal_count"] = len(data["signals"])
+    parent.data = data
+
 def persist_artifacts(
     db: Session,
     investigation_id: str,
     parent: Entity,
     artifacts: list[dict[str, Any]],
     default_source: str,
-) -> list[str]:
-    created_ids: list[str] = []
+) -> PersistedArtifactIds:
+    persisted = PersistedArtifactIds()
     for artifact in artifacts:
+        route = route_artifact(artifact)
+        classification = route.artifact_class
+        if route.attach_to_parent:
+            attach_signal_to_parent(parent, artifact, classification, default_source=default_source)
+            continue
+        if route.meta_bucket:
+            store_non_entity_artifact(
+                db,
+                investigation_id,
+                bucket=route.meta_bucket,
+                artifact=artifact,
+                classification=classification,
+                default_source=default_source,
+                parent_id=parent.id,
+            )
+            if classification == "COMPLIANCE":
+                persisted.compliance_count += 1
+            elif classification == "CANDIDATE":
+                persisted.candidate_count += 1
+            elif classification == "NOISE":
+                persisted.noise_count += 1
+            continue
+
         node_type = str(artifact.get("type") or "signal")
         label = str(artifact.get("label") or artifact.get("value") or node_type)
         value = str(artifact.get("value") or label)
@@ -301,10 +391,16 @@ def persist_artifacts(
         confidence = str(artifact.get("confidence") or "medium")
         artifact_data = dict(artifact.get("data") or {})
         artifact_data["artifact"] = {
+            **artifact,
             "source": source,
             "relationship": artifact.get("relationship") or "derived_signal",
             "confidence": confidence,
+            "classification": classification,
+            "artifact_class": classification,
+            "graph_visibility": route.graph_visibility,
         }
+        artifact_data["artifact_class"] = classification
+        artifact_data["graph_visibility"] = route.graph_visibility
         node = upsert_entity(
             db,
             investigation_id,
@@ -326,9 +422,8 @@ def persist_artifacts(
                 confidence=confidence,
                 data={"validator": default_source, "artifact_type": node_type},
             )
-        created_ids.append(node.id)
-    return created_ids
-
+        persisted.append(node.id)
+    return persisted
 
 def mark_task(db: Session, task_id: str, status: str, error: str | None = None, result: dict[str, Any] | None = None) -> None:
     record = db.get(TaskRecord, task_id)

@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
-import { ArrowRightLeft, AtSign, Crosshair, Fingerprint, Globe2, Hash, KeyRound, MapPin, Network, Phone, ShieldAlert, Star, UserRound, WalletCards } from "lucide-react";
+import { ArrowRightLeft, AtSign, Crosshair, Fingerprint, Globe2, Hash, KeyRound, MapPin, Network, Phone, Star, UserRound, WalletCards } from "lucide-react";
 
-export type EntityKind = "username" | "email" | "domain" | "ip" | "phone" | "crypto_wallet" | "crypto_transaction" | "censored_email" | "censored_phone" | "google_profile" | "google_review" | "location" | "profile" | "platform" | "service" | "signal" | "guardrail" | "target";
+export type EntityKind = "username" | "email" | "domain" | "ip" | "phone" | "crypto_wallet" | "crypto_transaction" | "censored_email" | "censored_phone" | "google_profile" | "google_review" | "location" | "profile" | "platform" | "service" | "signal" | "target";
 
 type CustomNodeProps = {
   kind: string;
@@ -28,7 +28,6 @@ export const ENTITY_KIND_META: Record<string, { label: string; icon: ReactElemen
   platform: { label: "Platform", icon: <Hash size={15} />, description: "service host" },
   service: { label: "Service", icon: <Crosshair size={15} />, description: "observed capability" },
   signal: { label: "Signal", icon: <Crosshair size={15} />, description: "derived intelligence" },
-  guardrail: { label: "Guardrail", icon: <ShieldAlert size={15} />, description: "policy boundary" },
   target: { label: "Target", icon: <Crosshair size={15} />, description: "root entity" },
 };
 

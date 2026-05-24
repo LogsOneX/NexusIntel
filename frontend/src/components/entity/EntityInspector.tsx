@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileJson, GitBranch, NotebookPen, Download } from "lucide-react";
+import { FileJson, GitBranch, NotebookPen, Download, ShieldAlert } from "lucide-react";
 import type { AnalystPipeline, ApiNode, EvidenceRecord, Investigation, TransformDefinition } from "../../lib/types";
 import { readLocalJson, writeLocalJson } from "../../lib/storage";
 import Tabs from "../common/Tabs";
@@ -28,6 +28,7 @@ export default function EntityInspector({
   onRunRegisteredTransform,
   onRunCorrelationEngine,
   onExportPacket,
+  onMarkNoise,
 }: {
   open: boolean;
   selectedNode: ApiNode | null;
@@ -44,6 +45,7 @@ export default function EntityInspector({
   onRunRegisteredTransform: (id: string) => void;
   onRunCorrelationEngine: () => void;
   onExportPacket: (format: "html" | "pdf" | "json" | "csv" | "graph_json") => void;
+  onMarkNoise?: () => void;
 }) {
   const [tab, setTab] = useState("overview");
   const noteKey = selectedNode ? `nexusintel.note.${selectedNode.id}` : "nexusintel.note.pending";
@@ -80,7 +82,7 @@ export default function EntityInspector({
         {tab === "notes" && <section className="analyst-notes"><header><NotebookPen size={14} /><strong>Analyst Notes</strong></header><textarea value={notes} onChange={(event) => { setNotes(event.target.value); writeLocalJson(noteKey, event.target.value); }} placeholder="Local analyst notes. Stored in this browser until backend notes exist." /></section>}
         {!selectedNode && !target.trim() && tab === "overview" && <EmptyState title="Select or add an entity" message="The inspector is evidence-first. Node source, evidence hash, legal note, and confidence reason appear when available." />}
       </div>
-      <footer className="inspector-actions"><button type="button" onClick={onRunCorrelationEngine}><GitBranch size={13} />Correlate</button><button type="button" onClick={() => onExportPacket("html")}><Download size={13} />Report</button><button type="button" onClick={() => onExportPacket("json")}>Evidence JSON</button><button type="button" onClick={() => onExportPacket("csv")}>CSV IOCs</button></footer>
+      <footer className="inspector-actions"><button type="button" onClick={onRunCorrelationEngine}><GitBranch size={13} />Correlate</button>{selectedNode && onMarkNoise && <button className="danger" type="button" onClick={onMarkNoise}><ShieldAlert size={13} />Mark Noise</button>}<button type="button" onClick={() => onExportPacket("html")}><Download size={13} />Report</button><button type="button" onClick={() => onExportPacket("json")}>Evidence JSON</button><button type="button" onClick={() => onExportPacket("csv")}>CSV IOCs</button></footer>
       <LeadQueuePanel analystPipeline={analystPipeline} compact />
       <CoverageMatrix matrix={analystPipeline?.coverage_matrix || null} compact />
       {evidenceItems.length > selectedEvidenceRefs.length && <small className="muted-copy">Case evidence available: {evidenceItems.length}. Use Evidence Browser for full filtering.</small>}

@@ -32,6 +32,7 @@ from backend.osint.importers.csv_importers import preview_csv, spiderfoot_mappin
 from backend.osint.registry import registry
 from backend.osint.types import EntityInput, RawEvidenceObject, RunContext
 from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, html_packet, ioc_csv, json_packet, minimal_pdf
+from backend.artifact_classifier import append_artifact_to_meta, artifact_record, classify_artifact, dedupe_records, route_artifact
 
 
 DATABASE_URL = os.getenv(
@@ -211,6 +212,10 @@ class ManualEntityRequest(BaseModel):
     source_id: str | None = None
     relationship_type: str = "manual_link"
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class MarkNoiseRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=512)
 
 
 class LoginRequest(BaseModel):
@@ -466,14 +471,145 @@ def upsert_relationship(
     return edge
 
 
-def graph_payload(db: Session, investigation_id: str) -> dict[str, Any]:
-    entities = db.execute(select(Entity).where(Entity.investigation_id == investigation_id)).scalars().all()
-    relationships = db.execute(select(Relationship).where(Relationship.investigation_id == investigation_id)).scalars().all()
+def artifact_like_from_entity(entity: Entity) -> dict[str, Any]:
+    data = entity.data if isinstance(entity.data, dict) else {}
+    artifact = data.get("artifact") if isinstance(data.get("artifact"), dict) else {}
     return {
-        "nodes": [serialize_entity(entity) for entity in entities],
-        "edges": [serialize_relationship(edge) for edge in relationships],
+        **artifact,
+        "type": artifact.get("type") or entity.type,
+        "label": artifact.get("label") or entity.label,
+        "value": artifact.get("value") or entity.value,
+        "source": artifact.get("source") or entity.source,
+        "confidence": artifact.get("confidence") or entity.confidence,
+        "relationship": artifact.get("relationship") or data.get("relationship"),
+        "data": {**data, **(artifact.get("data") if isinstance(artifact.get("data"), dict) else {})},
     }
 
+
+def record_from_entity(entity: Entity, classification: str) -> dict[str, Any]:
+    record = artifact_record(artifact_like_from_entity(entity), classification, default_source=entity.source)
+    record["entity_id"] = entity.id
+    record["created_at"] = entity.created_at.isoformat() + "Z"
+    return record
+
+
+def graph_payload(db: Session, investigation_id: str) -> dict[str, Any]:
+    investigation = db.get(Investigation, investigation_id)
+    meta = investigation.meta if investigation and isinstance(investigation.meta, dict) else {}
+    entities = db.execute(select(Entity).where(Entity.investigation_id == investigation_id)).scalars().all()
+    relationships = db.execute(select(Relationship).where(Relationship.investigation_id == investigation_id)).scalars().all()
+    nodes: list[dict[str, Any]] = []
+    legacy_leads: list[dict[str, Any]] = []
+    legacy_noise: list[dict[str, Any]] = []
+    legacy_compliance: list[dict[str, Any]] = []
+    hidden_ids: set[str] = set()
+    for entity in entities:
+        entity_data = entity.data if isinstance(entity.data, dict) else {}
+        visibility = str(entity_data.get("graph_visibility") or "main_graph")
+        route = route_artifact(artifact_like_from_entity(entity))
+        if visibility in {"candidate_bin", "noise_bin", "compliance_log", "evidence_only", "signal_badge"} or not route.create_entity:
+            hidden_ids.add(entity.id)
+            record = record_from_entity(entity, route.artifact_class)
+            if visibility == "candidate_bin" or route.artifact_class == "CANDIDATE":
+                legacy_leads.append(record)
+            elif visibility == "noise_bin" or route.artifact_class == "NOISE":
+                legacy_noise.append(record)
+            elif visibility == "compliance_log" or route.artifact_class == "COMPLIANCE":
+                legacy_compliance.append(record)
+            continue
+        nodes.append(serialize_entity(entity))
+
+    edges = [
+        serialize_relationship(edge)
+        for edge in relationships
+        if edge.source_id not in hidden_ids and edge.target_id not in hidden_ids
+    ]
+
+    def meta_list(name: str) -> list[dict[str, Any]]:
+        value = meta.get(name)
+        return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+    leads = dedupe_records(meta_list("leads"), legacy_leads)
+    noise = dedupe_records(meta_list("noise"), legacy_noise)
+    compliance = dedupe_records(meta_list("compliance"), legacy_compliance)
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "leads": leads,
+        "noise": noise,
+        "compliance": compliance,
+        "metadata": {
+            "created_entity_ids": [node["id"] for node in nodes],
+            "candidate_count": len(leads),
+            "noise_count": len(noise),
+            "compliance_count": len(compliance),
+        },
+    }
+
+
+def meta_records(investigation: Investigation, bucket: str) -> list[dict[str, Any]]:
+    meta = investigation.meta if isinstance(investigation.meta, dict) else {}
+    records = meta.get(bucket)
+    return [item for item in records if isinstance(item, dict)] if isinstance(records, list) else []
+
+
+def meta_record_id(record: dict[str, Any]) -> str:
+    from backend.artifact_classifier import artifact_record_key
+    return str(record.get("id") or artifact_record_key(record))
+
+
+def pop_meta_record(investigation: Investigation, bucket: str, record_id: str) -> dict[str, Any] | None:
+    meta = dict(investigation.meta or {})
+    items = meta_records(investigation, bucket)
+    remaining: list[dict[str, Any]] = []
+    found: dict[str, Any] | None = None
+    for item in items:
+        item = {**item, "id": meta_record_id(item)}
+        if item["id"] == record_id and found is None:
+            found = item
+        else:
+            remaining.append(item)
+    if found is not None:
+        meta[bucket] = remaining
+        counts = dict(meta.get("artifact_counts") or {})
+        counts["candidate_count"] = len(meta.get("leads") or [])
+        counts["noise_count"] = len(meta.get("noise") or [])
+        counts["compliance_count"] = len(meta.get("compliance") or [])
+        meta["artifact_counts"] = counts
+        investigation.meta = meta
+        investigation.updated_at = datetime.utcnow()
+    return found
+
+
+def find_meta_record(investigation: Investigation, bucket: str, record_id: str) -> dict[str, Any] | None:
+    for item in meta_records(investigation, bucket):
+        item = {**item, "id": meta_record_id(item)}
+        if item["id"] == record_id:
+            return item
+    return None
+
+
+def entity_from_artifact_record(db: Session, investigation_id: str, record: dict[str, Any], *, promoted: bool = False) -> Entity:
+    record_type = str(record.get("type") or "profile")
+    label = str(record.get("label") or record.get("value") or record_type)
+    value = str(record.get("value") or label)
+    source = str(record.get("source") or "analyst_promotion")
+    confidence = str(record.get("confidence") or "weak")
+    data = dict(record.get("data") or {})
+    data.update(
+        {
+            "artifact_class": "ENTITY",
+            "graph_visibility": "main_graph",
+            "promotion_status": "promoted" if promoted else "restored",
+            "promoted_from": record.get("id"),
+            "source_url": record.get("source_url") or data.get("source_url"),
+            "raw_evidence_ref": record.get("raw_evidence_ref") or data.get("raw_evidence_ref"),
+            "confidence_score": record.get("confidence_score") or data.get("confidence_score"),
+            "confidence_reason": record.get("confidence_reason") or data.get("confidence_reason"),
+            "legal_basis": record.get("legal_basis") or data.get("legal_basis"),
+        }
+    )
+    return upsert_entity(db, investigation_id, type_=record_type, label=label, value=value, source=source, confidence=confidence, data=data)
 
 def create_task_record(db: Session, investigation_id: str, task_name: str, target: str) -> TaskRecord:
     record = TaskRecord(
@@ -593,6 +729,47 @@ def store_raw_evidence(db: Session, investigation_id: str, raw: RawEvidenceObjec
     return record
 
 
+
+def store_non_entity_artifact(
+    db: Session,
+    investigation_id: str,
+    *,
+    bucket: str,
+    artifact: dict[str, Any],
+    classification: str,
+    default_source: str,
+    parent_id: str | None = None,
+) -> dict[str, Any]:
+    record = artifact_record(artifact, classification, default_source=default_source, parent_id=parent_id)
+    investigation = db.get(Investigation, investigation_id)
+    if investigation:
+        investigation.meta = append_artifact_to_meta(investigation.meta or {}, bucket, record)
+        investigation.updated_at = datetime.utcnow()
+    if bucket == "compliance":
+        db.add(
+            Event(
+                id=str(uuid.uuid4()),
+                investigation_id=investigation_id,
+                task_id=None,
+                level="info",
+                message=f"Compliance artifact captured: {record.get('label') or record.get('type')}",
+                payload=record,
+            )
+        )
+    return record
+
+
+def attach_signal_to_parent(parent: Entity, artifact: dict[str, Any], classification: str, *, default_source: str) -> None:
+    record = artifact_record(artifact, classification, default_source=default_source, parent_id=parent.id)
+    data = dict(parent.data or {})
+    signals = [item for item in (data.get("signals") or []) if isinstance(item, dict)]
+    ids = {str(item.get("id")) for item in signals if item.get("id")}
+    if str(record.get("id")) not in ids:
+        signals.append(record)
+    data["signals"] = signals[-100:]
+    data["signal_count"] = len(data["signals"])
+    parent.data = data
+
 def persist_adapter_result(db: Session, investigation_id: str, parent: Entity | None, result) -> dict[str, Any]:
     evidence_by_key: dict[tuple[str, str | None], DataProvenance] = {}
     evidence_records: list[DataProvenance] = []
@@ -604,6 +781,9 @@ def persist_adapter_result(db: Session, investigation_id: str, parent: Entity | 
 
     created_nodes: list[dict[str, Any]] = []
     created_edges: list[dict[str, Any]] = []
+    candidate_count = 0
+    noise_count = 0
+    compliance_count = 0
     for artifact in result.artifacts:
         evidence = None
         if artifact.raw_evidence_ref:
@@ -614,6 +794,29 @@ def persist_adapter_result(db: Session, investigation_id: str, parent: Entity | 
             artifact.raw_evidence_ref = evidence.id
         artifact_dict = artifact.to_dict()
         artifact_dict.setdefault("public_source_note", artifact.public_source_note)
+        route = route_artifact(artifact_dict)
+        classification = route.artifact_class
+        if route.attach_to_parent and parent:
+            attach_signal_to_parent(parent, artifact_dict, classification, default_source=artifact.source)
+            continue
+        if route.meta_bucket:
+            store_non_entity_artifact(
+                db,
+                investigation_id,
+                bucket=route.meta_bucket,
+                artifact=artifact_dict,
+                classification=classification,
+                default_source=artifact.source,
+                parent_id=parent.id if parent else None,
+            )
+            if classification == "COMPLIANCE":
+                compliance_count += 1
+            elif classification == "CANDIDATE":
+                candidate_count += 1
+            elif classification == "NOISE":
+                noise_count += 1
+            continue
+
         entity = upsert_entity(
             db,
             investigation_id,
@@ -624,7 +827,9 @@ def persist_adapter_result(db: Session, investigation_id: str, parent: Entity | 
             confidence=confidence_label_from_score(artifact.confidence_score),
             data={
                 **artifact.data,
-                "artifact": artifact_dict,
+                "artifact": {**artifact_dict, "classification": classification, "artifact_class": classification, "graph_visibility": route.graph_visibility},
+                "artifact_class": classification,
+                "graph_visibility": route.graph_visibility,
                 "artifact_id": artifact.artifact_id,
                 "source": artifact.source,
                 "source_url": artifact.source_url,
@@ -666,6 +871,10 @@ def persist_adapter_result(db: Session, investigation_id: str, parent: Entity | 
         "edges": created_edges,
         "evidence": [serialize_provenance_record(record) for record in evidence_records],
         "warnings": list(result.warnings),
+        "created_entity_ids": [node["id"] for node in created_nodes],
+        "candidate_count": candidate_count,
+        "noise_count": noise_count,
+        "compliance_count": compliance_count,
     }
 
 
@@ -1116,6 +1325,105 @@ def get_graph(investigation_id: str, db: Session = Depends(get_db)) -> ApiRespon
     if not investigation:
         raise HTTPException(status_code=404, detail="Investigation not found")
     return ApiResponse(ok=True, data=graph_payload(db, investigation_id))
+
+
+
+@app.get("/api/v1/investigations/{investigation_id}/leads", response_model=ApiResponse)
+def investigation_leads(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return ApiResponse(ok=True, data={"items": graph_payload(db, investigation_id).get("leads", [])})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/noise", response_model=ApiResponse)
+def investigation_noise(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return ApiResponse(ok=True, data={"items": graph_payload(db, investigation_id).get("noise", [])})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/compliance", response_model=ApiResponse)
+def investigation_compliance(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return ApiResponse(ok=True, data={"items": graph_payload(db, investigation_id).get("compliance", [])})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/leads/{lead_id}/promote", response_model=ApiResponse)
+def promote_lead(investigation_id: str, lead_id: str, db: Session = Depends(get_db), operator: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    record = pop_meta_record(investigation, "leads", lead_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    entity = entity_from_artifact_record(db, investigation_id, record, promoted=True)
+    parent_id = record.get("parent_id")
+    if parent_id and parent_id != entity.id and db.get(Entity, str(parent_id)):
+        upsert_relationship(
+            db,
+            investigation_id,
+            source_id=str(parent_id),
+            target_id=entity.id,
+            type_=str(record.get("relationship") or "PROMOTED_LEAD"),
+            source="analyst_promotion",
+            confidence=str(record.get("confidence") or "weak"),
+            data={"promotion_status": "promoted", "lead_id": lead_id, "operator": operator},
+        )
+    db.add(Event(id=str(uuid.uuid4()), investigation_id=investigation_id, task_id=None, level="info", message=f"Lead promoted to graph: {entity.label}", payload={"lead": record, "entity_id": entity.id, "operator": operator}))
+    db.commit()
+    return ApiResponse(ok=True, data={"node": serialize_entity(entity), "graph": graph_payload(db, investigation_id)})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/entities/{node_id}/mark-noise", response_model=ApiResponse)
+def mark_entity_noise(investigation_id: str, node_id: str, payload: MarkNoiseRequest | None = None, db: Session = Depends(get_db), operator: str = Depends(current_operator)) -> ApiResponse:
+    entity = db.get(Entity, node_id)
+    if not entity or entity.investigation_id != investigation_id:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    reason = (payload.reason if payload else None) or "Analyst marked this entity as noise."
+    data = dict(entity.data or {})
+    data.update({"artifact_class": "NOISE", "graph_visibility": "noise_bin", "noise_reason": reason, "promotion_status": "noise"})
+    entity.data = data
+    record = store_non_entity_artifact(
+        db,
+        investigation_id,
+        bucket="noise",
+        artifact={"type": entity.type, "label": entity.label, "value": entity.value, "source": entity.source, "confidence": entity.confidence, "noise_reason": reason, "data": data},
+        classification="NOISE",
+        default_source=entity.source,
+        parent_id=None,
+    )
+    record["entity_id"] = entity.id
+    investigation = db.get(Investigation, investigation_id)
+    if investigation:
+        investigation.meta = append_artifact_to_meta(investigation.meta or {}, "noise", record)
+    db.add(Event(id=str(uuid.uuid4()), investigation_id=investigation_id, task_id=None, level="warning", message=f"Entity marked as noise: {entity.label}", payload={"entity_id": entity.id, "reason": reason, "operator": operator}))
+    db.commit()
+    return ApiResponse(ok=True, data={"noise": record, "graph": graph_payload(db, investigation_id)})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/noise/{noise_id}/restore", response_model=ApiResponse)
+def restore_noise(investigation_id: str, noise_id: str, db: Session = Depends(get_db), operator: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    record = pop_meta_record(investigation, "noise", noise_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Noise record not found")
+    entity = db.get(Entity, str(record.get("entity_id"))) if record.get("entity_id") else None
+    if entity and entity.investigation_id == investigation_id:
+        data = dict(entity.data or {})
+        data.update({"artifact_class": "ENTITY", "graph_visibility": "main_graph", "promotion_status": "restored"})
+        data.pop("noise_reason", None)
+        entity.data = data
+    else:
+        entity = entity_from_artifact_record(db, investigation_id, record, promoted=False)
+    db.add(Event(id=str(uuid.uuid4()), investigation_id=investigation_id, task_id=None, level="info", message=f"Noise restored to graph: {entity.label}", payload={"noise": record, "entity_id": entity.id, "operator": operator}))
+    db.commit()
+    return ApiResponse(ok=True, data={"node": serialize_entity(entity), "graph": graph_payload(db, investigation_id)})
 
 
 @app.get("/api/v1/investigations/{investigation_id}/health", response_model=ApiResponse)

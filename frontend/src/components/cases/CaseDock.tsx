@@ -1,9 +1,12 @@
 import { Activity, Database, FolderOpen, Plus, Trash2 } from "lucide-react";
-import type { CaseHealth, Investigation } from "../../lib/types";
+import type { ArtifactBinItem, CaseHealth, Investigation } from "../../lib/types";
 import { caseTitle } from "../../lib/format";
 import CaseHealthCard from "./CaseHealthCard";
+import CandidateBin from "../leads/CandidateBin";
+import NoiseBin from "../noise/NoiseBin";
+import ComplianceLog from "../compliance/ComplianceLog";
 
-export default function CaseDock({ investigations, activeCase, health, onSelect, onCreateBlank, onDeleteActive, onClearActive, loading }: { investigations: Investigation[]; activeCase: Investigation | null; health: CaseHealth | null; onSelect: (id: string) => void; onCreateBlank: () => void; onDeleteActive: () => void; onClearActive: () => void; loading: boolean }) {
+export default function CaseDock({ investigations, activeCase, health, leads = [], noise = [], compliance = [], onSelect, onCreateBlank, onDeleteActive, onClearActive, onPromoteLead, onRestoreNoise, loading }: { investigations: Investigation[]; activeCase: Investigation | null; health: CaseHealth | null; leads?: ArtifactBinItem[]; noise?: ArtifactBinItem[]; compliance?: ArtifactBinItem[]; onSelect: (id: string) => void; onCreateBlank: () => void; onDeleteActive: () => void; onClearActive: () => void; onPromoteLead?: (id: string) => void; onRestoreNoise?: (id: string) => void; loading: boolean }) {
   return (
     <aside className="graph-case-dock premium-case-dock" aria-label="Investigation lifecycle controls">
       <header><div><FolderOpen size={14} /><strong>Investigation</strong></div><span>{activeCase ? activeCase.status : "detached"}</span></header>
@@ -18,6 +21,9 @@ export default function CaseDock({ investigations, activeCase, health, onSelect,
       </div>
       <div className="case-health-strip"><span><Activity size={13} />Health {health ? `${health.score}%` : "--"}</span><code>{health?.status || "no graph"}</code></div>
       <CaseHealthCard health={health} />
+      <CandidateBin items={leads} onPromote={onPromoteLead} />
+      <NoiseBin items={noise} onRestore={onRestoreNoise} />
+      <ComplianceLog items={compliance} />
     </aside>
   );
 }
