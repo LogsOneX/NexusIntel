@@ -13,6 +13,7 @@ export default function AppShell({ route, user, collapsed, setCollapsed, navigat
     { id: "graph", label: "Open Network Graph", group: "Navigation", action: () => navigate("/graph") },
     { id: "watchlist", label: "Open Threat Watchlist", group: "Navigation", action: () => navigate("/watchlist") },
     { id: "evidence", label: "Open Evidence Vault", group: "Navigation", action: () => navigate("/evidence") },
+    { id: "reports", label: "Open Reports", group: "Navigation", action: () => navigate("/reports") },
     { id: "transforms", label: "Open Transform Library", group: "Navigation", action: () => navigate("/transforms") },
     { id: "oracle", label: "Ask Oracle", group: "Navigation", action: () => navigate("/oracle") },
     { id: "settings", label: "Open Connector Center", group: "Navigation", action: () => navigate("/settings") },
@@ -31,9 +32,9 @@ export default function AppShell({ route, user, collapsed, setCollapsed, navigat
   }, []);
 
   return (
-    <main className={collapsed ? "command-shell nav-collapsed premium-shell" : "command-shell premium-shell"}>
+    <main className={collapsed ? "nexus-shell command-shell nav-collapsed premium-shell" : "nexus-shell command-shell premium-shell"}>
       <SidebarNav route={route} user={user} collapsed={collapsed} setCollapsed={setCollapsed} navigate={navigate} logout={logout} onOpenCommandPalette={() => setPaletteOpen(true)} />
-      <section className="command-content premium-content">{children}</section>
+      <section className="nexus-main command-content premium-content">{children}</section>
       <CommandPalette open={paletteOpen} commands={allCommands} onClose={() => setPaletteOpen(false)} />
     </main>
   );

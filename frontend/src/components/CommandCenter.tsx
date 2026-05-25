@@ -624,7 +624,7 @@ function GraphHub({ token, navigate }: PageProps) {
             onOpenAddEntity={(kind) => { setAddDialogType(kind || "username"); setAddDialogOpen(true); }}
             hideToolbar
           />
-          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onOpenAdd={(kind) => { setAddDialogType(kind); setAddDialogOpen(true); }} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} />}
+          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onOpenAdd={(kind) => { setAddDialogType(kind); setAddDialogOpen(true); }} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} onOpenImport={() => navigate("/evidence")} />}
         </GraphCanvasStage>
         <CaseDockDrawer open={caseDockOpen} onClose={() => setCaseDockOpen(false)}>
           <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} leads={graph.leads || []} noise={graph.noise || []} compliance={graph.compliance || []} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} onPromoteLead={(id) => void promoteLead(id)} onRestoreNoise={(id) => void restoreNoise(id)} loading={loading} />
@@ -701,6 +701,7 @@ export default function CommandCenter() {
   if (route === "/graph") page = <GraphHub {...props} />;
   if (route === "/watchlist") page = <ThreatWatchlistPage {...props} />;
   if (route === "/evidence") page = <EvidenceVaultPage {...props} />;
+  if (route === "/reports") page = <EvidenceVaultPage {...props} />;
   if (route === "/transforms") page = <TransformLibraryPage {...props} />;
   if (route === "/oracle") page = <OraclePage {...props} />;
   if (route === "/settings") page = <SettingsPage {...props} />;
