@@ -1,7 +1,7 @@
 import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import cytoscape from "cytoscape";
-import { Clock3, Crosshair, Download, GitBranch, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2 } from "lucide-react";
+import { Clock3, Crosshair, Download, GitBranch, Maximize2, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { EntityPaletteItem } from "../components/CustomNode";
 import TimelineView from "../components/TimelineView";
 
@@ -204,16 +204,16 @@ function cardIconForNodeType(type: string): string {
   const visual = visualForNodeType(type);
   const icon = NODE_ICON_PATHS[visual.icon] || NODE_ICON_PATHS.target;
   const code = visual.code.length > 6 ? visual.code.slice(0, 6) : visual.code;
-  return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="156" height="58" viewBox="0 0 156 58">
-    <rect x="1" y="1" width="154" height="56" rx="8" fill="#1A1A1C" stroke="#2D2D30"/>
-    <rect x="1" y="1" width="4" height="56" rx="2" fill="${visual.accent}"/>
-    <rect x="12" y="10" width="38" height="38" rx="8" fill="#0F0F11" stroke="#2D2D30"/>
-    <svg x="17" y="15" width="28" height="28" viewBox="0 0 64 64">
+  return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="132" height="94" viewBox="0 0 132 94">
+    <rect x="18" y="44" width="96" height="38" rx="8" fill="#1A1A1C" stroke="#2D2D30"/>
+    <rect x="24" y="78" width="84" height="3" rx="1.5" fill="${visual.accent}" opacity=".72"/>
+    <circle cx="66" cy="32" r="29" fill="#1A1A1C" stroke="#2D2D30"/>
+    <circle cx="66" cy="32" r="24" fill="#0F0F11" stroke="${visual.accent}" stroke-width="2"/>
+    <svg x="50" y="16" width="32" height="32" viewBox="0 0 64 64">
       <g fill="none" stroke="${visual.accent}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">${icon}</g>
     </svg>
-    <rect x="108" y="8" width="40" height="14" rx="4" fill="#0F0F11" stroke="#2D2D30"/>
-    <text x="128" y="18" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="7" font-weight="700" fill="#8B8B91">${code}</text>
-    <rect x="58" y="43" width="44" height="3" rx="1.5" fill="${visual.accent}" opacity=".6"/>
+    <rect x="78" y="45" width="31" height="13" rx="4" fill="#0F0F11" stroke="#2D2D30"/>
+    <text x="93.5" y="54" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6.5" font-weight="700" fill="#8B8B91">${code}</text>
   </svg>`);
 }
 
@@ -884,15 +884,15 @@ export default function GraphCanvas({
         {
           selector: "node",
           style: {
-            width: 156,
-            height: 58,
+            width: 132,
+            height: 94,
             shape: "data(nodeShape)",
             "background-color": "#1A1A1C",
             "background-opacity": 1,
             "background-image": "data(icon)",
             "background-fit": "cover",
-            "background-width": "156px",
-            "background-height": "58px",
+            "background-width": "132px",
+            "background-height": "94px",
             "background-position-x": "50%",
             "background-position-y": "50%",
             "border-width": 1,
@@ -900,14 +900,14 @@ export default function GraphCanvas({
             color: "#E0E0E3",
             label: "data(label)",
             "font-family": "Inter, Space Grotesk, system-ui, sans-serif",
-            "font-size": 10.5,
+            "font-size": 10,
             "font-weight": 700,
             "text-wrap": "ellipsis",
-            "text-max-width": 82,
-            "text-valign": "center",
+            "text-max-width": 78,
+            "text-valign": "bottom",
             "text-halign": "center",
-            "text-margin-x": 24,
-            "text-margin-y": -1,
+            "text-margin-x": 0,
+            "text-margin-y": -22,
             "text-background-color": "transparent",
             "text-background-opacity": 0,
             "text-background-padding": 0,
@@ -945,7 +945,7 @@ export default function GraphCanvas({
         },
         {
           selector: "node.root-entity",
-          style: { width: 176, height: 64, "background-width": "176px", "background-height": "64px", "border-width": 2, "border-color": "#EF4444", "font-size": 11.5, "text-max-width": 98 },
+          style: { width: 148, height: 104, "background-width": "148px", "background-height": "104px", "border-width": 2, "border-color": "#EF4444", "font-size": 10.5, "text-max-width": 90, "text-margin-y": -24 },
         },
         {
           selector: "node.processing",
@@ -1455,6 +1455,22 @@ export default function GraphCanvas({
           </div>
           <input type="range" min="0" max="100" value={timeCursor} onChange={(event) => setTimeCursor(Number(event.target.value))} />
         </div>
+      )}
+
+      {!timelineMode && (
+        <>
+          <div className="graph-mini-stats" aria-label="Graph stats">
+            <span>Entities <strong>{graphNodes.length}</strong></span>
+            <span>Relations <strong>{graphEdges.length}</strong></span>
+            <span>Layout <strong>{layoutMode}</strong></span>
+          </div>
+          <div className="graph-floating-controls" aria-label="Graph viewport controls">
+            <button type="button" onClick={() => cyRef.current?.zoom({ level: Math.min((cyRef.current?.zoom() || 1) + 0.16, 2.8), renderedPosition: { x: (containerRef.current?.clientWidth || 0) / 2, y: (containerRef.current?.clientHeight || 0) / 2 } })} title="Zoom in"><ZoomIn size={15} /></button>
+            <button type="button" onClick={() => cyRef.current?.zoom({ level: Math.max((cyRef.current?.zoom() || 1) - 0.16, 0.18), renderedPosition: { x: (containerRef.current?.clientWidth || 0) / 2, y: (containerRef.current?.clientHeight || 0) / 2 } })} title="Zoom out"><ZoomOut size={15} /></button>
+            <button type="button" onClick={() => cyRef.current?.fit(undefined, 90)} title="Fit graph"><Maximize2 size={15} /></button>
+            <button type="button" onClick={() => runLayout(layoutMode, true)} title="Refresh layout"><RotateCcw size={15} /></button>
+          </div>
+        </>
       )}
 
       {contextMenu && typeof document !== "undefined" && createPortal(
