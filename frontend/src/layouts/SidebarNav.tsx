@@ -1,4 +1,4 @@
-import { Bot, Briefcase, ChevronLeft, ChevronRight, Database, GitBranch, Home, LogOut, Network, Radar, Search, Settings, UserCircle } from "lucide-react";
+import { Bot, Briefcase, ChevronLeft, ChevronRight, Database, FileText, GitBranch, Home, LogOut, Network, Radar, Search, Settings, UserCircle } from "lucide-react";
 
 const ROUTES = [
   { path: "/dashboard", label: "Dashboard", icon: Home },
@@ -7,6 +7,7 @@ const ROUTES = [
   { path: "/graph", label: "Network Graph", icon: Network },
   { path: "/watchlist", label: "Threat Watchlist", icon: Radar },
   { path: "/evidence", label: "Evidence Vault", icon: Database },
+  { path: "/reports", label: "Reports", icon: FileText },
   { path: "/transforms", label: "Transforms", icon: GitBranch },
   { path: "/oracle", label: "AI Oracle", icon: Bot },
   { path: "/settings", label: "Settings", icon: Settings },
@@ -15,7 +16,7 @@ const ROUTES = [
 
 export default function SidebarNav({ route, user, collapsed, setCollapsed, navigate, logout, onOpenCommandPalette }: { route: string; user: string; collapsed: boolean; setCollapsed: (value: boolean) => void; navigate: (path: string) => void; logout: () => void; onOpenCommandPalette: () => void }) {
   return (
-    <aside className="command-sidebar premium-sidebar">
+    <aside className="nexus-sidebar command-sidebar premium-sidebar">
       <button className="command-brand premium-brand" type="button" onClick={onOpenCommandPalette} title="Open command palette">
         <span className="brand-monogram">NX</span>
         <div><strong>NexusIntel</strong><span>Analyst Command</span></div>

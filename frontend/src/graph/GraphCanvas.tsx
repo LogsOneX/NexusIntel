@@ -1,7 +1,7 @@
 import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import cytoscape from "cytoscape";
-import { Clock3, Crosshair, Download, GitBranch, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2 } from "lucide-react";
+import { Clock3, Crosshair, Download, GitBranch, Maximize2, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { EntityPaletteItem } from "../components/CustomNode";
 import TimelineView from "../components/TimelineView";
 
@@ -126,37 +126,119 @@ function cyShape(_shape: GraphNode["nodeShape"]): string {
 }
 
 function svgDataUri(svg: string): string {
-  const cleanSvg = svg
-    .replace(/<rect width="64" height="64" fill="#111111"\/>/g, "")
-    .replace(/stroke-width="4"/g, 'stroke-width="5"');
-  return `data:image/svg+xml;utf8,${encodeURIComponent(cleanSvg)}`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-const CY_NODE_ICONS: Record<string, string> = {
-  username: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><circle cx="32" cy="22" r="10" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M14 54c3-13 11-20 18-20s15 7 18 20" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="square"/></svg>`),
-  name: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><circle cx="32" cy="22" r="10" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M14 54c3-13 11-20 18-20s15 7 18 20" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="square"/></svg>`),
-  email: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><rect x="10" y="18" width="44" height="30" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M12 20l20 17 20-17" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="square"/></svg>`),
-  domain: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><circle cx="32" cy="32" r="22" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M10 32h44M32 10c8 8 8 36 0 44M32 10c-8 8-8 36 0 44" fill="none" stroke="#ffffff" stroke-width="3"/></svg>`),
-  ip: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><rect x="12" y="14" width="40" height="12" fill="none" stroke="#ffffff" stroke-width="4"/><rect x="12" y="30" width="40" height="12" fill="none" stroke="#ffffff" stroke-width="4"/><rect x="12" y="46" width="40" height="6" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M20 20h4M20 36h4" stroke="#ffffff" stroke-width="4"/></svg>`),
-  phone: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M22 10h20v44H22z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M29 47h6" stroke="#ffffff" stroke-width="4"/></svg>`),
-  crypto_wallet: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M10 20h44v30H10z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M44 30h12v12H44z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M22 42V18h24" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
-  crypto_transaction: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M12 22h34l-8-8M46 22l-8 8" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M52 42H18l8-8M18 42l8 8" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
-  transaction: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M12 22h34l-8-8M46 22l-8 8" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M52 42H18l8-8M18 42l8 8" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
-  censored_email: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M16 30h32v22H16z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M23 30v-7a9 9 0 0118 0v7" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M32 39v6" stroke="#ffffff" stroke-width="4"/></svg>`),
-  censored_phone: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M16 30h32v22H16z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M23 30v-7a9 9 0 0118 0v7" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M32 39v6" stroke="#ffffff" stroke-width="4"/></svg>`),
-  google_review: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M32 10l6 15h16l-13 9 5 16-14-10-14 10 5-16-13-9h16z" fill="none" stroke="#ffffff" stroke-width="4" stroke-linejoin="miter"/></svg>`),
-  location: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M32 56s18-18 18-32A18 18 0 1014 24c0 14 18 32 18 32z" fill="none" stroke="#ffffff" stroke-width="4"/><circle cx="32" cy="24" r="6" fill="none" stroke="#ffffff" stroke-width="4"/></svg>`),
-  profile: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#111111"/><path d="M32 10l20 12v20L32 54 12 42V22z" fill="none" stroke="#ffffff" stroke-width="4"/><path d="M24 32h16" stroke="#ffffff" stroke-width="4"/></svg>`),
+type NodeVisual = { accent: string; code: string; icon: string; family: string };
+
+const NODE_ICON_PATHS: Record<string, string> = {
+  identity: `<circle cx="32" cy="21" r="9"/><path d="M15 53c3-12 10-18 17-18s14 6 17 18"/>`,
+  fingerprint: `<path d="M20 28a12 12 0 0124 0v4"/><path d="M14 34v-6a18 18 0 0136 0v5"/><path d="M25 56c-3-8-3-16-1-24a8 8 0 0116 0c1 8-1 15-5 21"/><path d="M32 30v10"/>`,
+  mail: `<rect x="10" y="18" width="44" height="30" rx="2"/><path d="M12 21l20 16 20-16"/>`,
+  phone: `<path d="M21 10h22v44H21z"/><path d="M29 47h6"/>`,
+  globe: `<circle cx="32" cy="32" r="22"/><path d="M10 32h44M32 10c8 8 8 36 0 44M32 10c-8 8-8 36 0 44"/>`,
+  link: `<path d="M25 23l-5 5a10 10 0 0014 14l5-5"/><path d="M39 41l5-5a10 10 0 00-14-14l-5 5"/><path d="M25 39l14-14"/>`,
+  server: `<rect x="12" y="14" width="40" height="12" rx="2"/><rect x="12" y="30" width="40" height="12" rx="2"/><rect x="12" y="46" width="40" height="8" rx="2"/><path d="M20 20h4M20 36h4M20 50h4"/>`,
+  pin: `<path d="M32 56s18-18 18-32A18 18 0 1014 24c0 14 18 32 18 32z"/><circle cx="32" cy="24" r="6"/>`,
+  image: `<rect x="12" y="16" width="40" height="32" rx="3"/><path d="M18 42l10-10 8 8 5-5 7 7"/><circle cx="42" cy="25" r="4"/>`,
+  wallet: `<path d="M10 20h44v30H10z"/><path d="M44 30h12v12H44z"/><path d="M22 42V18h24"/>`,
+  transaction: `<path d="M12 22h34l-8-8M46 22l-8 8"/><path d="M52 42H18l8-8M18 42l8 8"/>`,
+  file: `<path d="M18 10h21l9 9v35H18z"/><path d="M39 10v12h9M25 32h15M25 41h12"/>`,
+  star: `<path d="M32 10l6 15h16l-13 9 5 16-14-10-14 10 5-16-13-9h16z"/>`,
+  lock: `<path d="M16 30h32v22H16z"/><path d="M23 30v-7a9 9 0 0118 0v7"/><path d="M32 39v6"/>`,
+  alert: `<path d="M32 9l25 44H7z"/><path d="M32 24v13M32 45h.1"/>`,
+  target: `<circle cx="32" cy="32" r="20"/><circle cx="32" cy="32" r="8"/><path d="M32 6v10M32 48v10M6 32h10M48 32h10"/>`,
 };
 
+const NODE_VISUALS: Record<string, NodeVisual> = {
+  username: { accent: "#60a5fa", code: "USER", icon: "fingerprint", family: "identity" },
+  name: { accent: "#60a5fa", code: "ALIAS", icon: "identity", family: "identity" },
+  person_alias: { accent: "#60a5fa", code: "ALIAS", icon: "identity", family: "identity" },
+  profile: { accent: "#60a5fa", code: "PROF", icon: "fingerprint", family: "identity" },
+  account: { accent: "#60a5fa", code: "ACCT", icon: "identity", family: "identity" },
+  email: { accent: "#2dd4bf", code: "EMAIL", icon: "mail", family: "contact" },
+  masked_email: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
+  censored_email: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
+  phone: { accent: "#2dd4bf", code: "PHONE", icon: "phone", family: "contact" },
+  masked_phone: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
+  censored_phone: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
+  domain: { accent: "#a78bfa", code: "DNS", icon: "globe", family: "infra" },
+  url: { accent: "#a78bfa", code: "URL", icon: "link", family: "infra" },
+  ip: { accent: "#a78bfa", code: "IP", icon: "server", family: "infra" },
+  dns_record: { accent: "#a78bfa", code: "DNS", icon: "server", family: "infra" },
+  certificate: { accent: "#a78bfa", code: "CERT", icon: "file", family: "infra" },
+  service: { accent: "#a78bfa", code: "SVC", icon: "server", family: "infra" },
+  technology: { accent: "#a78bfa", code: "TECH", icon: "server", family: "infra" },
+  google_profile: { accent: "#f472b6", code: "MAPS", icon: "pin", family: "geo" },
+  google_maps_profile: { accent: "#f472b6", code: "MAPS", icon: "pin", family: "geo" },
+  google_review: { accent: "#f472b6", code: "REVIEW", icon: "star", family: "geo" },
+  location: { accent: "#f472b6", code: "LOC", icon: "pin", family: "geo" },
+  place: { accent: "#f472b6", code: "PLACE", icon: "pin", family: "geo" },
+  image_asset: { accent: "#f59e0b", code: "IMG", icon: "image", family: "asset" },
+  avatar: { accent: "#f59e0b", code: "IMG", icon: "image", family: "asset" },
+  favicon: { accent: "#f59e0b", code: "HASH", icon: "image", family: "asset" },
+  hash: { accent: "#f59e0b", code: "HASH", icon: "file", family: "asset" },
+  document: { accent: "#94a3b8", code: "DOC", icon: "file", family: "asset" },
+  evidence: { accent: "#94a3b8", code: "EV", icon: "file", family: "asset" },
+  crypto_wallet: { accent: "#34d399", code: "WALLET", icon: "wallet", family: "crypto" },
+  wallet: { accent: "#34d399", code: "WALLET", icon: "wallet", family: "crypto" },
+  crypto_transaction: { accent: "#34d399", code: "TX", icon: "transaction", family: "crypto" },
+  transaction: { accent: "#34d399", code: "TX", icon: "transaction", family: "crypto" },
+  suspicious_domain: { accent: "#ef4444", code: "RISK", icon: "alert", family: "threat" },
+  breach_record: { accent: "#ef4444", code: "BREACH", icon: "alert", family: "threat" },
+  indicator: { accent: "#ef4444", code: "IOC", icon: "alert", family: "threat" },
+  target: { accent: "#ef4444", code: "ROOT", icon: "target", family: "system" },
+  investigation_root: { accent: "#ef4444", code: "ROOT", icon: "target", family: "system" },
+  note: { accent: "#94a3b8", code: "NOTE", icon: "file", family: "system" },
+  signal: { accent: "#94a3b8", code: "SIG", icon: "target", family: "system" },
+};
+
+function visualForNodeType(type: string): NodeVisual {
+  const normalized = type.toLowerCase();
+  if (normalized.includes("risk") || normalized.includes("suspicious")) return NODE_VISUALS.suspicious_domain;
+  if (normalized.includes("candidate") || normalized.includes("possible")) return { accent: "#f59e0b", code: "LEAD", icon: "target", family: "candidate" };
+  return NODE_VISUALS[normalized] || NODE_VISUALS.profile;
+}
+
+function cardIconForNodeType(type: string): string {
+  const visual = visualForNodeType(type);
+  const icon = NODE_ICON_PATHS[visual.icon] || NODE_ICON_PATHS.target;
+  const code = visual.code.length > 6 ? visual.code.slice(0, 6) : visual.code;
+  return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="132" height="94" viewBox="0 0 132 94">
+    <rect x="18" y="44" width="96" height="38" rx="8" fill="#1A1A1C" stroke="#2D2D30"/>
+    <rect x="24" y="78" width="84" height="3" rx="1.5" fill="${visual.accent}" opacity=".72"/>
+    <circle cx="66" cy="32" r="29" fill="#1A1A1C" stroke="#2D2D30"/>
+    <circle cx="66" cy="32" r="24" fill="#0F0F11" stroke="${visual.accent}" stroke-width="2"/>
+    <svg x="50" y="16" width="32" height="32" viewBox="0 0 64 64">
+      <g fill="none" stroke="${visual.accent}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">${icon}</g>
+    </svg>
+    <rect x="78" y="45" width="31" height="13" rx="4" fill="#0F0F11" stroke="#2D2D30"/>
+    <text x="93.5" y="54" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6.5" font-weight="700" fill="#8B8B91">${code}</text>
+  </svg>`);
+}
+
+const CY_NODE_ICONS: Record<string, string> = {};
+
 function iconForNodeType(type: string): string {
-  return CY_NODE_ICONS[type] || CY_NODE_ICONS.profile;
+  const normalized = type.toLowerCase();
+  if (!CY_NODE_ICONS[normalized]) CY_NODE_ICONS[normalized] = cardIconForNodeType(normalized);
+  return CY_NODE_ICONS[normalized];
 }
 
 function displayTypeLabel(type: string): string {
   if (type === "google_review") return "[REVIEW]";
   if (type === "location") return "[LOCATION]";
   return `[${upperSnake(type)}]`;
+}
+
+function compactNodeLabel(value: string): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= 24) return clean;
+  if (clean.includes("@")) {
+    const [local, domain] = clean.split("@");
+    return `${local.slice(0, 10)}…@${(domain || "").slice(0, 10)}`;
+  }
+  return `${clean.slice(0, 21)}…`;
 }
 
 function labelForApiNode(node: ApiGraphNode): string {
@@ -446,12 +528,13 @@ function passiveNodeTag(node: GraphNode): "INTERNAL" | "SUSPICIOUS" | null {
 function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
   const confidence = String(node.nodeProperties.confidence || "medium");
   const tag = passiveNodeTag(node);
+  const visual = visualForNodeType(node.nodeType);
+  const root = node.nodeProperties.role === "root" || node.nodeType === "target" || node.nodeType === "investigation_root";
   return {
     group: "nodes",
     data: {
       id: node.id,
-      label: `${tag ? `[${tag}] ` : ""}${node.nodeLabel}
-[${upperSnake(node.nodeType)}]`,
+      label: compactNodeLabel(`${tag ? `[${tag}] ` : ""}${node.nodeLabel}`),
       rawLabel: node.nodeLabel,
       tag: tag || "",
       nodeType: node.nodeType,
@@ -461,9 +544,11 @@ function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
       confidence,
       nodeShape: cyShape(node.nodeShape),
       flag: node.nodeFlag || "",
+      family: visual.family,
+      accent: visual.accent,
     },
     position: { x: node.x, y: node.y },
-    classes: `entity shape-${node.nodeShape} ${confidence === "low" ? "low-confidence" : ""} ${node.nodeType.startsWith("censored_") ? "censored-entity" : ""} ${node.nodeType === "location" ? "location-entity" : ""} ${tag === "INTERNAL" ? "tag-internal" : ""} ${tag === "SUSPICIOUS" ? "tag-suspicious" : ""}`,
+    classes: `entity premium-entity family-${visual.family} ${root ? "root-entity" : ""} ${confidence === "low" ? "low-confidence" : ""} ${node.nodeType.startsWith("censored_") ? "censored-entity" : ""} ${node.nodeType === "location" ? "location-entity" : ""} ${tag === "INTERNAL" ? "tag-internal" : ""} ${tag === "SUSPICIOUS" ? "tag-suspicious" : ""}`,
   };
 }
 
@@ -799,32 +884,33 @@ export default function GraphCanvas({
         {
           selector: "node",
           style: {
-            width: 70,
-            height: 54,
+            width: 132,
+            height: 94,
             shape: "data(nodeShape)",
-            "background-color": "#111419",
+            "background-color": "#1A1A1C",
             "background-opacity": 1,
             "background-image": "data(icon)",
-            "background-fit": "contain",
-            "background-width": "38px",
-            "background-height": "38px",
+            "background-fit": "cover",
+            "background-width": "132px",
+            "background-height": "94px",
             "background-position-x": "50%",
             "background-position-y": "50%",
-            "border-width": 2,
-            "border-color": "#38414d",
-            color: "#f3f5f7",
+            "border-width": 1,
+            "border-color": "transparent",
+            color: "#E0E0E3",
             label: "data(label)",
-            "font-family": "JetBrains Mono, SFMono-Regular, Consolas, monospace",
-            "font-size": 11,
-            "font-weight": 600,
-            "text-wrap": "wrap",
-            "text-max-width": 156,
+            "font-family": "Inter, Space Grotesk, system-ui, sans-serif",
+            "font-size": 10,
+            "font-weight": 700,
+            "text-wrap": "ellipsis",
+            "text-max-width": 78,
             "text-valign": "bottom",
             "text-halign": "center",
-            "text-margin-y": 8,
-            "text-background-color": "#07080a",
-            "text-background-opacity": 1,
-            "text-background-padding": 3,
+            "text-margin-x": 0,
+            "text-margin-y": -22,
+            "text-background-color": "transparent",
+            "text-background-opacity": 0,
+            "text-background-padding": 0,
             "overlay-opacity": 0,
             opacity: 1,
           },
@@ -832,14 +918,14 @@ export default function GraphCanvas({
         {
           selector: "node:selected",
           style: {
-            "border-width": 3,
-            "border-color": "#7aa7c7",
-            "background-color": "#161a20",
+            "border-width": 2,
+            "border-color": "#60A5FA",
+            "background-color": "#1A1A1C",
           },
         },
         {
           selector: "node.hovered",
-          style: { "border-width": 3, "border-color": "#f2f4f7" },
+          style: { "border-width": 2, "border-color": "#E0E0E3" },
         },
         {
           selector: ".neighbor-dim",
@@ -847,35 +933,39 @@ export default function GraphCanvas({
         },
         {
           selector: "node.low-confidence",
-          style: { "border-style": "dashed", "border-color": "#778291", color: "#a9b1bb" },
+          style: { "border-style": "dashed", "border-color": "#F59E0B", color: "#B9BEC7", opacity: 0.86 },
         },
         {
           selector: "node.censored-entity",
-          style: { "border-style": "dashed", "border-color": "#778291", "background-color": "#151a20" },
+          style: { "border-style": "dashed", "border-color": "#2DD4BF", "background-color": "#1A1A1C" },
         },
         {
           selector: "node.location-entity",
-          style: { "background-color": "#171d24", "border-color": "#7fb3d8" },
+          style: { "background-color": "#1A1A1C", "border-color": "#F472B6" },
+        },
+        {
+          selector: "node.root-entity",
+          style: { width: 148, height: 104, "background-width": "148px", "background-height": "104px", "border-width": 2, "border-color": "#EF4444", "font-size": 10.5, "text-max-width": 90, "text-margin-y": -24 },
         },
         {
           selector: "node.processing",
-          style: { "border-width": 4, "border-color": "#7fb3d8" },
+          style: { "border-width": 3, "border-color": "#3B82F6" },
         },
         {
           selector: "node.hub-amber",
-          style: { "border-width": 4, "border-color": "#c7924b" },
+          style: { "border-width": 3, "border-color": "#F59E0B" },
         },
         {
           selector: "node.hub-red",
-          style: { "border-width": 5, "border-color": "#d14b4b" },
+          style: { "border-width": 3, "border-color": "#EF4444" },
         },
         {
           selector: "node.tag-internal",
-          style: { "border-color": "#c7924b", color: "#c7924b" },
+          style: { "border-color": "#F59E0B", color: "#FCD34D" },
         },
         {
           selector: "node.tag-suspicious",
-          style: { "border-color": "#d14b4b", "background-color": "#211718" },
+          style: { "border-color": "#EF4444", "background-color": "#1A1A1C" },
         },
         {
           selector: "edge",
@@ -1365,6 +1455,22 @@ export default function GraphCanvas({
           </div>
           <input type="range" min="0" max="100" value={timeCursor} onChange={(event) => setTimeCursor(Number(event.target.value))} />
         </div>
+      )}
+
+      {!timelineMode && (
+        <>
+          <div className="graph-mini-stats" aria-label="Graph stats">
+            <span>Entities <strong>{graphNodes.length}</strong></span>
+            <span>Relations <strong>{graphEdges.length}</strong></span>
+            <span>Layout <strong>{layoutMode}</strong></span>
+          </div>
+          <div className="graph-floating-controls" aria-label="Graph viewport controls">
+            <button type="button" onClick={() => cyRef.current?.zoom({ level: Math.min((cyRef.current?.zoom() || 1) + 0.16, 2.8), renderedPosition: { x: (containerRef.current?.clientWidth || 0) / 2, y: (containerRef.current?.clientHeight || 0) / 2 } })} title="Zoom in"><ZoomIn size={15} /></button>
+            <button type="button" onClick={() => cyRef.current?.zoom({ level: Math.max((cyRef.current?.zoom() || 1) - 0.16, 0.18), renderedPosition: { x: (containerRef.current?.clientWidth || 0) / 2, y: (containerRef.current?.clientHeight || 0) / 2 } })} title="Zoom out"><ZoomOut size={15} /></button>
+            <button type="button" onClick={() => cyRef.current?.fit(undefined, 90)} title="Fit graph"><Maximize2 size={15} /></button>
+            <button type="button" onClick={() => runLayout(layoutMode, true)} title="Refresh layout"><RotateCcw size={15} /></button>
+          </div>
+        </>
       )}
 
       {contextMenu && typeof document !== "undefined" && createPortal(

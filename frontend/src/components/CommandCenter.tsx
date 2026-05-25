@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { KeyRound, Shield } from "lucide-react";
 import GraphCanvas from "./GraphCanvas";
 import OraclePanel from "./OraclePanel";
+import InvestigatorPanel from "./investigator/InvestigatorPanel";
 import AppShell from "../layouts/AppShell";
 import DashboardPage from "../pages/DashboardPage";
 import WorkspacePage from "../pages/WorkspacePage";
@@ -104,6 +105,7 @@ function GraphHub({ token, navigate }: PageProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addDialogType, setAddDialogType] = useState("username");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [investigatorOpen, setInvestigatorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleteCase, setDeleteCase] = useState<Investigation | null>(null);
@@ -538,7 +540,8 @@ function GraphHub({ token, navigate }: PageProps) {
     if (normalized === "open-inspector") { setDataPanelOpen(true); log("Entity inspector opened"); return; }
     if (normalized === "close-inspector") { setDataPanelOpen(false); log("Entity inspector closed"); return; }
     if (normalized === "fit-graph") { dispatchGraphEvent("graph-fit"); log("Graph fit requested"); return; }
-    if (normalized === "toggle-terminal") { setTerminalOpen((open) => !open); return; }
+    if (normalized === "toggle-terminal" || normalized === "toggle-console") { setTerminalOpen((open) => !open); return; }
+    if (normalized === "close-palette") { setPaletteOpen(false); log("Entity palette closed"); return; }
     log(`Unsupported UI command: ${command}`, "warning");
   }, [dispatchGraphEvent]);
 
@@ -552,8 +555,12 @@ function GraphHub({ token, navigate }: PageProps) {
     { id: "fit", label: "Fit Graph", shortcut: "F", group: "LAYOUT", action: () => dispatchGraphEvent("graph-fit") },
     { id: "layout", label: "Switch Layout", shortcut: "L", group: "LAYOUT", action: () => dispatchGraphEvent("graph-layout", { mode: "force" }) },
     { id: "export", label: "Export Report", group: "EXPORT", action: () => dispatchGraphEvent("graph-export") },
+    { id: "evidence", label: "Open Evidence Vault", group: "EXPORT", action: () => navigate("/evidence") },
+    { id: "review-noise", label: "Review Noise", group: "VIEW", action: () => setCaseDockOpen(true) },
+    { id: "settings", label: "Open Settings", group: "VIEW", action: () => navigate("/settings") },
+    { id: "investigator", label: "Open Investigator Brain", group: "INVESTIGATOR", action: () => setInvestigatorOpen(true) },
     { id: "new-case", label: "New Investigation", group: "INVESTIGATION", action: () => void createBlankInvestigation() },
-  ], [caseDockOpen, createBlankInvestigation, dataPanelOpen, dispatchGraphEvent, mode, startLookupValue, target]);
+  ], [caseDockOpen, createBlankInvestigation, dataPanelOpen, dispatchGraphEvent, mode, navigate, startLookupValue, target]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -597,6 +604,10 @@ function GraphHub({ token, navigate }: PageProps) {
           onExport={() => dispatchGraphEvent("graph-export")}
           onFit={() => dispatchGraphEvent("graph-fit")}
           onLayout={(layout) => dispatchGraphEvent("graph-layout", { mode: layout })}
+          onOpenEvidence={() => navigate("/evidence")}
+          onOpenInvestigator={() => setInvestigatorOpen(true)}
+          onReviewNoise={() => setCaseDockOpen(true)}
+          onOpenSettings={() => navigate("/settings")}
         />
         <GraphCanvasStage>
           <GraphCanvas
@@ -624,7 +635,7 @@ function GraphHub({ token, navigate }: PageProps) {
             onOpenAddEntity={(kind) => { setAddDialogType(kind || "username"); setAddDialogOpen(true); }}
             hideToolbar
           />
-          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onOpenAdd={(kind) => { setAddDialogType(kind); setAddDialogOpen(true); }} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} />}
+          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onOpenAdd={(kind) => { setAddDialogType(kind); setAddDialogOpen(true); }} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} onOpenImport={() => navigate("/evidence")} />}
         </GraphCanvasStage>
         <CaseDockDrawer open={caseDockOpen} onClose={() => setCaseDockOpen(false)}>
           <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} leads={graph.leads || []} noise={graph.noise || []} compliance={graph.compliance || []} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} onPromoteLead={(id) => void promoteLead(id)} onRestoreNoise={(id) => void restoreNoise(id)} loading={loading} />
@@ -651,6 +662,7 @@ function GraphHub({ token, navigate }: PageProps) {
         </InspectorDrawer>
         <TelemetryDrawer open={terminalOpen} lines={terminalLines} taskLabel={taskLabel || "idle"} onClose={() => setTerminalOpen(false)} onClear={() => setTerminalLines([])} onRunCommand={runTelemetryCommand} />
         {oracleNode && <div className="graph-oracle-popover"><button type="button" onClick={() => setOracleNode(null)}>Close Oracle</button><OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode} title="Node Oracle" /></div>}
+        {investigatorOpen && <div className="graph-investigator-popover"><button type="button" onClick={() => setInvestigatorOpen(false)}>Close Investigator</button><InvestigatorPanel token={token} /></div>}
         <EntityPaletteDrawer open={paletteOpen} onClose={() => setPaletteOpen(false)} onPick={(kind) => { setAddDialogType(kind); setPaletteOpen(false); setAddDialogOpen(true); }} />
         <AddEntityDialog open={addDialogOpen} initialType={addDialogType} onClose={() => setAddDialogOpen(false)} onAdd={(value, type, lookup) => void addTypedEntity(value, type, lookup)} />
         <CommandPalette open={commandPaletteOpen} commands={graphCommands} onClose={() => setCommandPaletteOpen(false)} />
@@ -701,6 +713,7 @@ export default function CommandCenter() {
   if (route === "/graph") page = <GraphHub {...props} />;
   if (route === "/watchlist") page = <ThreatWatchlistPage {...props} />;
   if (route === "/evidence") page = <EvidenceVaultPage {...props} />;
+  if (route === "/reports") page = <EvidenceVaultPage {...props} />;
   if (route === "/transforms") page = <TransformLibraryPage {...props} />;
   if (route === "/oracle") page = <OraclePage {...props} />;
   if (route === "/settings") page = <SettingsPage {...props} />;

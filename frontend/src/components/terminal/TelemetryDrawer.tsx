@@ -62,10 +62,10 @@ export default function TelemetryDrawer({
     setCommand("");
   };
 
-  if (children && !lines) return <section className={open ? "telemetry-drawer open" : "telemetry-drawer"} aria-label="Live telemetry" aria-hidden={!open}>{children}</section>;
+  if (children && !lines) return <section className={open ? "nexus-telemetry telemetry-drawer open" : "nexus-telemetry telemetry-drawer"} aria-label="Live telemetry" aria-hidden={!open}>{children}</section>;
 
   return (
-    <section className={open ? "telemetry-drawer open reference-telemetry" : "telemetry-drawer reference-telemetry"} aria-label="Live telemetry console" aria-hidden={!open}>
+    <section className={open ? "nexus-telemetry telemetry-drawer open reference-telemetry" : "nexus-telemetry telemetry-drawer reference-telemetry"} aria-label="Live telemetry console" aria-hidden={!open}>
       <header className="ref-telemetry-header">
         <div><Terminal size={14} /><strong>Live Telemetry Console</strong><span>{taskLabel || "idle"}</span></div>
         <nav aria-label="Telemetry filters">

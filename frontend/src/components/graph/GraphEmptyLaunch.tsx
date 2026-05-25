@@ -1,6 +1,6 @@
 import { AtSign, Database, FileInput, Globe, Phone, UserRound } from "lucide-react";
 
-export default function GraphEmptyLaunch({ hasCase, onOpenAdd, onOpenDock, onOpenPalette }: { hasCase: boolean; onOpenAdd: (kind: string) => void; onOpenDock: () => void; onOpenPalette: () => void }) {
+export default function GraphEmptyLaunch({ hasCase, onOpenAdd, onOpenDock, onOpenPalette, onOpenImport }: { hasCase: boolean; onOpenAdd: (kind: string) => void; onOpenDock: () => void; onOpenPalette: () => void; onOpenImport: () => void }) {
   return (
     <section className="graph-empty-launch" aria-label="Start link analysis">
       <span className="micro-label">Link analysis</span>
@@ -11,10 +11,10 @@ export default function GraphEmptyLaunch({ hasCase, onOpenAdd, onOpenDock, onOpe
         <button type="button" onClick={() => onOpenAdd("email")}><AtSign size={15} />Add Email</button>
         <button type="button" onClick={() => onOpenAdd("domain")}><Globe size={15} />Add Domain</button>
         <button type="button" onClick={() => onOpenAdd("phone")}><Phone size={15} />Add Phone</button>
-        <button type="button" onClick={onOpenPalette}><Database size={15} />Entity Palette</button>
-        <button type="button" onClick={onOpenDock}><FileInput size={15} />Open Case Dock</button>
+        <button type="button" onClick={onOpenImport}><FileInput size={15} />Import CSV/JSON</button>
+        <button type="button" onClick={onOpenPalette}><Database size={15} />Open Entity Palette</button>
       </div>
-      <footer><kbd>Ctrl K</kbd><span>Command</span><kbd>/</kbd><span>Search</span><kbd>D</kbd><span>Case Dock</span><kbd>I</kbd><span>Inspector</span></footer>
+      <footer><kbd>Ctrl K</kbd><span>Command</span><kbd>/</kbd><span>Search</span><kbd>D</kbd><button type="button" onClick={onOpenDock}>Case Dock</button><kbd>I</kbd><span>Inspector</span></footer>
     </section>
   );
 }

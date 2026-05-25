@@ -45,7 +45,7 @@ export default function EntityPaletteDrawer({ open, onClose, onPick }: { open: b
     items: ENTITY_TYPES.filter((item) => item.group === group).filter((item) => !cleanQuery || item.label.toLowerCase().includes(cleanQuery) || item.description.toLowerCase().includes(cleanQuery) || item.type.toLowerCase().includes(cleanQuery) || group.toLowerCase().includes(cleanQuery)),
   })).filter((group) => group.items.length > 0);
   return (
-    <aside className={open ? "entity-palette-drawer open reference-palette" : "entity-palette-drawer reference-palette"} aria-label="Entity palette" aria-hidden={!open}>
+    <aside className={open ? "nexus-drawer-left entity-palette-drawer open reference-palette" : "nexus-drawer-left entity-palette-drawer reference-palette"} aria-label="Entity palette" aria-hidden={!open}>
       <header><div><strong>Entity Palette</strong><span>Structured seeds and pivots</span></div><button type="button" onClick={onClose} aria-label="Close entity palette"><X size={15} /></button></header>
       <label className="ref-palette-search"><Search size={12} /><input aria-label="Search entity types" placeholder="Filter entity types..." value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <div className="entity-palette-groups">
