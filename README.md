@@ -456,6 +456,52 @@ Lihat [LICENSE](LICENSE) untuk teks lisensi lengkap.
 
 NexusIntel sekarang punya `/oracle` dan Oracle panel kontekstual di `/graph` serta `/workspace`. Tanpa LLM eksternal, Oracle memakai local investigation brain berbasis aturan untuk membaca JSON graph state, menghitung posture kasus, mengurutkan pivot kuat, memberi rekomendasi transform berikutnya, highlight entity type, clear highlight, dan flag collection gap. Panel Oracle juga punya quick prompts untuk summary, next transform, high-confidence infrastructure, dan gap analysis.
 
+### Evidence-First Local Investigator Brain
+
+NexusIntel menambahkan `backend/investigator/` sebagai otak investigasi lokal yang RAM/storage friendly. Engine ini deterministic-first: validator, evidence reasoner, noise killer, hypothesis engine, planner, memory, dan report readiness berjalan sebelum bantuan LLM. LLM lokal hanya dipakai untuk briefing dan planning, tidak boleh mengubah status finding tanpa evidence.
+
+Endpoint utama:
+
+- `POST /api/v1/oracle/chat`
+- `GET /api/v1/investigations/{id}/validation`
+- `POST /api/v1/investigations/{id}/planner/next-actions`
+- `POST /api/v1/investigations/{id}/hypotheses/generate`
+- `GET /api/v1/investigations/{id}/report-readiness`
+- `GET /api/v1/investigator/model-status`
+
+Mode AI lokal:
+
+```bash
+NEXUS_AI_MODE=rules
+NEXUS_AI_ENDPOINT=http://localhost:11434
+NEXUS_AI_MODEL=
+NEXUS_AI_RAM_PROFILE=tiny
+```
+
+`rules` adalah default dan tidak membutuhkan model. `ollama`, `llamacpp`, dan `openai_compatible` tersedia jika operator sudah menjalankan runtime/model sendiri. NexusIntel tidak mengunduh model otomatis dan tidak mengirim raw evidence payload besar ke model; context dibatasi ke compact evidence cards, IDs, source URLs, hash, status validasi, dan ringkasan kasus.
+
+### Analyst Workbench: Evidence OS, Playbooks, Correlation
+
+NexusIntel sekarang menambahkan analyst workbench di atas Investigator Brain:
+
+- Evidence OS 2.0: evidence map, excerpt, SHA-256 verification, diff repeated captures, dan unsupported finding warnings.
+- Advanced Correlation: weighted correlation untuk shared username/avatar/favicon/link/email domain/display name/bio/location/analytics/cert/infrastructure dengan contradiction penalty.
+- Playbook Engine: `email_investigation`, `username_investigation`, `domain_impersonation`, `phone_investigation`, `crypto_wallet_investigation`, `website_clone_detection`, `threat_actor_infrastructure_mapping`, dan `report_preparation`.
+- Connector Marketplace: status konfigurasi GitHub, HIBP, VirusTotal, Shodan, Censys, SecurityTrails, URLScan, Google Maps/Places, Twilio Lookup, OpenCorporates, dan custom HTTP adapter placeholder.
+
+Endpoint utama workbench:
+
+- `GET /api/v1/investigations/{id}/evidence-map`
+- `GET /api/v1/evidence/{evidence_id}/excerpt`
+- `POST /api/v1/evidence/{evidence_id}/verify`
+- `POST /api/v1/evidence/diff`
+- `GET /api/v1/investigations/{id}/correlations`
+- `POST /api/v1/investigations/{id}/correlate`
+- `GET /api/v1/playbooks`
+- `POST /api/v1/investigations/{id}/playbooks/{playbook_id}/plan`
+- `POST /api/v1/investigations/{id}/playbooks/{playbook_id}/run`
+- `GET /api/v1/connectors`
+
 Untuk LLM lokal/remote, buka Settings atau set env:
 
 ```bash

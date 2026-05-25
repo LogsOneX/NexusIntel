@@ -33,6 +33,20 @@ from backend.osint.registry import registry
 from backend.osint.types import EntityInput, RawEvidenceObject, RunContext
 from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, html_packet, ioc_csv, json_packet, minimal_pdf
 from backend.artifact_classifier import append_artifact_to_meta, artifact_record, classify_artifact, dedupe_records, route_artifact
+from backend.investigator.brain import InvestigatorBrain
+from backend.investigator.hypothesis import HypothesisEngine
+from backend.investigator.local_llm import model_status
+from backend.investigator.memory import InvestigatorMemory
+from backend.investigator.model_profiles import list_profiles
+from backend.investigator.noise_killer import NoiseKiller
+from backend.investigator.planner import Planner
+from backend.investigator.report import ReportReadinessEngine
+from backend.investigator.types import InvestigatorQuestion
+from backend.investigator.validator import Validator
+from backend.investigator.correlation import AdvancedCorrelationEngine
+from backend.investigator.connectors import connector_status
+from backend.investigator.evidence_os import build_evidence_map, diff_evidence, evidence_excerpt, verify_evidence
+from backend.playbooks import PlaybookEngine
 
 
 DATABASE_URL = os.getenv(
@@ -238,11 +252,31 @@ class OracleChatRequest(BaseModel):
     investigation_id: str | None = None
     graph_state: dict[str, Any] = Field(default_factory=dict)
     node: dict[str, Any] | None = None
+    selected_entity_id: str | None = None
+    mode: Literal["conservative", "balanced", "deep", "report"] = "balanced"
 
 
 class OracleBriefingRequest(BaseModel):
     investigation_id: str | None = None
     graph_state: dict[str, Any] = Field(default_factory=dict)
+
+
+class InvestigatorPlanRequest(BaseModel):
+    selected_entity_id: str | None = None
+    mode: Literal["conservative", "balanced", "deep", "report"] = "balanced"
+
+
+class HypothesisDecisionRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class EvidenceDiffRequest(BaseModel):
+    left_evidence_id: str
+    right_evidence_id: str
+
+
+class PlaybookRunRequest(BaseModel):
+    confirmed: bool = False
 
 
 class ApiResponse(BaseModel):
@@ -547,6 +581,62 @@ def graph_payload(db: Session, investigation_id: str) -> dict[str, Any]:
     }
 
 
+def investigation_evidence(db: Session, investigation_id: str) -> list[dict[str, Any]]:
+    records = db.execute(select(DataProvenance).where(DataProvenance.investigation_id == investigation_id).order_by(DataProvenance.created_at.desc())).scalars().all()
+    return [serialize_provenance_record(record, include_payload=False) for record in records]
+
+
+def investigation_tasks(db: Session, investigation_id: str) -> list[dict[str, Any]]:
+    records = db.execute(select(TaskRecord).where(TaskRecord.investigation_id == investigation_id).order_by(TaskRecord.started_at.desc().nullslast(), TaskRecord.finished_at.desc().nullslast())).scalars().all()
+    return [
+        {
+            "id": item.id,
+            "task_name": item.task_name,
+            "status": item.status,
+            "target": item.target,
+            "started_at": item.started_at.isoformat() + "Z" if item.started_at else None,
+            "finished_at": item.finished_at.isoformat() + "Z" if item.finished_at else None,
+            "error": item.error,
+            "result": item.result or {},
+        }
+        for item in records
+    ]
+
+
+def transform_records(db: Session) -> list[dict[str, Any]]:
+    return registry.list_transforms(configured_osint_key_names(db))
+
+
+def investigator_state(db: Session, investigation_id: str) -> dict[str, Any]:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    graph = graph_payload(db, investigation_id)
+    return {
+        "investigation": serialize_case(investigation),
+        "graph": graph,
+        "evidence": investigation_evidence(db, investigation_id),
+        "leads": graph.get("leads") or [],
+        "noise": graph.get("noise") or [],
+        "compliance": graph.get("compliance") or [],
+        "task_history": investigation_tasks(db, investigation_id),
+        "transforms": transform_records(db),
+        "settings": get_settings(db),
+        "api_keys": sorted(configured_osint_key_names(db)),
+    }
+
+
+def write_meta_bucket(db: Session, investigation_id: str, bucket: str, value: Any) -> None:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    meta = dict(investigation.meta or {})
+    meta[bucket] = value
+    investigation.meta = meta
+    investigation.updated_at = datetime.utcnow()
+    db.commit()
+
+
 def meta_records(investigation: Investigation, bucket: str) -> list[dict[str, Any]]:
     meta = investigation.meta if isinstance(investigation.meta, dict) else {}
     records = meta.get(bucket)
@@ -669,16 +759,20 @@ def confidence_label_from_score(score: int) -> str:
 
 
 def serialize_provenance_record(record: DataProvenance, include_payload: bool = False) -> dict[str, Any]:
+    meta = record.meta or {}
     data: dict[str, Any] = {
         "id": record.id,
         "investigation_id": record.investigation_id,
         "entity_id": record.entity_id,
         "source": record.source,
         "uri": record.uri,
+        "source_url": meta.get("source_url") or record.uri,
+        "fetched_at": meta.get("fetched_at") or record.created_at.isoformat() + "Z",
         "sha256": record.sha256,
         "content_type": record.content_type,
+        "status_code": meta.get("status_code") or meta.get("http_status"),
         "size_bytes": int(record.size_bytes or 0),
-        "meta": record.meta or {},
+        "meta": meta,
         "created_at": record.created_at.isoformat() + "Z",
     }
     if include_payload:
@@ -995,6 +1089,19 @@ def default_settings() -> dict[str, Any]:
             "model": os.getenv("NEXUS_LLM_MODEL", "llama3.1"),
             "api_key": os.getenv("NEXUS_LLM_API_KEY", ""),
         },
+        "ai": {
+            "mode": os.getenv("NEXUS_AI_MODE", "rules"),
+            "endpoint": os.getenv("NEXUS_AI_ENDPOINT", "http://localhost:11434"),
+            "model": os.getenv("NEXUS_AI_MODEL", ""),
+            "context_tokens": int(os.getenv("NEXUS_AI_CONTEXT_TOKENS", "4096")),
+            "max_tokens": int(os.getenv("NEXUS_AI_MAX_TOKENS", "700")),
+            "temperature": float(os.getenv("NEXUS_AI_TEMPERATURE", "0.1")),
+            "ram_profile": os.getenv("NEXUS_AI_RAM_PROFILE", "tiny"),
+            "enable_summarization": os.getenv("NEXUS_AI_ENABLE_SUMMARIZATION", "true").lower() != "false",
+            "enable_json_mode": os.getenv("NEXUS_AI_ENABLE_JSON_MODE", "true").lower() != "false",
+            "api_key": os.getenv("NEXUS_AI_API_KEY", ""),
+            "custom_system_prompt": os.getenv("NEXUS_AI_SYSTEM_PROMPT", ""),
+        },
         "api_keys": {
             "github": os.getenv("GITHUB_TOKEN", ""),
             "hibp": os.getenv("HIBP_API_KEY", ""),
@@ -1017,7 +1124,9 @@ def get_settings(db: Session) -> dict[str, Any]:
     merged = default_settings()
     value = record.value or {}
     merged["llm"] = {**merged.get("llm", {}), **(value.get("llm") or {})}
+    merged["ai"] = {**merged.get("ai", {}), **(value.get("ai") or {})}
     merged["api_keys"] = {**merged.get("api_keys", {}), **(value.get("api_keys") or {})}
+    merged["connectors"] = {**(value.get("connectors") or {})}
     return merged
 
 
@@ -1254,10 +1363,166 @@ def write_settings(payload: SettingsUpdate, db: Session = Depends(get_db), _: st
     return ApiResponse(ok=True, data={"settings": get_settings(db)})
 
 
+@app.get("/api/v1/connectors", response_model=ApiResponse)
+def connector_marketplace(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data={"items": connector_status(get_settings(db))})
+
+
 @app.post("/api/v1/oracle/chat", response_model=ApiResponse)
 async def oracle_chat(payload: OracleChatRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if payload.investigation_id:
+        selected_id = payload.selected_entity_id or (str(payload.node.get("id")) if isinstance(payload.node, dict) and payload.node.get("id") else None)
+        state = investigator_state(db, payload.investigation_id)
+        answer = await InvestigatorBrain().answer(InvestigatorQuestion(payload.prompt, payload.investigation_id, selected_id, payload.mode), state)
+        return ApiResponse(ok=True, data={**answer, "model_status": model_status(get_settings(db))})
     result = await llm_oracle(get_settings(db), payload.prompt, payload.graph_state, payload.node)
     return ApiResponse(ok=True, data=result)
+
+
+@app.get("/api/v1/investigator/model-status", response_model=ApiResponse)
+def investigator_model_status(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data={"status": model_status(get_settings(db)), "profiles": list_profiles()})
+
+
+@app.get("/api/v1/playbooks", response_model=ApiResponse)
+def list_playbooks(_: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data={"items": PlaybookEngine().list()})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/playbooks/{playbook_id}/plan", response_model=ApiResponse)
+def plan_playbook(investigation_id: str, playbook_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    state = investigator_state(db, investigation_id)
+    try:
+        plan = PlaybookEngine().plan(investigation_id, playbook_id, state["graph"], state["transforms"], set(state["api_keys"]))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Playbook not found") from exc
+    return ApiResponse(ok=True, data=plan)
+
+
+@app.post("/api/v1/investigations/{investigation_id}/playbooks/{playbook_id}/run", response_model=ApiResponse)
+def run_playbook(investigation_id: str, playbook_id: str, payload: PlaybookRunRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    state = investigator_state(db, investigation_id)
+    try:
+        result = PlaybookEngine().run(investigation_id, playbook_id, state["graph"], state["transforms"], set(state["api_keys"]), payload.confirmed)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Playbook not found") from exc
+    return ApiResponse(ok=True, data=result)
+
+
+@app.get("/api/v1/investigations/{investigation_id}/validation", response_model=ApiResponse)
+def investigation_validation(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    state = investigator_state(db, investigation_id)
+    analysis = InvestigatorBrain().analyze(state)
+    return ApiResponse(ok=True, data=analysis["validation"])
+
+
+@app.get("/api/v1/investigations/{investigation_id}/entities/{node_id}/validation", response_model=ApiResponse)
+def entity_validation(investigation_id: str, node_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    state = investigator_state(db, investigation_id)
+    graph = state.get("graph") or {}
+    if not any(str(node.get("id")) == node_id for node in graph.get("nodes") or []):
+        raise HTTPException(status_code=404, detail="Entity not found")
+    analysis = InvestigatorBrain().analyze(state, node_id)
+    return ApiResponse(ok=True, data={"validation": analysis["validation"].get("selected"), "reasoned_evidence": analysis["reasoned_evidence"].get("node_evidence", {}).get(node_id)})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/hypotheses", response_model=ApiResponse)
+def read_hypotheses(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    stored = (investigation.meta or {}).get("hypotheses") if isinstance(investigation.meta, dict) else None
+    if isinstance(stored, list):
+        return ApiResponse(ok=True, data={"items": stored})
+    state = investigator_state(db, investigation_id)
+    analysis = InvestigatorBrain().analyze(state)
+    return ApiResponse(ok=True, data={"items": analysis["hypotheses"]})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/hypotheses/generate", response_model=ApiResponse)
+def generate_hypotheses(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    state = investigator_state(db, investigation_id)
+    analysis = InvestigatorBrain().analyze(state)
+    write_meta_bucket(db, investigation_id, "hypotheses", analysis["hypotheses"])
+    return ApiResponse(ok=True, data={"items": analysis["hypotheses"]})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/hypotheses/{hypothesis_id}/accept", response_model=ApiResponse)
+def accept_hypothesis(investigation_id: str, hypothesis_id: str, payload: HypothesisDecisionRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    meta = dict(investigation.meta or {})
+    hypotheses = [item for item in meta.get("hypotheses", []) if isinstance(item, dict)]
+    for item in hypotheses:
+        if item.get("hypothesis_id") == hypothesis_id:
+            item["analyst_status"] = "accepted"
+            item["analyst_note"] = payload.note or "accepted by analyst"
+            item["accepted_at"] = now_iso()
+            break
+    else:
+        raise HTTPException(status_code=404, detail="Hypothesis not found; generate hypotheses first")
+    meta["hypotheses"] = hypotheses
+    investigation.meta = meta
+    investigation.updated_at = datetime.utcnow()
+    db.commit()
+    return ApiResponse(ok=True, data={"items": hypotheses})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/hypotheses/{hypothesis_id}/reject", response_model=ApiResponse)
+def reject_hypothesis(investigation_id: str, hypothesis_id: str, payload: HypothesisDecisionRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    meta = dict(investigation.meta or {})
+    hypotheses = [item for item in meta.get("hypotheses", []) if isinstance(item, dict)]
+    for item in hypotheses:
+        if item.get("hypothesis_id") == hypothesis_id:
+            item["analyst_status"] = "rejected"
+            item["analyst_note"] = payload.note or "rejected by analyst"
+            item["rejected_at"] = now_iso()
+            break
+    else:
+        raise HTTPException(status_code=404, detail="Hypothesis not found; generate hypotheses first")
+    meta["hypotheses"] = hypotheses
+    investigation.meta = meta
+    investigation.updated_at = datetime.utcnow()
+    db.commit()
+    return ApiResponse(ok=True, data={"items": hypotheses})
+
+
+@app.post("/api/v1/investigations/{investigation_id}/planner/next-actions", response_model=ApiResponse)
+def planner_next_actions(investigation_id: str, payload: InvestigatorPlanRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    state = investigator_state(db, investigation_id)
+    analysis = InvestigatorBrain().analyze(state, payload.selected_entity_id, payload.mode)
+    return ApiResponse(ok=True, data=analysis["plan"])
+
+
+@app.post("/api/v1/investigations/{investigation_id}/memory/refresh", response_model=ApiResponse)
+def refresh_investigator_memory(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    state = investigator_state(db, investigation_id)
+    analysis = InvestigatorBrain().analyze(state)
+    memory = InvestigatorMemory().refresh(dict(investigation.meta or {}), analysis["validation"], analysis["noise"], analysis["hypotheses"], analysis["report_readiness"])
+    write_meta_bucket(db, investigation_id, "ai_memory", memory)
+    return ApiResponse(ok=True, data={"memory": memory})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/memory", response_model=ApiResponse)
+def read_investigator_memory(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    investigation = db.get(Investigation, investigation_id)
+    if not investigation:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return ApiResponse(ok=True, data={"memory": InvestigatorMemory().get(dict(investigation.meta or {}))})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/report-readiness", response_model=ApiResponse)
+def report_readiness(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    state = investigator_state(db, investigation_id)
+    analysis = InvestigatorBrain().analyze(state)
+    return ApiResponse(ok=True, data=analysis["report_readiness"])
 
 
 @app.post("/api/v1/oracle/briefing", response_model=ApiResponse)
@@ -1717,6 +1982,40 @@ def list_all_evidence(limit: int = 250, db: Session = Depends(get_db), _: str = 
     return ApiResponse(ok=True, data={"items": [serialize_provenance_record(row) for row in rows]})
 
 
+@app.get("/api/v1/investigations/{investigation_id}/evidence-map", response_model=ApiResponse)
+def evidence_map(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    graph = graph_payload(db, investigation_id)
+    evidence = investigation_evidence(db, investigation_id)
+    return ApiResponse(ok=True, data=build_evidence_map(graph, evidence))
+
+
+@app.get("/api/v1/evidence/{evidence_id}/excerpt", response_model=ApiResponse)
+def read_evidence_excerpt(evidence_id: str, limit: int = 2000, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    record = db.get(DataProvenance, evidence_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Evidence record not found")
+    return ApiResponse(ok=True, data={"excerpt": evidence_excerpt(record, max(200, min(20_000, limit)))})
+
+
+@app.post("/api/v1/evidence/{evidence_id}/verify", response_model=ApiResponse)
+def verify_evidence_endpoint(evidence_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    record = db.get(DataProvenance, evidence_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Evidence record not found")
+    return ApiResponse(ok=True, data={"verification": verify_evidence(record)})
+
+
+@app.post("/api/v1/evidence/diff", response_model=ApiResponse)
+def diff_evidence_endpoint(payload: EvidenceDiffRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    left = db.get(DataProvenance, payload.left_evidence_id)
+    right = db.get(DataProvenance, payload.right_evidence_id)
+    if not left or not right:
+        raise HTTPException(status_code=404, detail="Evidence record not found")
+    return ApiResponse(ok=True, data={"diff": diff_evidence(left, right)})
+
+
 @app.get("/api/v1/investigations/{investigation_id}/analyst-pipeline", response_model=ApiResponse)
 def analyst_pipeline(investigation_id: str, entity_id: str | None = None, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     return ApiResponse(ok=True, data=analyst_pipeline_payload(db, investigation_id, entity_id))
@@ -1727,30 +2026,45 @@ def correlate_investigation(investigation_id: str, db: Session = Depends(get_db)
     if not db.get(Investigation, investigation_id):
         raise HTTPException(status_code=404, detail="Investigation not found")
     graph = graph_payload(db, investigation_id)
-    correlations = build_correlations(graph["nodes"], graph["edges"])
+    evidence = investigation_evidence(db, investigation_id)
+    evidence_index = build_evidence_map(graph, evidence)
+    correlations = AdvancedCorrelationEngine().correlate(graph, evidence_index)
     created = []
     for item in correlations:
-        if int(item.get("confidence_level") or 0) < 50:
+        if int(item.get("confidence_level") or item.get("score") or 0) < 50:
             continue
         edge = upsert_relationship(
             db,
             investigation_id,
             source_id=str(item["source"]),
             target_id=str(item["target"]),
-            type_="possible_same_actor",
+            type_=str(item.get("type") or "possible_same_actor"),
             source="correlation_engine",
-            confidence="probable" if int(item["confidence_level"]) >= 70 else "weak",
+            confidence="probable" if int(item.get("confidence_level") or item.get("score") or 0) >= 70 else "weak",
             data={
-                "confidence_level": int(item["confidence_level"]),
+                "confidence_level": int(item.get("confidence_level") or item.get("score") or 0),
                 "confidence_reason": "; ".join(item.get("reasons") or []),
                 "shared_features": item.get("shared_features") or {},
+                "supporting_evidence": item.get("supporting_evidence") or [],
+                "contradicting_evidence": item.get("contradicting_evidence") or [],
                 "legal_basis": item.get("legal_basis"),
                 "requires_analyst_confirmation": True,
             },
         )
         created.append(serialize_relationship(edge))
     db.commit()
-    return ApiResponse(ok=True, data={"created": created, "graph": graph_payload(db, investigation_id)})
+    return ApiResponse(ok=True, data={"correlations": correlations, "created": created, "graph": graph_payload(db, investigation_id)})
+
+
+@app.get("/api/v1/investigations/{investigation_id}/correlations", response_model=ApiResponse)
+def preview_correlations(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    graph = graph_payload(db, investigation_id)
+    evidence = investigation_evidence(db, investigation_id)
+    evidence_index = build_evidence_map(graph, evidence)
+    correlations = AdvancedCorrelationEngine().correlate(graph, evidence_index)
+    return ApiResponse(ok=True, data={"items": correlations, "requires_analyst_confirmation": True})
 
 
 @app.get("/api/v1/investigations/{investigation_id}/exports/analyst-packet")
