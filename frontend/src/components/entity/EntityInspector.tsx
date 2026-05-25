@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileJson, GitBranch, NotebookPen, Download, ShieldAlert } from "lucide-react";
+import { Database, Download, FileJson, GitBranch, NotebookPen, ShieldAlert, Sparkles } from "lucide-react";
 import type { AnalystPipeline, ApiNode, EvidenceRecord, Investigation, TransformDefinition } from "../../lib/types";
 import { readLocalJson, writeLocalJson } from "../../lib/storage";
 import Tabs from "../common/Tabs";
@@ -69,9 +69,24 @@ export default function EntityInspector({
   ], [pendingTransforms, selectedEvidenceRefs.length, selectedNode, selectedTransforms]);
 
   const transforms = selectedNode ? selectedTransforms : pendingTransforms;
+  const entityType = selectedNode?.type || pendingEntityType || "entity";
+  const entityLabel = selectedNode?.label || activeCase?.target || target || "No active entity";
+  const entityValue = selectedNode?.value || target || "Select a node, add an entity, or run lookup.";
+  const confidenceLabel = selectedNode?.confidence || (target.trim() ? "pending" : "idle");
   return (
-    <aside className={open ? "entity-spec premium-entity-inspector" : "entity-spec premium-entity-inspector closed"}>
-      <div className="inspector-header"><div><FileJson size={15} /><span>Entity Inspector</span></div><strong>{selectedNode?.label || activeCase?.target || "No active entity"}</strong><code>{selectedNode ? `${selectedNode.type} / ${selectedNode.confidence || "medium"}` : target.trim() ? `${pendingEntityType} / pending` : "select a node"}</code></div>
+    <aside className={open ? "entity-spec premium-entity-inspector reference-inspector" : "entity-spec premium-entity-inspector reference-inspector closed"}>
+      <header className="ref-inspector-toolbar">
+        <div><FileJson size={14} /><span>{selectedNode ? "Entity Inspector" : "System Inspector"}</span></div>
+        <code>{selectedEvidenceRefs.length} proof</code>
+      </header>
+      <section className="ref-inspector-hero">
+        <div className="ref-entity-glyph">{entityType.slice(0, 3).toUpperCase()}</div>
+        <div>
+          <p><span>{entityType}</span><b>{confidenceLabel}</b></p>
+          <strong title={entityValue}>{entityLabel}</strong>
+          <code>{entityValue}</code>
+        </div>
+      </section>
       <Tabs items={tabItems} active={tab} onChange={setTab} ariaLabel="Entity inspector tabs" />
       <div className="inspector-body">
         {tab === "overview" && <EntityOverviewTab node={selectedNode} activeCase={activeCase} analystPipeline={analystPipeline} pendingEntityType={pendingEntityType} pendingTransforms={pendingTransforms} />}
@@ -80,7 +95,8 @@ export default function EntityInspector({
         {tab === "timeline" && <EntityTimelineTab node={selectedNode} evidence={selectedEvidenceRefs} />}
         {tab === "raw" && <EntityRawTab node={selectedNode} />}
         {tab === "notes" && <section className="analyst-notes"><header><NotebookPen size={14} /><strong>Analyst Notes</strong></header><textarea value={notes} onChange={(event) => { setNotes(event.target.value); writeLocalJson(noteKey, event.target.value); }} placeholder="Local analyst notes. Stored in this browser until backend notes exist." /></section>}
-        {!selectedNode && !target.trim() && tab === "overview" && <EmptyState title="Select or add an entity" message="The inspector is evidence-first. Node source, evidence hash, legal note, and confidence reason appear when available." />}
+        {!selectedNode && !target.trim() && tab === "overview" && <div className="ref-inspector-empty"><Database size={22} /><EmptyState title="No active entity" message="Select a node, add an entity, or run a lookup from the command bar." /></div>}
+        {selectedNode && tab === "overview" && !selectedEvidenceRefs.length && <div className="ref-signal-warning"><Sparkles size={13} /><span>Finding unsupported until evidence, hash, source URL, or public-source citation is attached.</span></div>}
       </div>
       <footer className="inspector-actions"><button type="button" onClick={onRunCorrelationEngine}><GitBranch size={13} />Correlate</button>{selectedNode && onMarkNoise && <button className="danger" type="button" onClick={onMarkNoise}><ShieldAlert size={13} />Mark Noise</button>}<button type="button" onClick={() => onExportPacket("html")}><Download size={13} />Report</button><button type="button" onClick={() => onExportPacket("json")}>Evidence JSON</button><button type="button" onClick={() => onExportPacket("csv")}>CSV IOCs</button></footer>
       <LeadQueuePanel analystPipeline={analystPipeline} compact />
@@ -89,4 +105,3 @@ export default function EntityInspector({
     </aside>
   );
 }
-
