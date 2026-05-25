@@ -565,6 +565,10 @@ function GraphHub({ token, navigate }: PageProps) {
           mode={mode}
           setMode={setMode}
           loading={loading}
+          dockOpen={caseDockOpen}
+          inspectorOpen={dataPanelOpen}
+          terminalOpen={terminalOpen}
+          paletteOpen={paletteOpen}
           onLookup={startInvestigation}
           onAddEntity={() => setAddDialogOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
@@ -656,7 +660,7 @@ function routeFromPath(path: string): string {
 export default function CommandCenter() {
   const [session, setSession] = useState<SessionState>(() => readSession());
   const [route, setRoute] = useState(() => routeFromLocation());
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => readLocalJson("nexus.shell.navCollapsed", true));
 
   const navigate = useCallback((path: string) => {
     window.history.pushState({}, "", path);
@@ -671,6 +675,8 @@ export default function CommandCenter() {
 
   const login = (next: SessionState) => { saveSession(next); setSession(next); navigate("/dashboard"); };
   const logout = () => { clearSession(); setSession({ token: null, user: null }); navigate("/login"); };
+
+  useEffect(() => { writeLocalJson("nexus.shell.navCollapsed", collapsed); }, [collapsed]);
 
   if (route === "/login" || !session.token) return <LoginPage onLogin={login} />;
 

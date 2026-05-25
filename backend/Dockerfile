@@ -21,6 +21,8 @@ COPY backend/artifact_classifier.py ./backend/artifact_classifier.py
 COPY backend/queues.py ./backend/queues.py
 COPY backend/modules ./backend/modules
 COPY backend/osint ./backend/osint
+COPY backend/investigator ./backend/investigator
+COPY backend/playbooks ./backend/playbooks
 COPY core ./core
 COPY modules ./modules
 COPY nexusrecon ./nexusrecon
