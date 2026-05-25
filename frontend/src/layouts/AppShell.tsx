@@ -32,7 +32,7 @@ export default function AppShell({ route, user, collapsed, setCollapsed, navigat
 
   return (
     <main className={collapsed ? "command-shell nav-collapsed premium-shell" : "command-shell premium-shell"}>
-      <SidebarNav route={route} user={user} collapsed={collapsed} setCollapsed={setCollapsed} navigate={navigate} logout={logout} />
+      <SidebarNav route={route} user={user} collapsed={collapsed} setCollapsed={setCollapsed} navigate={navigate} logout={logout} onOpenCommandPalette={() => setPaletteOpen(true)} />
       <section className="command-content premium-content">{children}</section>
       <CommandPalette open={paletteOpen} commands={allCommands} onClose={() => setPaletteOpen(false)} />
     </main>
