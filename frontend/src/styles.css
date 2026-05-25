@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 :root {
   color-scheme: dark;
   --bg: #05080d;
@@ -7401,4 +7403,333 @@ body,
   .case-dock-drawer,
   .inspector-drawer,
   .entity-palette-drawer { width: min(430px, calc(100vw - 84px)) !important; }
+}
+
+/* 1:1 reference shell pass: match /Downloads/nexusintel structural proportions while preserving NexusIntel data flow. */
+.command-shell.premium-shell,
+.command-shell.nav-collapsed.premium-shell {
+  grid-template-columns: 56px minmax(0, 1fr) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.command-sidebar.premium-sidebar {
+  width: 56px !important;
+  min-width: 56px !important;
+  max-width: 56px !important;
+  align-items: center;
+  background: #141416 !important;
+}
+
+.command-brand.premium-brand {
+  justify-content: center;
+  width: 56px !important;
+  min-height: 58px !important;
+  padding: 0 !important;
+}
+
+.command-brand.premium-brand div,
+.command-sidebar nav span,
+.sidebar-footer span,
+.sidebar-footer code {
+  display: none !important;
+}
+
+.brand-monogram {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-color: #2d2d30;
+  background: #2563eb;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+.command-sidebar nav {
+  width: 100%;
+  padding: 14px 8px !important;
+  gap: 8px !important;
+  overflow-x: visible !important;
+}
+
+.command-sidebar nav button,
+.sidebar-footer button {
+  justify-content: center !important;
+  width: 40px;
+  min-height: 40px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+}
+
+.command-sidebar nav button.active,
+.command-sidebar nav button:hover,
+.sidebar-footer button:hover {
+  background: rgba(255, 255, 255, 0.045) !important;
+  border-color: #2d2d30 !important;
+}
+
+.sidebar-footer {
+  width: 100%;
+  justify-items: center;
+  padding: 10px 8px !important;
+}
+
+.command-sidebar nav button:hover::after,
+.sidebar-footer button:hover::after,
+.command-brand.premium-brand:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 58px;
+  z-index: 99999;
+  width: max-content;
+  max-width: 240px;
+  border: 1px solid #2d2d30;
+  border-radius: 6px;
+  background: #1a1a1c;
+  color: #e0e0e3;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.46);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(4px);
+}
+
+.graph-workspace-layout {
+  grid-template-rows: 56px minmax(0, 1fr) !important;
+}
+
+.graph-topbar-v2 {
+  height: 56px !important;
+  grid-template-columns: minmax(250px, auto) minmax(360px, 1fr) max-content !important;
+  border-bottom-color: #2d2d30 !important;
+  background: #1a1a1c !important;
+  padding: 0 14px !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035) inset !important;
+}
+
+.graph-topbar-v2::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 1px;
+  background: #2d2d30;
+  pointer-events: none;
+}
+
+.graph-product-label strong,
+.graph-product-label span {
+  font-family: "Space Grotesk", Inter, sans-serif;
+}
+
+.graph-product-label strong {
+  color: #8c8c95 !important;
+  letter-spacing: 0.08em !important;
+}
+
+.graph-product-label span {
+  color: #ffffff !important;
+}
+
+.case-chip,
+.graph-stats-chip,
+.entity-detect-chip,
+.graph-topbar-v2 button,
+.graph-topbar-v2 select,
+.graph-search-field {
+  height: 36px !important;
+  border-color: #2d2d30 !important;
+  border-radius: 6px !important;
+  background: #232326 !important;
+  box-shadow: none !important;
+}
+
+.graph-search-field {
+  height: 38px !important;
+  background: #0f0f11 !important;
+  padding: 0 12px !important;
+}
+
+.graph-search-field input::placeholder {
+  color: #65656d;
+}
+
+.entity-detect-chip,
+.graph-stats-chip {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px !important;
+  font-weight: 700;
+}
+
+.graph-stats-chip span {
+  color: #8c8c95 !important;
+}
+
+.graph-topbar-v2 button.primary {
+  background: #2563eb !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26) !important;
+}
+
+.graph-topbar-v2 .icon-only {
+  width: 36px !important;
+}
+
+.topbar-center {
+  max-width: 760px;
+  justify-self: stretch;
+  border-left-color: #2d2d30 !important;
+  border-right-color: #2d2d30 !important;
+}
+
+.topbar-right {
+  gap: 6px !important;
+}
+
+.graph-canvas-stage {
+  background-color: #0a0a0b !important;
+  background-image: radial-gradient(#2d2d30 1px, transparent 1px) !important;
+  background-size: 32px 32px !important;
+}
+
+.graph-canvas-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 42%, rgba(59, 130, 246, 0.08), transparent 34%), linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.22));
+}
+
+.graph-canvas-stage .tactical-graph-shell {
+  z-index: 2 !important;
+}
+
+.case-dock-drawer,
+.entity-palette-drawer {
+  left: 0 !important;
+}
+
+.case-dock-drawer,
+.inspector-drawer,
+.entity-palette-drawer {
+  top: 56px !important;
+  bottom: 0 !important;
+  z-index: 62 !important;
+}
+
+.case-dock-drawer { width: 330px !important; }
+.entity-palette-drawer { width: 320px !important; }
+.inspector-drawer {
+  right: 0 !important;
+  width: 420px !important;
+}
+
+.case-dock-drawer .graph-case-dock,
+.inspector-drawer .entity-spec,
+.entity-palette-drawer {
+  border-radius: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  background: #1a1a1c !important;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: none !important;
+}
+
+.case-dock-drawer .graph-case-dock,
+.entity-palette-drawer {
+  border-left: 0 !important;
+  border-right-color: #2d2d30 !important;
+}
+
+.inspector-drawer .entity-spec {
+  border-right: 0 !important;
+  border-left-color: #2d2d30 !important;
+}
+
+.drawer-close,
+.entity-palette-drawer > header button {
+  top: 12px !important;
+  right: 12px !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+  background: #232326 !important;
+}
+
+.entity-palette-drawer {
+  padding: 0 !important;
+  grid-template-rows: auto auto minmax(0, 1fr) !important;
+}
+
+.entity-palette-drawer > header {
+  min-height: 66px;
+  border-bottom: 1px solid #2d2d30;
+  background: rgba(20, 20, 22, 0.72);
+  padding: 14px 48px 14px 16px !important;
+}
+
+.entity-palette-drawer > input {
+  width: calc(100% - 24px);
+  margin: 12px !important;
+  background: #0f0f11 !important;
+}
+
+.entity-palette-groups {
+  padding: 0 12px 14px !important;
+}
+
+.entity-type-card {
+  border-left-width: 2px !important;
+  border-radius: 6px !important;
+  background: #0f0f11 !important;
+}
+
+.telemetry-drawer {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: min(260px, 36vh) !important;
+  z-index: 58 !important;
+}
+
+.telemetry-drawer .graph-terminal,
+.premium-terminal.graph-terminal {
+  border-radius: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  background: #050506 !important;
+}
+
+.graph-empty-launch {
+  border-radius: 6px !important;
+  background: #1a1a1c !important;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.52) !important;
+}
+
+.dialog-backdrop {
+  background: rgba(0, 0, 0, 0.68) !important;
+  backdrop-filter: blur(4px);
+}
+
+.nx-dialog,
+.command-palette,
+.confirm-dialog,
+.drawer-panel {
+  border-color: #2d2d30 !important;
+  border-radius: 8px !important;
+  background: #1a1a1c !important;
+}
+
+@media (max-width: 1366px) {
+  .graph-topbar-v2 {
+    grid-template-columns: minmax(0, 1fr) max-content !important;
+  }
+  .topbar-left { display: none !important; }
+  .topbar-center { grid-area: auto; max-width: none; border-left: 0 !important; padding-left: 0 !important; }
+  .topbar-right > button:not(.icon-only),
+  .topbar-right .export-button,
+  .graph-layout-selector span,
+  .entity-detect-chip,
+  .graph-topbar-v2 select { display: none !important; }
 }
