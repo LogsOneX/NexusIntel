@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KeyRound, Shield, Terminal } from "lucide-react";
+import { KeyRound, Shield } from "lucide-react";
 import GraphCanvas from "./GraphCanvas";
 import OraclePanel from "./OraclePanel";
 import AppShell from "../layouts/AppShell";
@@ -30,7 +30,7 @@ import AddEntityDialog from "./entity/AddEntityDialog";
 import { FALLBACK_TRANSFORMS } from "./transforms/TransformLibrary";
 import { apiJson, downloadFile, wsUrl } from "../lib/api";
 import { clearSession, readLocalJson, readSession, saveSession, writeLocalJson } from "../lib/storage";
-import { caseTitle, terminalPrefix } from "../lib/format";
+import { caseTitle } from "../lib/format";
 import { classifyEntityValue, evidenceRefsForNode } from "../lib/graph";
 import type { AnalystPipeline, ApiNode, CaseHealth, CommandItem, EvidenceRecord, GraphPayload, Investigation, PageProps, SessionState, TerminalLine, TransformDefinition } from "../lib/types";
 
@@ -523,17 +523,36 @@ function GraphHub({ token, navigate }: PageProps) {
     window.dispatchEvent(new CustomEvent(`nexus:${name}`, { detail }));
   }, []);
 
+  const runTelemetryCommand = useCallback((command: string) => {
+    const normalized = command.trim().toLowerCase();
+    const log = (message: string, level = "system") => setTerminalLines((previous) => [...previous.slice(-260), { level, message, time: new Date().toISOString() }]);
+    if (!normalized) return;
+    if (normalized === "help") {
+      log("Safe UI commands: help, clear-ui-logs, open-palette, open-case-dock, close-case-dock, open-inspector, close-inspector, fit-graph, toggle-terminal");
+      return;
+    }
+    if (normalized === "clear-ui-logs" || normalized === "clear") { setTerminalLines([]); return; }
+    if (normalized === "open-palette") { setPaletteOpen(true); log("Entity palette opened"); return; }
+    if (normalized === "open-case-dock") { setCaseDockOpen(true); log("Case dock opened"); return; }
+    if (normalized === "close-case-dock") { setCaseDockOpen(false); log("Case dock closed"); return; }
+    if (normalized === "open-inspector") { setDataPanelOpen(true); log("Entity inspector opened"); return; }
+    if (normalized === "close-inspector") { setDataPanelOpen(false); log("Entity inspector closed"); return; }
+    if (normalized === "fit-graph") { dispatchGraphEvent("graph-fit"); log("Graph fit requested"); return; }
+    if (normalized === "toggle-terminal") { setTerminalOpen((open) => !open); return; }
+    log(`Unsupported UI command: ${command}`, "warning");
+  }, [dispatchGraphEvent]);
+
   const graphCommands = useMemo<CommandItem[]>(() => [
-    { id: "add-entity", label: "Add Entity", description: "Create a seed entity", shortcut: "A", action: () => setAddDialogOpen(true) },
-    { id: "palette", label: "Open Entity Palette", description: "Browse entity types", action: () => setPaletteOpen(true) },
-    { id: "lookup", label: "Run Lookup", description: "Run lookup for the current search value", disabled: !target.trim(), action: () => void startLookupValue(target, mode) },
-    { id: "case-dock", label: caseDockOpen ? "Hide Case Dock" : "Open Case Dock", shortcut: "D", action: () => setCaseDockOpen((open) => !open) },
-    { id: "inspector", label: dataPanelOpen ? "Hide Inspector" : "Open Inspector", shortcut: "I", action: () => setDataPanelOpen((open) => !open) },
-    { id: "terminal", label: "Toggle Telemetry", action: () => setTerminalOpen((open) => !open) },
-    { id: "fit", label: "Fit Graph", shortcut: "F", action: () => dispatchGraphEvent("graph-fit") },
-    { id: "layout", label: "Switch Layout", shortcut: "L", action: () => dispatchGraphEvent("graph-layout", { mode: "force" }) },
-    { id: "export", label: "Export Report", action: () => dispatchGraphEvent("graph-export") },
-    { id: "new-case", label: "New Investigation", action: () => void createBlankInvestigation() },
+    { id: "add-entity", label: "Add Entity", description: "Create a seed entity", shortcut: "A", group: "INVESTIGATION", action: () => setAddDialogOpen(true) },
+    { id: "palette", label: "Open Entity Palette", description: "Browse production entity types", group: "INVESTIGATION", action: () => setPaletteOpen(true) },
+    { id: "lookup", label: "Run Lookup", description: "Run lookup for the current search value", shortcut: "Enter", group: "INVESTIGATION", disabled: !target.trim(), action: () => void startLookupValue(target, mode) },
+    { id: "case-dock", label: caseDockOpen ? "Hide Case Dock" : "Open Case Dock", shortcut: "D", group: "VIEW", action: () => setCaseDockOpen((open) => !open) },
+    { id: "inspector", label: dataPanelOpen ? "Hide Inspector" : "Open Inspector", shortcut: "I", group: "VIEW", action: () => setDataPanelOpen((open) => !open) },
+    { id: "terminal", label: "Toggle Telemetry", group: "VIEW", action: () => setTerminalOpen((open) => !open) },
+    { id: "fit", label: "Fit Graph", shortcut: "F", group: "LAYOUT", action: () => dispatchGraphEvent("graph-fit") },
+    { id: "layout", label: "Switch Layout", shortcut: "L", group: "LAYOUT", action: () => dispatchGraphEvent("graph-layout", { mode: "force" }) },
+    { id: "export", label: "Export Report", group: "EXPORT", action: () => dispatchGraphEvent("graph-export") },
+    { id: "new-case", label: "New Investigation", group: "INVESTIGATION", action: () => void createBlankInvestigation() },
   ], [caseDockOpen, createBlankInvestigation, dataPanelOpen, dispatchGraphEvent, mode, startLookupValue, target]);
 
   useEffect(() => {
@@ -630,12 +649,7 @@ function GraphHub({ token, navigate }: PageProps) {
             onMarkNoise={() => void markSelectedNoise()}
           />
         </InspectorDrawer>
-        <TelemetryDrawer open={terminalOpen}>
-          <section className="graph-terminal premium-terminal">
-            <header><Terminal size={15} /><strong>Live Telemetry</strong><span>{taskLabel || "idle"}</span></header>
-            <div>{terminalLines.map((line, index) => <p className={line.level} key={`${line.time || index}:${index}`}><span>{line.time ? new Date(line.time).toLocaleTimeString() : "--:--:--"}</span><strong>{terminalPrefix(line.level)}</strong><code>{line.message}</code></p>)}{!terminalLines.length && <p><span>00:00:00</span><strong>[SYS]</strong><code>Telemetry idle. Run a lookup or transform to stream events.</code></p>}</div>
-          </section>
-        </TelemetryDrawer>
+        <TelemetryDrawer open={terminalOpen} lines={terminalLines} taskLabel={taskLabel || "idle"} onClose={() => setTerminalOpen(false)} onClear={() => setTerminalLines([])} onRunCommand={runTelemetryCommand} />
         {oracleNode && <div className="graph-oracle-popover"><button type="button" onClick={() => setOracleNode(null)}>Close Oracle</button><OraclePanel token={token} investigationId={activeInvestigationId} graph={graph} activeNode={oracleNode} title="Node Oracle" /></div>}
         <EntityPaletteDrawer open={paletteOpen} onClose={() => setPaletteOpen(false)} onPick={(kind) => { setAddDialogType(kind); setPaletteOpen(false); setAddDialogOpen(true); }} />
         <AddEntityDialog open={addDialogOpen} initialType={addDialogType} onClose={() => setAddDialogOpen(false)} onAdd={(value, type, lookup) => void addTypedEntity(value, type, lookup)} />

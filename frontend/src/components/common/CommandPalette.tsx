@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Command, Search } from "lucide-react";
+import { ChevronRight, Command, HelpCircle, Search, X } from "lucide-react";
 import type { CommandItem } from "../../lib/types";
 
 export default function CommandPalette({ open, commands, onClose }: { open: boolean; commands: CommandItem[]; onClose: () => void }) {
@@ -36,20 +36,29 @@ export default function CommandPalette({ open, commands, onClose }: { open: bool
 
   if (!open) return null;
   return (
-    <div className="command-palette-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="command-palette" role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(event) => event.stopPropagation()}>
-        <header><Command size={17} /><strong>Command Palette</strong><span>Ctrl K</span></header>
-        <label className="palette-search"><Search size={15} /><input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setIndex(0); }} placeholder="Search command, page, transform, or action" /></label>
-        <div className="palette-results">
+    <div className="command-palette-backdrop reference-command-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="command-palette reference-command-palette" role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="ref-command-searchbar">
+          <Command size={16} />
+          <label>
+            <Search size={14} />
+            <input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setIndex(0); }} placeholder="Type command name to execute action..." />
+          </label>
+          <span>ESC to cancel</span>
+          <button type="button" onClick={onClose} aria-label="Close command palette"><X size={14} /></button>
+        </header>
+        <div className="palette-results ref-command-results">
           {filtered.map((item, itemIndex) => (
             <button className={itemIndex === index ? "active" : ""} key={item.id} type="button" disabled={item.disabled} onClick={() => { item.action(); onClose(); }}>
-              <span><strong>{item.label}</strong>{item.description && <small>{item.description}</small>}</span>{item.shortcut && <code>{item.shortcut}</code>}
+              <i><Command size={14} /></i>
+              <span><strong>{item.label}<em>{item.group || "COMMAND"}</em></strong>{item.description && <small>{item.description}</small>}</span>
+              <b>{item.shortcut && <code>{item.shortcut}</code>}{itemIndex === index && <ChevronRight size={13} />}</b>
             </button>
           ))}
-          {!filtered.length && <p>No command matches this query.</p>}
+          {!filtered.length && <p><HelpCircle size={24} /><strong>No matching operators found</strong><small>Refine the command or workflow search term.</small></p>}
         </div>
+        <footer className="ref-command-footer"><span>up/down to select</span><span>enter to run</span><span>NexusIntel operator suite</span></footer>
       </section>
     </div>
   );
 }
-

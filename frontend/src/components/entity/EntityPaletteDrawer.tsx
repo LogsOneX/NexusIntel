@@ -1,34 +1,69 @@
 import { useState } from "react";
-import { AtSign, Bitcoin, FileImage, Fingerprint, Globe, GripVertical, Hash, HelpCircle, Link, MapPin, Network, NotebookPen, Phone, Search, Sparkles, UserRound, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { AtSign, Bitcoin, FileImage, FileText, Fingerprint, Globe, GripVertical, Hash, HelpCircle, IdCard, Link, MapPin, MapPinned, Network, NotebookPen, Phone, ReceiptText, Search, Server, Sparkles, UserRound, X } from "lucide-react";
 import EntityTypeCard from "./EntityTypeCard";
+import { ENTITY_GROUPS, ENTITY_TYPES, type EntityGroup } from "../../lib/entityTypes";
 
-const GROUPS = [
-  { name: "Identity", items: [[UserRound, "Username", "Public handle or alias"], [Fingerprint, "Person/Alias", "Name, handle, or persona"]] },
-  { name: "Contact", items: [[AtSign, "Email", "Mailbox or account identifier"], [Phone, "Phone", "E.164 phone number"]] },
-  { name: "Infrastructure", items: [[Globe, "Domain", "DNS and web surface"], [Link, "URL", "Specific public URL"], [Network, "IP Address", "Network address"]] },
-  { name: "Geo", items: [[MapPin, "Google Maps Profile", "Public maps profile URL"], [MapPin, "Location/Place", "Place or location entity"]] },
-  { name: "Asset", items: [[FileImage, "Image Asset", "Image, avatar, or screenshot"], [Hash, "Favicon/Hash", "Asset hash pivot"]] },
-  { name: "Crypto", items: [[Bitcoin, "Crypto Wallet", "Public wallet address"], [Link, "Transaction", "Public chain transaction"]] },
-  { name: "Analyst", items: [[NotebookPen, "Note", "Analyst note"], [Hash, "Evidence", "Source or raw proof pointer"]] },
-] as const;
+const TYPE_ICONS: Record<string, LucideIcon> = {
+  username: Fingerprint,
+  name: UserRound,
+  profile: IdCard,
+  email: AtSign,
+  phone: Phone,
+  domain: Globe,
+  url: Link,
+  ip: Network,
+  dns_record: Server,
+  google_maps_profile: MapPin,
+  location: MapPin,
+  place: MapPinned,
+  image_asset: FileImage,
+  favicon: FileImage,
+  hash: Hash,
+  document: FileText,
+  crypto_wallet: Bitcoin,
+  crypto_transaction: ReceiptText,
+  note: NotebookPen,
+  evidence: FileText,
+};
 
-function seedFor(label: string): string {
-  return label.toLowerCase().replace(" address", "").replace("person/alias", "name").replace("google maps profile", "url").replace("location/place", "location").replace("favicon/hash", "hash").replace("crypto wallet", "crypto_wallet");
-}
+const GROUP_ACCENT: Record<EntityGroup, string> = {
+  Identity: "identity",
+  Contact: "contact",
+  Infrastructure: "infrastructure",
+  Geo: "geo",
+  Asset: "asset",
+  Crypto: "crypto",
+  Analyst: "analyst",
+};
 
 export default function EntityPaletteDrawer({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (kind: string) => void }) {
   const [query, setQuery] = useState("");
   const cleanQuery = query.trim().toLowerCase();
-  const filteredGroups = GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter(([, label, description]) => !cleanQuery || label.toLowerCase().includes(cleanQuery) || description.toLowerCase().includes(cleanQuery) || group.name.toLowerCase().includes(cleanQuery)),
+  const filteredGroups = ENTITY_GROUPS.map((group) => ({
+    name: group,
+    items: ENTITY_TYPES.filter((item) => item.group === group).filter((item) => !cleanQuery || item.label.toLowerCase().includes(cleanQuery) || item.description.toLowerCase().includes(cleanQuery) || item.type.toLowerCase().includes(cleanQuery) || group.toLowerCase().includes(cleanQuery)),
   })).filter((group) => group.items.length > 0);
   return (
     <aside className={open ? "entity-palette-drawer open reference-palette" : "entity-palette-drawer reference-palette"} aria-label="Entity palette" aria-hidden={!open}>
       <header><div><strong>Entity Palette</strong><span>Structured seeds and pivots</span></div><button type="button" onClick={onClose} aria-label="Close entity palette"><X size={15} /></button></header>
       <label className="ref-palette-search"><Search size={12} /><input aria-label="Search entity types" placeholder="Filter entity types..." value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <div className="entity-palette-groups">
-        {filteredGroups.map((group) => <section key={group.name}><h3><span>{group.name}</span><code>{group.items.length} types</code></h3>{group.items.map(([Icon, label, description]) => <div className="ref-entity-type-row" key={label}><GripVertical size={12} /><EntityTypeCard icon={Icon} label={label} description={description} onClick={() => onPick(seedFor(label))} /><span>+ ADD NODE</span></div>)}</section>)}
+        {filteredGroups.map((group) => (
+          <section key={group.name}>
+            <h3><span>{group.name}</span><code>{group.items.length} types</code></h3>
+            {group.items.map((item) => {
+              const Icon = TYPE_ICONS[item.type] || HelpCircle;
+              return (
+                <div className={`ref-entity-type-row ${GROUP_ACCENT[item.group]}${item.enabled ? "" : " disabled"}`} key={item.type}>
+                  <GripVertical size={12} />
+                  <EntityTypeCard icon={Icon} label={item.label} description={item.description} onClick={() => item.enabled && onPick(item.mapsTo || item.type)} />
+                  <span>{item.enabled ? "+ ADD NODE" : "UNSUPPORTED"}</span>
+                </div>
+              );
+            })}
+          </section>
+        ))}
         {!filteredGroups.length && <div className="ref-palette-empty"><HelpCircle size={28} /><strong>No entity types found</strong><span>Try a different metadata label.</span></div>}
       </div>
       <footer className="ref-palette-footer"><Sparkles size={11} /><span>Standard IOC profiles loaded internally</span></footer>
