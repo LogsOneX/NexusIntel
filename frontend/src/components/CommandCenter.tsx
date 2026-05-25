@@ -12,6 +12,7 @@ import AccountPage from "../pages/AccountPage";
 import GraphPage from "../pages/GraphPage";
 import IdentitySearchPage from "../pages/IdentitySearchPage";
 import EvidenceVaultPage from "../pages/EvidenceVaultPage";
+import ReportsPage from "../pages/ReportsPage";
 import ThreatWatchlistPage from "../pages/ThreatWatchlistPage";
 import TransformLibraryPage from "../pages/TransformLibraryPage";
 import CaseDock from "./cases/CaseDock";
@@ -22,7 +23,6 @@ import CommandPalette from "./common/CommandPalette";
 import GraphWorkspaceLayout from "../layouts/GraphWorkspaceLayout";
 import GraphTopBar from "./graph/GraphTopBar";
 import GraphCanvasStage from "./graph/GraphCanvasStage";
-import GraphEmptyLaunch from "./graph/GraphEmptyLaunch";
 import CaseDockDrawer from "./cases/CaseDockDrawer";
 import InspectorDrawer from "./entity/InspectorDrawer";
 import TelemetryDrawer from "./terminal/TelemetryDrawer";
@@ -633,9 +633,9 @@ function GraphHub({ token, navigate }: PageProps) {
             dataPanelOpen={dataPanelOpen}
             setDataPanelOpen={setDataPanelOpen}
             onOpenAddEntity={(kind) => { setAddDialogType(kind || "username"); setAddDialogOpen(true); }}
+            onOpenImport={() => navigate("/evidence")}
             hideToolbar
           />
-          {!graph.nodes.length && <GraphEmptyLaunch hasCase={Boolean(activeCase)} onOpenAdd={(kind) => { setAddDialogType(kind); setAddDialogOpen(true); }} onOpenDock={() => setCaseDockOpen(true)} onOpenPalette={() => setPaletteOpen(true)} onOpenImport={() => navigate("/evidence")} />}
         </GraphCanvasStage>
         <CaseDockDrawer open={caseDockOpen} onClose={() => setCaseDockOpen(false)}>
           <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} leads={graph.leads || []} noise={graph.noise || []} compliance={graph.compliance || []} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} onPromoteLead={(id) => void promoteLead(id)} onRestoreNoise={(id) => void restoreNoise(id)} loading={loading} />
@@ -713,7 +713,7 @@ export default function CommandCenter() {
   if (route === "/graph") page = <GraphHub {...props} />;
   if (route === "/watchlist") page = <ThreatWatchlistPage {...props} />;
   if (route === "/evidence") page = <EvidenceVaultPage {...props} />;
-  if (route === "/reports") page = <EvidenceVaultPage {...props} />;
+  if (route === "/reports") page = <ReportsPage {...props} />;
   if (route === "/transforms") page = <TransformLibraryPage {...props} />;
   if (route === "/oracle") page = <OraclePage {...props} />;
   if (route === "/settings") page = <SettingsPage {...props} />;

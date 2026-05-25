@@ -1,17 +1,12 @@
-import { Bot, Briefcase, ChevronLeft, ChevronRight, Database, FileText, GitBranch, Home, LogOut, Network, Radar, Search, Settings, UserCircle } from "lucide-react";
+import { Briefcase, Command, Database, FileText, Home, LogOut, Network, Settings, UserCircle } from "lucide-react";
 
 const ROUTES = [
   { path: "/dashboard", label: "Dashboard", icon: Home },
-  { path: "/identity", label: "Identity Search", icon: Search },
-  { path: "/workspace", label: "Workspace", icon: Briefcase },
-  { path: "/graph", label: "Network Graph", icon: Network },
-  { path: "/watchlist", label: "Threat Watchlist", icon: Radar },
-  { path: "/evidence", label: "Evidence Vault", icon: Database },
+  { path: "/graph", label: "Graph", icon: Network },
+  { path: "/workspace", label: "Cases", icon: Briefcase },
+  { path: "/evidence", label: "Evidence", icon: Database },
   { path: "/reports", label: "Reports", icon: FileText },
-  { path: "/transforms", label: "Transforms", icon: GitBranch },
-  { path: "/oracle", label: "AI Oracle", icon: Bot },
   { path: "/settings", label: "Settings", icon: Settings },
-  { path: "/account", label: "Account", icon: UserCircle },
 ];
 
 export default function SidebarNav({ route, user, collapsed, setCollapsed, navigate, logout, onOpenCommandPalette }: { route: string; user: string; collapsed: boolean; setCollapsed: (value: boolean) => void; navigate: (path: string) => void; logout: () => void; onOpenCommandPalette: () => void }) {
@@ -19,7 +14,6 @@ export default function SidebarNav({ route, user, collapsed, setCollapsed, navig
     <aside className="nexus-sidebar command-sidebar premium-sidebar">
       <button className="command-brand premium-brand" type="button" onClick={onOpenCommandPalette} title="Open command palette">
         <span className="brand-monogram">NX</span>
-        <div><strong>NexusIntel</strong><span>Analyst Command</span></div>
       </button>
       <nav aria-label="Primary navigation">
         {ROUTES.map((item) => {
@@ -28,9 +22,9 @@ export default function SidebarNav({ route, user, collapsed, setCollapsed, navig
         })}
       </nav>
       <div className="sidebar-footer">
-        <button type="button" onClick={() => setCollapsed(!collapsed)} title="Collapse sidebar">{collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}<span>Collapse</span></button>
+        <button type="button" onClick={onOpenCommandPalette} title="Command palette"><Command size={16} /><span>Command</span></button>
         <button type="button" onClick={logout} title="Logout"><LogOut size={16} /><span>Logout</span></button>
-        <code>{user}</code>
+        <button type="button" title={user || "Operator"}><UserCircle size={16} /><span>{user || "Operator"}</span></button>
       </div>
     </aside>
   );

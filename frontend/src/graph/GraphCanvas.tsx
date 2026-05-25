@@ -1,9 +1,6 @@
 import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import cytoscape from "cytoscape";
-import { Clock3, Crosshair, Download, GitBranch, Maximize2, Network, PanelBottom, PanelRight, Play, Plus, Radio, RotateCcw, Search, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
-import { EntityPaletteItem } from "../components/CustomNode";
-import TimelineView from "../components/TimelineView";
+import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import { mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
 
 export type GraphNode = {
   id: string;
@@ -58,20 +55,8 @@ type ApiGraphPayload = {
   metadata?: Record<string, unknown>;
 };
 
-type TransformAction = {
-  id: string;
-  label: string;
-  description: string;
-};
-
-type ContextMenu = {
-  x: number;
-  y: number;
-  node: GraphNode;
-};
-
 type LayoutMode = "tree" | "circular" | "force";
-type ContextTab = "transforms" | "playbooks";
+type StudioPosition = { x: number; y: number };
 
 type GraphCanvasProps = {
   investigationId: string | null;
@@ -97,11 +82,9 @@ type GraphCanvasProps = {
   setDataPanelOpen?: Dispatch<SetStateAction<boolean>>;
   hideToolbar?: boolean;
   onOpenAddEntity?: (kind?: string) => void;
+  onOpenImport?: () => void;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
-const PALETTE_TYPES = ["username", "email", "domain", "ip", "phone", "crypto_wallet"] as const;
-const HISTORY_LIMIT = 40;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 function upperSnake(value: string): string {
@@ -111,22 +94,10 @@ function upperSnake(value: string): string {
 
 function confidenceScore(value?: string): number | undefined {
   const raw = String(value || "").toLowerCase();
-  if (["confirmed", "high", "success", "true"].includes(raw)) return 90;
+  if (["confirmed", "verified", "high", "strong", "success", "true"].includes(raw)) return 90;
   if (["medium", "observed", "probable"].includes(raw)) return 60;
   if (["low", "weak", "candidate", "false"].includes(raw)) return 30;
   return undefined;
-}
-
-function shapeFor(_type: string): GraphNode["nodeShape"] {
-  return "square";
-}
-
-function cyShape(_shape: GraphNode["nodeShape"]): string {
-  return "round-rectangle";
-}
-
-function svgDataUri(svg: string): string {
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
 type NodeVisual = { accent: string; code: string; icon: string; family: string };
@@ -151,361 +122,90 @@ const NODE_ICON_PATHS: Record<string, string> = {
 };
 
 const NODE_VISUALS: Record<string, NodeVisual> = {
-  username: { accent: "#60a5fa", code: "USER", icon: "fingerprint", family: "identity" },
-  name: { accent: "#60a5fa", code: "ALIAS", icon: "identity", family: "identity" },
-  person_alias: { accent: "#60a5fa", code: "ALIAS", icon: "identity", family: "identity" },
-  profile: { accent: "#60a5fa", code: "PROF", icon: "fingerprint", family: "identity" },
-  account: { accent: "#60a5fa", code: "ACCT", icon: "identity", family: "identity" },
-  email: { accent: "#2dd4bf", code: "EMAIL", icon: "mail", family: "contact" },
-  masked_email: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
-  censored_email: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
-  phone: { accent: "#2dd4bf", code: "PHONE", icon: "phone", family: "contact" },
-  masked_phone: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
-  censored_phone: { accent: "#2dd4bf", code: "MASK", icon: "lock", family: "contact" },
-  domain: { accent: "#a78bfa", code: "DNS", icon: "globe", family: "infra" },
-  url: { accent: "#a78bfa", code: "URL", icon: "link", family: "infra" },
-  ip: { accent: "#a78bfa", code: "IP", icon: "server", family: "infra" },
-  dns_record: { accent: "#a78bfa", code: "DNS", icon: "server", family: "infra" },
-  certificate: { accent: "#a78bfa", code: "CERT", icon: "file", family: "infra" },
-  service: { accent: "#a78bfa", code: "SVC", icon: "server", family: "infra" },
-  technology: { accent: "#a78bfa", code: "TECH", icon: "server", family: "infra" },
-  google_profile: { accent: "#f472b6", code: "MAPS", icon: "pin", family: "geo" },
-  google_maps_profile: { accent: "#f472b6", code: "MAPS", icon: "pin", family: "geo" },
-  google_review: { accent: "#f472b6", code: "REVIEW", icon: "star", family: "geo" },
-  location: { accent: "#f472b6", code: "LOC", icon: "pin", family: "geo" },
-  place: { accent: "#f472b6", code: "PLACE", icon: "pin", family: "geo" },
-  image_asset: { accent: "#f59e0b", code: "IMG", icon: "image", family: "asset" },
-  avatar: { accent: "#f59e0b", code: "IMG", icon: "image", family: "asset" },
-  favicon: { accent: "#f59e0b", code: "HASH", icon: "image", family: "asset" },
-  hash: { accent: "#f59e0b", code: "HASH", icon: "file", family: "asset" },
-  document: { accent: "#94a3b8", code: "DOC", icon: "file", family: "asset" },
-  evidence: { accent: "#94a3b8", code: "EV", icon: "file", family: "asset" },
-  crypto_wallet: { accent: "#34d399", code: "WALLET", icon: "wallet", family: "crypto" },
-  wallet: { accent: "#34d399", code: "WALLET", icon: "wallet", family: "crypto" },
-  crypto_transaction: { accent: "#34d399", code: "TX", icon: "transaction", family: "crypto" },
-  transaction: { accent: "#34d399", code: "TX", icon: "transaction", family: "crypto" },
-  suspicious_domain: { accent: "#ef4444", code: "RISK", icon: "alert", family: "threat" },
-  breach_record: { accent: "#ef4444", code: "BREACH", icon: "alert", family: "threat" },
-  indicator: { accent: "#ef4444", code: "IOC", icon: "alert", family: "threat" },
-  target: { accent: "#ef4444", code: "ROOT", icon: "target", family: "system" },
-  investigation_root: { accent: "#ef4444", code: "ROOT", icon: "target", family: "system" },
-  note: { accent: "#94a3b8", code: "NOTE", icon: "file", family: "system" },
-  signal: { accent: "#94a3b8", code: "SIG", icon: "target", family: "system" },
+  username: { accent: "#3B82F6", code: "USER", icon: "fingerprint", family: "identity" },
+  name: { accent: "#3B82F6", code: "ALIAS", icon: "identity", family: "identity" },
+  person_alias: { accent: "#3B82F6", code: "ALIAS", icon: "identity", family: "identity" },
+  profile: { accent: "#3B82F6", code: "PROF", icon: "fingerprint", family: "identity" },
+  account: { accent: "#3B82F6", code: "ACCT", icon: "identity", family: "identity" },
+  email: { accent: "#10B981", code: "EMAIL", icon: "mail", family: "contact" },
+  masked_email: { accent: "#10B981", code: "MASK", icon: "lock", family: "contact" },
+  phone: { accent: "#10B981", code: "PHONE", icon: "phone", family: "contact" },
+  domain: { accent: "#A855F7", code: "DNS", icon: "globe", family: "infra" },
+  url: { accent: "#A855F7", code: "URL", icon: "link", family: "infra" },
+  ip: { accent: "#A855F7", code: "IP", icon: "server", family: "infra" },
+  dns_record: { accent: "#A855F7", code: "DNS", icon: "server", family: "infra" },
+  certificate: { accent: "#A855F7", code: "CERT", icon: "file", family: "infra" },
+  service: { accent: "#A855F7", code: "SVC", icon: "server", family: "infra" },
+  technology: { accent: "#A855F7", code: "TECH", icon: "server", family: "infra" },
+  google_profile: { accent: "#F59E0B", code: "MAPS", icon: "pin", family: "geo" },
+  google_maps_profile: { accent: "#F59E0B", code: "MAPS", icon: "pin", family: "geo" },
+  google_review: { accent: "#F59E0B", code: "REVIEW", icon: "star", family: "geo" },
+  location: { accent: "#F59E0B", code: "LOC", icon: "pin", family: "geo" },
+  place: { accent: "#F59E0B", code: "PLACE", icon: "pin", family: "geo" },
+  image_asset: { accent: "#F59E0B", code: "IMG", icon: "image", family: "asset" },
+  avatar: { accent: "#F59E0B", code: "IMG", icon: "image", family: "asset" },
+  favicon: { accent: "#F59E0B", code: "HASH", icon: "image", family: "asset" },
+  hash: { accent: "#F59E0B", code: "HASH", icon: "file", family: "asset" },
+  document: { accent: "#8B8B91", code: "DOC", icon: "file", family: "asset" },
+  evidence: { accent: "#8B8B91", code: "EV", icon: "file", family: "asset" },
+  crypto_wallet: { accent: "#10B981", code: "WALLET", icon: "wallet", family: "crypto" },
+  wallet: { accent: "#10B981", code: "WALLET", icon: "wallet", family: "crypto" },
+  crypto_transaction: { accent: "#10B981", code: "TX", icon: "transaction", family: "crypto" },
+  transaction: { accent: "#10B981", code: "TX", icon: "transaction", family: "crypto" },
+  suspicious_domain: { accent: "#EF4444", code: "RISK", icon: "alert", family: "threat" },
+  breach_record: { accent: "#EF4444", code: "BREACH", icon: "alert", family: "threat" },
+  indicator: { accent: "#EF4444", code: "IOC", icon: "alert", family: "threat" },
+  target: { accent: "#EF4444", code: "ROOT", icon: "target", family: "system" },
+  investigation_root: { accent: "#EF4444", code: "ROOT", icon: "target", family: "system" },
+  note: { accent: "#8B8B91", code: "NOTE", icon: "file", family: "system" },
+  signal: { accent: "#8B8B91", code: "SIG", icon: "target", family: "system" },
 };
 
+const HIDDEN_NODE_TYPES = new Set([
+  "guardrail", "compliance", "skipped_check", "legal_note", "policy", "policy_notice", "blocked_transform", "prohibited_probe_notice",
+  "noise", "soft_404", "auth_wall_only", "generic_login_page", "parked_domain", "registrar_privacy_noise",
+]);
+
+const CANDIDATE_NODE_TYPES = new Set([
+  "profile_candidate", "candidate_profile", "candidate_url_only", "username_candidate", "email_candidate", "phone_deeplink_candidate", "possible_profile", "possible_same_actor",
+]);
+
 function visualForNodeType(type: string): NodeVisual {
-  const normalized = type.toLowerCase();
+  const normalized = String(type || "").toLowerCase();
   if (normalized.includes("risk") || normalized.includes("suspicious")) return NODE_VISUALS.suspicious_domain;
-  if (normalized.includes("candidate") || normalized.includes("possible")) return { accent: "#f59e0b", code: "LEAD", icon: "target", family: "candidate" };
+  if (normalized.includes("candidate") || normalized.includes("possible")) return { accent: "#F59E0B", code: "LEAD", icon: "target", family: "candidate" };
   return NODE_VISUALS[normalized] || NODE_VISUALS.profile;
 }
 
-function cardIconForNodeType(type: string): string {
-  const visual = visualForNodeType(type);
-  const icon = NODE_ICON_PATHS[visual.icon] || NODE_ICON_PATHS.target;
-  const code = visual.code.length > 6 ? visual.code.slice(0, 6) : visual.code;
-  return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="132" height="94" viewBox="0 0 132 94">
-    <rect x="18" y="44" width="96" height="38" rx="8" fill="#1A1A1C" stroke="#2D2D30"/>
-    <rect x="24" y="78" width="84" height="3" rx="1.5" fill="${visual.accent}" opacity=".72"/>
-    <circle cx="66" cy="32" r="29" fill="#1A1A1C" stroke="#2D2D30"/>
-    <circle cx="66" cy="32" r="24" fill="#0F0F11" stroke="${visual.accent}" stroke-width="2"/>
-    <svg x="50" y="16" width="32" height="32" viewBox="0 0 64 64">
-      <g fill="none" stroke="${visual.accent}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">${icon}</g>
-    </svg>
-    <rect x="78" y="45" width="31" height="13" rx="4" fill="#0F0F11" stroke="#2D2D30"/>
-    <text x="93.5" y="54" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6.5" font-weight="700" fill="#8B8B91">${code}</text>
-  </svg>`);
+function isGraphVisible(node: ApiGraphNode): boolean {
+  const type = String(node.type || "").toLowerCase();
+  const data = node.data || {};
+  const artifactClass = String(data.artifact_class || data.classification || "").toLowerCase();
+  const visibility = String(data.graph_visibility || "").toLowerCase();
+  if (HIDDEN_NODE_TYPES.has(type) || HIDDEN_NODE_TYPES.has(artifactClass) || HIDDEN_NODE_TYPES.has(visibility)) return false;
+  if (CANDIDATE_NODE_TYPES.has(type) || CANDIDATE_NODE_TYPES.has(artifactClass) || visibility === "candidate_bin") return false;
+  return true;
 }
 
-const CY_NODE_ICONS: Record<string, string> = {};
-
-function iconForNodeType(type: string): string {
-  const normalized = type.toLowerCase();
-  if (!CY_NODE_ICONS[normalized]) CY_NODE_ICONS[normalized] = cardIconForNodeType(normalized);
-  return CY_NODE_ICONS[normalized];
-}
-
-function displayTypeLabel(type: string): string {
-  if (type === "google_review") return "[REVIEW]";
-  if (type === "location") return "[LOCATION]";
-  return `[${upperSnake(type)}]`;
-}
-
-function compactNodeLabel(value: string): string {
-  const clean = value.replace(/\s+/g, " ").trim();
-  if (clean.length <= 24) return clean;
+function compactLabel(value: string): string {
+  const clean = String(value || "").replace(/\s+/g, " ").trim();
+  if (clean.length <= 28) return clean;
   if (clean.includes("@")) {
     const [local, domain] = clean.split("@");
-    return `${local.slice(0, 10)}…@${(domain || "").slice(0, 10)}`;
+    return `${local.slice(0, 12)}…@${(domain || "").slice(0, 12)}`;
   }
-  return `${clean.slice(0, 21)}…`;
+  return `${clean.slice(0, 25)}…`;
 }
 
-function labelForApiNode(node: ApiGraphNode): string {
-  return node.label || node.value || node.type;
+function nodeConfidence(node: ApiGraphNode): number {
+  const data = node.data || {};
+  const numeric = Number(node.confidence_level ?? data.confidence_score ?? data.confidence_level);
+  if (Number.isFinite(numeric)) return Math.max(0, Math.min(100, numeric));
+  return confidenceScore(node.confidence) || 50;
 }
 
-function iconForApiNode(_node: ApiGraphNode): string | null {
-  return null;
-}
-
-function apiNodeFromStrict(node: GraphNode): ApiGraphNode {
-  return {
-    id: node.id,
-    type: node.nodeType,
-    label: node.nodeLabel,
-    value: String(node.nodeProperties.value || node.nodeLabel),
-    source: String(node.nodeProperties.source || "graph"),
-    confidence: String(node.nodeProperties.confidence || "medium"),
-    confidence_level: typeof node.nodeProperties.confidence_level === "number" ? node.nodeProperties.confidence_level : confidenceScore(String(node.nodeProperties.confidence || "medium")),
-    data: node.nodeProperties,
-    created_at: String(node.nodeProperties.created_at || new Date().toISOString()),
-  };
-}
-
-function strictNodeFromApi(
-  node: ApiGraphNode,
-  previous: GraphNode | undefined,
-  index: number,
-  parentPosition?: { x: number; y: number; siblingIndex: number },
-): GraphNode {
-  if (previous) {
-    return {
-      ...previous,
-      nodeType: node.type,
-      nodeLabel: labelForApiNode(node),
-      nodeProperties: {
-        ...(previous.nodeProperties || {}),
-        ...(node.data || {}),
-        value: node.value,
-        source: node.source || "graph",
-        confidence: node.confidence || "medium",
-        confidence_level: typeof node.confidence_level === "number" ? node.confidence_level : typeof node.data?.confidence_level === "number" ? node.data.confidence_level : previous.nodeProperties.confidence_level,
-        created_at: node.created_at || previous.nodeProperties.created_at || new Date().toISOString(),
-      },
-      nodeIcon: iconForApiNode(node),
-      nodeFlag: node.confidence === "low" ? "LOW" : null,
-    };
-  }
-
-  const dataX = Number((node.data || {}).x);
-  const dataY = Number((node.data || {}).y);
-  let x = Number.isFinite(dataX) ? dataX : 180 + (index % 8) * 138;
-  let y = Number.isFinite(dataY) ? dataY : 180 + Math.floor(index / 8) * 112;
-  if (parentPosition) {
-    const radius = 160 + (parentPosition.siblingIndex % 4) * 34;
-    const angle = parentPosition.siblingIndex * GOLDEN_ANGLE;
-    x = parentPosition.x + Math.cos(angle) * radius;
-    y = parentPosition.y + Math.sin(angle) * radius;
-  }
-
-  return {
-    id: node.id,
-    nodeType: node.type,
-    nodeLabel: labelForApiNode(node),
-    nodeProperties: {
-      ...(node.data || {}),
-      value: node.value,
-      source: node.source || "graph",
-      confidence: node.confidence || "medium",
-      confidence_level: typeof node.confidence_level === "number" ? node.confidence_level : typeof node.data?.confidence_level === "number" ? node.data.confidence_level : confidenceScore(node.confidence),
-      created_at: node.created_at || new Date().toISOString(),
-    },
-    nodeShape: shapeFor(node.type),
-    x,
-    y,
-    nodeIcon: iconForApiNode(node),
-    nodeFlag: node.confidence === "low" ? "LOW" : null,
-  };
-}
-
-function strictEdgeFromApi(edge: ApiGraphEdge): GraphEdge {
-  return {
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    label: upperSnake(edge.type),
-    confidence_level: typeof edge.confidence_level === "number" ? edge.confidence_level : typeof edge.data?.confidence_level === "number" ? edge.data.confidence_level : confidenceScore(edge.confidence),
-    created_at: edge.created_at || String(edge.data?.created_at || ""),
-  };
-}
-
-function normalizeGraphPayload(payload: unknown): ApiGraphPayload {
-  const raw = (payload || {}) as Partial<ApiGraphPayload>;
-  return {
-    nodes: Array.isArray(raw.nodes) ? raw.nodes : [],
-    edges: Array.isArray(raw.edges) ? raw.edges : [],
-    leads: Array.isArray(raw.leads) ? raw.leads : [],
-    noise: Array.isArray(raw.noise) ? raw.noise : [],
-    compliance: Array.isArray(raw.compliance) ? raw.compliance : [],
-    metadata: raw.metadata || {},
-  };
-}
-
-function cloneState(nodes: GraphNode[], edges: GraphEdge[]) {
-  return {
-    nodes: JSON.parse(JSON.stringify(nodes)) as GraphNode[],
-    edges: JSON.parse(JSON.stringify(edges)) as GraphEdge[],
-  };
-}
-
-function transformsFor(node: GraphNode): TransformAction[] {
-  if (["username", "name", "profile"].includes(node.nodeType)) {
-    return [
-      { id: "username_to_email", label: "Username -> Email", description: "Generate mailbox candidates and public email pivots from this handle" },
-      { id: "username_identity_sweep", label: "Username Identity Sweep", description: "Resolve confirmed public account/profile surfaces" },
-      { id: "tier_1_major_socials", label: "Major Socials", description: "Facebook, Instagram, LinkedIn, X, Threads, TikTok" },
-      { id: "tier_2_tech_dev", label: "Tech & Dev", description: "GitHub, GitLab, StackOverflow, HackTheBox" },
-      { id: "tier_3_gaming_forums", label: "Gaming & Forums", description: "Steam, Discord, Reddit, Twitch" },
-      { id: "tier_4_deep_sweep", label: "Deep Sweep", description: "Full 100+ site Maigret/Sherlock execution" },
-    ];
-  }
-  if (node.nodeType === "email") {
-    return [
-      { id: "check_email_registrations", label: "Check Registrations", description: "Analyze public registration response signatures without stripping the domain" },
-      { id: "google_footprint_lookup", label: "Google Footprint", description: "Verified public Maps profile URL review expansion only" },
-      { id: "email_to_domain", label: "Email -> Domain", description: "Extract mail domain, MX, DMARC, SPF, BIMI and DNS records" },
-    ];
-  }
-  if (node.nodeType === "crypto_wallet") {
-    return [
-      { id: "check_wallet_balance", label: "Check Balance", description: "Fetch public chain balance and wallet summary" },
-      { id: "trace_transactions", label: "Trace Transactions", description: "Create linked transaction nodes and public flow edges" },
-    ];
-  }
-  if (node.nodeType === "domain") {
-    return [
-      { id: "domain_recon", label: "Extract DNS", description: "A, AAAA, MX, NS, TXT, CAA and candidate subdomains" },
-      { id: "network_recon", label: "RDAP + Certificate Pivots", description: "Public RDAP and passive certificate signals" },
-      { id: "workspace_recon", label: "Mail Surface", description: "Infer mail providers and authentication controls" },
-    ];
-  }
-  if (node.nodeType === "ip") {
-    return [
-      { id: "ip_recon", label: "IP Recon", description: "Reverse DNS, RDAP allocation and public network hints" },
-      { id: "reverse_dns", label: "Reverse DNS", description: "Create linked hostname entities from PTR signals" },
-    ];
-  }
-  if (node.nodeType === "phone") {
-    return [
-      { id: "phone_to_email", label: "Phone -> Email", description: "Create conservative public contact/email pivot candidates from numbering metadata" },
-      { id: "check_messenger_presence", label: "Messenger Presence", description: "Validate E.164 and parse public deep-link metadata only" },
-      { id: "phone_recon", label: "Numbering Plan", description: "Validate E.164 and map public numbering-plan hints" },
-      { id: "carrier_lookup", label: "Carrier Hint", description: "Create public line-type and region signals" },
-    ];
-  }
-  return [{ id: "network_recon", label: "Infrastructure Pivot", description: "Run public DNS/network transforms from this entity" }];
-}
-
-function playbooksFor(node: GraphNode): TransformAction[] {
-  return [
-    {
-      id: "full_identity_pipeline",
-      label: "Full Identity Machine",
-      description: "Email or handle to profiles, domain, MX, DNS, IP and workspace nodes",
-    },
-    ...(node.nodeType === "email"
-      ? [{ id: "email_macro", label: "Email Attack Surface Map", description: "Mailbox to domain, DNS, MX and workspace posture" }]
-      : []),
-  ];
-}
-
-async function apiJson(path: string, options?: RequestInit) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options?.headers || {}) },
-    ...options,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.ok === false) {
-    throw new Error(payload.detail || payload.message || `Request failed: ${response.status}`);
-  }
-  return payload;
-}
-
-function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function reportHtml(nodes: GraphNode[], edges: GraphEdge[], imageData: string, investigationId: string | null): string {
-  const generatedAt = new Date().toISOString();
-  const rows = nodes
-    .map(
-      (node) => `<tr><td>${escapeHtml(node.nodeType)}</td><td>${escapeHtml(node.nodeLabel)}</td><td>${escapeHtml(node.nodeProperties.value)}</td><td>${escapeHtml(node.nodeProperties.confidence || "medium")}</td></tr>`,
-    )
-    .join("");
-  const edgeRows = edges.map((edge) => `<tr><td>${escapeHtml(edge.source)}</td><td>${escapeHtml(edge.label)}</td><td>${escapeHtml(edge.target)}</td><td>${escapeHtml(edge.confidence_level || "")}</td></tr>`).join("");
-  const graphJson = escapeHtml(JSON.stringify({ nodes, edges }, null, 2));
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>NexusIntel Intelligence Report</title>
-<style>
-  * { box-sizing: border-box; }
-  body { margin: 0; background: #000; color: #fff; font-family: Inter, Arial, sans-serif; }
-  main { max-width: 1160px; margin: 0 auto; padding: 32px; }
-  h1, h2 { margin: 0; text-transform: uppercase; letter-spacing: 0; }
-  header { border: 1px solid #333; padding: 18px; margin-bottom: 18px; background: #111; }
-  p, code, small, td, th { font-family: "JetBrains Mono", monospace; }
-  small { color: #888; }
-  section { border: 1px solid #333; margin-top: 18px; padding: 18px; background: #050505; }
-  img { width: 100%; border: 1px solid #333; background: #000; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
-  th, td { border: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; }
-  th { color: #888; text-transform: uppercase; }
-  pre { white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid #333; padding: 12px; background: #000; color: #fff; font-size: 11px; }
-</style>
-</head>
-<body>
-<main>
-  <header>
-    <small>NEXUSINTEL / TACTICAL REPORT</small>
-    <h1>Intelligence Graph Export</h1>
-    <p>Investigation: ${escapeHtml(investigationId || "local")}</p>
-    <p>Generated: ${escapeHtml(generatedAt)}</p>
-  </header>
-  <section>
-    <h2>Visual Link Analysis</h2>
-    ${imageData ? `<img src="${imageData}" alt="Current graph canvas" />` : `<p>No graph image captured.</p>`}
-  </section>
-  <section>
-    <h2>Entities</h2>
-    <table><thead><tr><th>Type</th><th>Label</th><th>Value</th><th>Confidence</th></tr></thead><tbody>${rows}</tbody></table>
-  </section>
-  <section>
-    <h2>Relationships</h2>
-    <table><thead><tr><th>Source</th><th>Label</th><th>Target</th><th>Confidence</th></tr></thead><tbody>${edgeRows}</tbody></table>
-  </section>
-  <section>
-    <h2>Structured Graph JSON</h2>
-    <pre>${graphJson}</pre>
-  </section>
-</main>
-</body>
-</html>`;
-}
-
-function confidenceLevelForNode(node: GraphNode): number {
-  const numeric = Number(node.nodeProperties.confidence_level);
-  if (Number.isFinite(numeric)) return numeric;
-  return confidenceScore(String(node.nodeProperties.confidence || "medium")) || 50;
-}
-
-function timestampForNode(node: GraphNode): number {
-  const raw = String(node.nodeProperties.created_at || node.nodeProperties.timestamp || "");
-  const parsed = Date.parse(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function timestampForEdge(edge: GraphEdge): number {
-  const parsed = Date.parse(String(edge.created_at || ""));
-  return Number.isFinite(parsed) ? parsed : 0;
+function nodeSource(node: ApiGraphNode): string {
+  return String(node.source || node.data?.source || node.data?.adapter_id || "graph");
 }
 
 function isPrivateOrBogonIp(value: string): boolean {
@@ -518,55 +218,58 @@ function suspiciousDomain(value: string): boolean {
   return ["login-", "secure-", "verify-", "account-", "wallet-", "signin-", "-login", "-verify", "password", "update-billing"].some((term) => domain.includes(term));
 }
 
-function passiveNodeTag(node: GraphNode): "INTERNAL" | "SUSPICIOUS" | null {
-  const value = String(node.nodeProperties.value || node.nodeLabel);
-  if (node.nodeType === "ip" && isPrivateOrBogonIp(value)) return "INTERNAL";
-  if (node.nodeType === "domain" && suspiciousDomain(value)) return "SUSPICIOUS";
+function nodeRiskTag(node: ApiGraphNode): "INTERNAL" | "SUSPICIOUS" | null {
+  const value = String(node.value || node.label || "");
+  if (node.type === "ip" && isPrivateOrBogonIp(value)) return "INTERNAL";
+  if (node.type === "domain" && suspiciousDomain(value)) return "SUSPICIOUS";
   return null;
 }
 
-function nodeElement(node: GraphNode): cytoscape.ElementDefinition {
-  const confidence = String(node.nodeProperties.confidence || "medium");
-  const tag = passiveNodeTag(node);
-  const visual = visualForNodeType(node.nodeType);
-  const root = node.nodeProperties.role === "root" || node.nodeType === "target" || node.nodeType === "investigation_root";
+function positionFor(index: number, total: number, width: number, height: number, mode: LayoutMode): StudioPosition {
+  const centerX = Math.max(440, width / 2);
+  const centerY = Math.max(280, height / 2);
+  if (mode === "tree") {
+    const columns = Math.max(1, Math.ceil(Math.sqrt(total || 1)));
+    return { x: 155 + (index % columns) * 190, y: 118 + Math.floor(index / columns) * 150 };
+  }
+  if (mode === "circular") {
+    const radius = Math.max(190, Math.min(width, height) * 0.32);
+    const angle = total <= 1 ? -Math.PI / 2 : (index / total) * Math.PI * 2 - Math.PI / 2;
+    return { x: centerX + Math.cos(angle) * radius - 66, y: centerY + Math.sin(angle) * radius - 38 };
+  }
+  const radius = 92 + Math.sqrt(index + 1) * 58;
+  const angle = index * GOLDEN_ANGLE;
+  return { x: centerX + Math.cos(angle) * radius - 66, y: centerY + Math.sin(angle) * radius - 38 };
+}
+
+function graphNodeForReport(node: ApiGraphNode, position: StudioPosition): GraphNode {
   return {
-    group: "nodes",
-    data: {
-      id: node.id,
-      label: compactNodeLabel(`${tag ? `[${tag}] ` : ""}${node.nodeLabel}`),
-      rawLabel: node.nodeLabel,
-      tag: tag || "",
-      nodeType: node.nodeType,
-      typeLabel: displayTypeLabel(node.nodeType),
-      value: String(node.nodeProperties.value || node.nodeLabel),
-      icon: iconForNodeType(node.nodeType),
-      confidence,
-      nodeShape: cyShape(node.nodeShape),
-      flag: node.nodeFlag || "",
-      family: visual.family,
-      accent: visual.accent,
-    },
-    position: { x: node.x, y: node.y },
-    classes: `entity premium-entity family-${visual.family} ${root ? "root-entity" : ""} ${confidence === "low" ? "low-confidence" : ""} ${node.nodeType.startsWith("censored_") ? "censored-entity" : ""} ${node.nodeType === "location" ? "location-entity" : ""} ${tag === "INTERNAL" ? "tag-internal" : ""} ${tag === "SUSPICIOUS" ? "tag-suspicious" : ""}`,
+    id: node.id,
+    nodeType: node.type,
+    nodeLabel: node.label || node.value || node.type,
+    nodeProperties: { ...(node.data || {}), value: node.value, source: node.source || "graph", confidence: node.confidence || "medium", confidence_level: nodeConfidence(node), created_at: node.created_at || new Date().toISOString() },
+    nodeShape: "circle",
+    x: position.x,
+    y: position.y,
+    nodeIcon: null,
+    nodeFlag: node.confidence === "low" ? "LOW" : null,
   };
 }
 
-function edgeElement(edge: GraphEdge, runningNodeId: string | null, faded = false): cytoscape.ElementDefinition {
-  const confidence = edge.confidence_level || 60;
-  return {
-    group: "edges",
-    data: {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.label,
-      confidence_level: confidence,
-      created_at: edge.created_at || "",
-      width: Math.max(1, confidence / 38),
-    },
-    classes: `edge ${confidence < 50 ? "low-confidence" : ""} ${runningNodeId && edge.source === runningNodeId ? "running-flow" : ""} ${faded ? "faded" : ""}`,
-  };
+function graphEdgeForReport(edge: ApiGraphEdge): GraphEdge {
+  return { id: edge.id, source: edge.source, target: edge.target, label: upperSnake(edge.type), confidence_level: Number(edge.confidence_level || edge.data?.confidence_score || confidenceScore(edge.confidence) || 60), created_at: edge.created_at || String(edge.data?.created_at || "") };
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+
+function reportHtml(nodes: GraphNode[], edges: GraphEdge[], investigationId: string | null): string {
+  const generatedAt = new Date().toISOString();
+  const rows = nodes.map((node) => `<tr><td>${escapeHtml(node.nodeType)}</td><td>${escapeHtml(node.nodeLabel)}</td><td>${escapeHtml(node.nodeProperties.value)}</td><td>${escapeHtml(node.nodeProperties.confidence_level || "")}</td></tr>`).join("");
+  const edgeRows = edges.map((edge) => `<tr><td>${escapeHtml(edge.source)}</td><td>${escapeHtml(edge.label)}</td><td>${escapeHtml(edge.target)}</td><td>${escapeHtml(edge.confidence_level || "")}</td></tr>`).join("");
+  const graphJson = escapeHtml(JSON.stringify({ nodes, edges }, null, 2));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>NexusIntel Intelligence Report</title><style>body{margin:0;background:#0A0A0B;color:#E0E0E3;font-family:Inter,Arial,sans-serif}main{max-width:1160px;margin:0 auto;padding:32px}header,section{border:1px solid #2D2D30;background:#141416;margin:0 0 18px;padding:18px}h1,h2{margin:0 0 12px}small,td,th,pre{font-family:"JetBrains Mono",monospace}table{width:100%;border-collapse:collapse;font-size:12px}td,th{border:1px solid #2D2D30;padding:8px;text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0F0F11;padding:12px}</style></head><body><main><header><small>NEXUSINTEL / STUDIO GRAPH EXPORT</small><h1>Intelligence Graph Export</h1><p>Investigation: ${escapeHtml(investigationId || "local")}</p><p>Generated: ${escapeHtml(generatedAt)}</p></header><section><h2>Entities</h2><table><thead><tr><th>Type</th><th>Label</th><th>Value</th><th>Confidence</th></tr></thead><tbody>${rows}</tbody></table></section><section><h2>Relationships</h2><table><thead><tr><th>Source</th><th>Label</th><th>Target</th><th>Confidence</th></tr></thead><tbody>${edgeRows}</tbody></table></section><section><h2>Structured Graph JSON</h2><pre>${graphJson}</pre></section></main></body></html>`;
 }
 
 export default function GraphCanvas({
@@ -575,961 +278,249 @@ export default function GraphCanvas({
   edges,
   selectedNode,
   onSelectNode,
-  onGraphUpdate,
-  onTaskStart,
-  onError,
   onSystemLog,
   onOracleNode,
-  searchTarget,
-  setSearchTarget,
-  reconMode,
-  setReconMode,
-  onLaunch,
-  onAddSeed,
-  isLaunching,
-  terminalOpen,
-  setTerminalOpen,
-  dataPanelOpen,
   setDataPanelOpen,
-  hideToolbar = false,
   onOpenAddEntity,
+  onOpenImport,
 }: GraphCanvasProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
-  const pollers = useRef<Record<string, number>>({});
-  const dashAnimation = useRef<number | null>(null);
-  const graphNodesRef = useRef<GraphNode[]>([]);
-  const graphEdgesRef = useRef<GraphEdge[]>([]);
-  const apiNodesRef = useRef<Map<string, ApiGraphNode>>(new Map());
-  const incomingIdsRef = useRef<Set<string>>(new Set());
-  const historyStack = useRef<Array<{ nodes: GraphNode[]; edges: GraphEdge[] }>>([]);
-  const redoStack = useRef<Array<{ nodes: GraphNode[]; edges: GraphEdge[] }>>([]);
-  const suppressNextPropHistory = useRef(false);
-  const hasFitRef = useRef(false);
-  const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
-  const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [positions, setPositions] = useState<Record<string, StudioPosition>>({});
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("force");
-  const [localSearchTarget, setLocalSearchTarget] = useState("");
-  const [localReconMode, setLocalReconMode] = useState<"passive" | "standard" | "aggressive">("standard");
-  const [localTerminalOpen, setLocalTerminalOpen] = useState(true);
-  const [localDataPanelOpen, setLocalDataPanelOpen] = useState(true);
-  const [timelineMode, setTimelineMode] = useState(false);
-  const [highlightType, setHighlightType] = useState("all");
-  const [highlightMinConfidence, setHighlightMinConfidence] = useState(0);
-  const [timeCursor, setTimeCursor] = useState(100);
-  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
-  const [contextTab, setContextTab] = useState<ContextTab>("transforms");
-  const [runningTask, setRunningTask] = useState<string | null>(null);
-  const [runningNodeId, setRunningNodeId] = useState<string | null>(null);
-  const [dropHint, setDropHint] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
+  const [panning, setPanning] = useState<{ x: number; y: number; startX: number; startY: number } | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
-  const effectiveSearchTarget = searchTarget ?? localSearchTarget;
-  const effectiveSetSearchTarget = setSearchTarget ?? setLocalSearchTarget;
-  const effectiveReconMode = reconMode ?? localReconMode;
-  const effectiveSetReconMode = setReconMode ?? setLocalReconMode;
-  const effectiveTerminalOpen = terminalOpen ?? localTerminalOpen;
-  const effectiveSetTerminalOpen = setTerminalOpen ?? setLocalTerminalOpen;
-  const effectiveDataPanelOpen = dataPanelOpen ?? localDataPanelOpen;
-  const effectiveSetDataPanelOpen = setDataPanelOpen ?? setLocalDataPanelOpen;
-  const selectedStrictNode = useMemo(() => graphNodes.find((node) => node.id === selectedNode?.id) || null, [graphNodes, selectedNode?.id]);
-  const degreeById = useMemo(() => {
-    const degree = new Map<string, number>();
-    graphEdges.forEach((edge) => {
-      degree.set(edge.source, (degree.get(edge.source) || 0) + 1);
-      degree.set(edge.target, (degree.get(edge.target) || 0) + 1);
-    });
-    return degree;
-  }, [graphEdges]);
-  const timeBounds = useMemo(() => {
-    const stamps = graphNodes.map(timestampForNode).filter((stamp) => stamp > 0).sort((a, b) => a - b);
-    return { min: stamps[0] || 0, max: stamps[stamps.length - 1] || 0 };
-  }, [graphNodes]);
-  const temporalCutoff = useMemo(() => {
-    if (!timeBounds.min || !timeBounds.max || timeBounds.min === timeBounds.max) return Number.POSITIVE_INFINITY;
-    return timeBounds.min + ((timeBounds.max - timeBounds.min) * timeCursor) / 100;
-  }, [timeBounds.max, timeBounds.min, timeCursor]);
-  const temporalActive = Number.isFinite(temporalCutoff) && timeCursor < 100;
-  const visibleNodeIds = useMemo(() => new Set(graphNodes.filter((node) => !temporalActive || timestampForNode(node) <= temporalCutoff).map((node) => node.id)), [graphNodes, temporalActive, temporalCutoff]);
-  const timeMachineLabel = timeCursor >= 100 || !Number.isFinite(temporalCutoff) ? "live" : new Date(temporalCutoff).toLocaleString();
+  const visibleNodes = useMemo(() => nodes.filter(isGraphVisible), [nodes]);
+  const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes]);
+  const visibleEdges = useMemo(() => edges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)), [edges, visibleNodeIds]);
+  const studioNodes = useMemo(() => visibleNodes.map((node, index) => ({ api: node, ui: mapApiNodeToStudioNode(node, index) })), [visibleNodes]);
+  const studioEdges = useMemo(() => visibleEdges.map((edge, index) => ({ api: edge, ui: mapApiEdgeToStudioEdge(edge, index) })), [visibleEdges]);
+  const selectedId = selectedNode?.id || null;
 
-  const resizeGraph = useCallback((fit = false) => {
-    window.requestAnimationFrame(() => {
-      const cy = cyRef.current;
-      if (!cy) return;
-      cy.resize();
-      if (fit && cy.nodes().length) cy.fit(undefined, 96);
-    });
-  }, []);
-
-  const pushHistory = useCallback((snapshot?: { nodes: GraphNode[]; edges: GraphEdge[] }) => {
-    const cloned = snapshot || cloneState(graphNodesRef.current, graphEdgesRef.current);
-    if (!cloned.nodes.length && !cloned.edges.length) return;
-    historyStack.current = [...historyStack.current.slice(-(HISTORY_LIMIT - 1)), cloned];
-    redoStack.current = [];
-  }, []);
-
-  const restoreState = useCallback(
-    (snapshot: { nodes: GraphNode[]; edges: GraphEdge[] }, message: string) => {
-      setGraphNodes(snapshot.nodes);
-      setGraphEdges(snapshot.edges);
-      onSystemLog?.(message);
-      requestAnimationFrame(() => cyRef.current?.fit(undefined, 86));
-    },
-    [onSystemLog],
-  );
-
-  const undoGraph = useCallback(() => {
-    const previous = historyStack.current.pop();
-    if (!previous) return;
-    redoStack.current = [...redoStack.current.slice(-(HISTORY_LIMIT - 1)), cloneState(graphNodesRef.current, graphEdgesRef.current)];
-    restoreState(previous, "Graph state reverted.");
-  }, [restoreState]);
-
-  const redoGraph = useCallback(() => {
-    const next = redoStack.current.pop();
-    if (!next) return;
-    historyStack.current = [...historyStack.current.slice(-(HISTORY_LIMIT - 1)), cloneState(graphNodesRef.current, graphEdgesRef.current)];
-    restoreState(next, "Graph state restored.");
-  }, [restoreState]);
+  const applyLayout = useCallback((mode: LayoutMode = layoutMode) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    const width = rect?.width || 1240;
+    const height = rect?.height || 760;
+    setLayoutMode(mode);
+    setPositions(Object.fromEntries(visibleNodes.map((node, index) => [node.id, positionFor(index, visibleNodes.length, width, height, mode)])));
+    onSystemLog?.(`Graph layout switched to ${mode}.`);
+  }, [layoutMode, onSystemLog, visibleNodes]);
 
   useEffect(() => {
-    graphNodesRef.current = graphNodes;
-    graphEdgesRef.current = graphEdges;
-  }, [graphEdges, graphNodes]);
-
-  useEffect(() => {
-    apiNodesRef.current = new Map(nodes.map((node) => [node.id, node]));
-  }, [nodes]);
-
-  useEffect(() => {
-    historyStack.current = [];
-    redoStack.current = [];
-    incomingIdsRef.current = new Set();
-    hasFitRef.current = false;
-  }, [investigationId]);
-
-  useEffect(() => {
-    const incomingIds = new Set(nodes.map((node) => node.id));
-    const priorIds = incomingIdsRef.current;
-    const changedAfterInitial = priorIds.size > 0 && (nodes.some((node) => !priorIds.has(node.id)) || [...priorIds].some((id) => !incomingIds.has(id)));
-    if (changedAfterInitial && !suppressNextPropHistory.current) pushHistory();
-    suppressNextPropHistory.current = false;
-
-    setGraphNodes((previous) => {
-      const previousById = new Map(previous.map((node) => [node.id, node]));
-      const siblingCounts = new Map<string, number>();
-      return nodes.map((node, index) => {
-        const parentEdge = edges.find((edge) => edge.target === node.id && previousById.has(edge.source));
-        let parentPosition: { x: number; y: number; siblingIndex: number } | undefined;
-        if (!previousById.has(node.id) && parentEdge) {
-          const parent = previousById.get(parentEdge.source);
-          const cyParent = cyRef.current?.getElementById(parentEdge.source);
-          const siblingIndex = siblingCounts.get(parentEdge.source) || 0;
-          siblingCounts.set(parentEdge.source, siblingIndex + 1);
-          parentPosition = {
-            x: cyParent?.length ? cyParent.position("x") : parent?.x || 260,
-            y: cyParent?.length ? cyParent.position("y") : parent?.y || 260,
-            siblingIndex,
-          };
-        }
-        return strictNodeFromApi(node, previousById.get(node.id), index, parentPosition);
-      });
-    });
-    setGraphEdges(edges.map(strictEdgeFromApi));
-    incomingIdsRef.current = incomingIds;
-  }, [edges, nodes, pushHistory]);
-
-  const selectStrictNode = useCallback(
-    (node: GraphNode | null) => {
-      if (!node) {
-        onSelectNode(null);
-        return;
-      }
-      onSelectNode(apiNodesRef.current.get(node.id) || apiNodeFromStrict(node));
-      effectiveSetDataPanelOpen(true);
-    },
-    [effectiveSetDataPanelOpen, onSelectNode],
-  );
-
-  const runLayout = useCallback((mode: LayoutMode = layoutMode, fit = true) => {
-    const cy = cyRef.current;
-    if (!cy || !cy.nodes().length) return;
-    const common = { animate: true, animationDuration: 520, animationEasing: "ease-out", fit, padding: 110 };
-    if (mode === "tree") {
-      cy.layout({ name: "breadthfirst", directed: true, circle: false, spacingFactor: 2.0, avoidOverlap: true, ...common }).run();
-      return;
-    }
-    if (mode === "circular") {
-      cy.layout({ name: "concentric", minNodeSpacing: 82, spacingFactor: 1.25, concentric: (node) => (node.indegree(false) ? 1 : 3), levelWidth: () => 1, ...common }).run();
-      return;
-    }
-    cy.layout({ name: "cose", nodeRepulsion: 9800, idealEdgeLength: 144, edgeElasticity: 80, gravity: 0.22, numIter: 900, ...common }).run();
-  }, [layoutMode]);
-
-  const pollGraphUntilComplete = useCallback(
-    (taskId: string) => {
-      if (pollers.current[taskId]) window.clearInterval(pollers.current[taskId]);
-      const refresh = async () => {
-        try {
-          const graphPayload = await apiJson(`/api/v1/tasks/${taskId}/graph`);
-          onGraphUpdate(normalizeGraphPayload(graphPayload.data));
-          const taskPayload = await apiJson(`/api/v1/tasks/${taskId}`);
-          if (["completed", "failed"].includes(taskPayload.data.status)) {
-            window.clearInterval(pollers.current[taskId]);
-            delete pollers.current[taskId];
-            setRunningTask(null);
-            setRunningNodeId(null);
-          }
-        } catch (error) {
-          window.clearInterval(pollers.current[taskId]);
-          delete pollers.current[taskId];
-          setRunningTask(null);
-          setRunningNodeId(null);
-          onError(error instanceof Error ? error.message : "Graph polling failed");
-        }
-      };
-      void refresh();
-      pollers.current[taskId] = window.setInterval(refresh, 1500);
-    },
-    [onError, onGraphUpdate],
-  );
-
-  const runTransform = useCallback(
-    async (node: GraphNode, transform: string) => {
-      if (!investigationId) {
-        onError("Create or select an investigation before running transforms.");
-        return;
-      }
-      setContextMenu(null);
-      setRunningNodeId(node.id);
-      try {
-        const payload = await apiJson("/api/v1/transforms", {
-          method: "POST",
-          body: JSON.stringify({ investigation_id: investigationId, node_id: node.id, transform, mode: effectiveReconMode }),
-        });
-        setRunningTask(payload.data.task_id);
-        onTaskStart(payload.data.task_id, transform, apiNodesRef.current.get(node.id) || apiNodeFromStrict(node));
-        pollGraphUntilComplete(payload.data.task_id);
-      } catch (error) {
-        setRunningTask(null);
-        setRunningNodeId(null);
-        onError(error instanceof Error ? error.message : "Transform failed");
-      }
-    },
-    [effectiveReconMode, investigationId, onError, onTaskStart, pollGraphUntilComplete],
-  );
-
-  const deleteNode = useCallback(
-    async (node: GraphNode) => {
-      if (!investigationId) return;
-      setContextMenu(null);
-      pushHistory();
-      setGraphNodes((previous) => previous.filter((item) => item.id !== node.id));
-      setGraphEdges((previous) => previous.filter((edge) => edge.source !== node.id && edge.target !== node.id));
-      cyRef.current?.getElementById(node.id).remove();
-      if (selectedNode?.id === node.id) onSelectNode(null);
-      suppressNextPropHistory.current = true;
-      try {
-        const payload = await apiJson(`/api/v1/investigations/${investigationId}/entities/${node.id}`, { method: "DELETE" });
-        onGraphUpdate(normalizeGraphPayload(payload.data.graph));
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "Delete failed");
-      }
-    },
-    [investigationId, onError, onGraphUpdate, onSelectNode, pushHistory, selectedNode?.id],
-  );
-
-  const addEntityFromDrop = useCallback(
-    async (kind: string, point: { x: number; y: number }) => {
-      if (!investigationId) {
-        onError("Create or select an investigation before adding an entity.");
-        return;
-      }
-      void point;
-      if (onOpenAddEntity) onOpenAddEntity(kind);
-      else onError("Open Add Entity from the command bar to create a node.");
-    },
-    [investigationId, onError, onOpenAddEntity],
-  );
-
-  const addEntityFromToolbar = useCallback(() => {
-    if (onOpenAddEntity) onOpenAddEntity("username");
-    else onError("Open Add Entity from the command bar to create a node.");
-  }, [onError, onOpenAddEntity]);
-
-  const exportReport = useCallback(() => {
-    const image = cyRef.current?.png({ full: true, scale: 2, bg: "#000000" }) || "";
-    const html = reportHtml(graphNodesRef.current, graphEdgesRef.current, image, investigationId);
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `nexusintel-report-${new Date().toISOString().replace(/[:.]/g, "-")}.html`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    onSystemLog?.("Intelligence report exported.");
-  }, [investigationId, onSystemLog]);
-
-  useEffect(() => {
-    if (!containerRef.current || cyRef.current) return;
-    cyRef.current = cytoscape({
-      container: containerRef.current,
-      wheelSensitivity: 0.14,
-      minZoom: 0.18,
-      maxZoom: 2.8,
-      pixelRatio: "auto",
-      style: ([
-        {
-          selector: "node",
-          style: {
-            width: 132,
-            height: 94,
-            shape: "data(nodeShape)",
-            "background-color": "#1A1A1C",
-            "background-opacity": 1,
-            "background-image": "data(icon)",
-            "background-fit": "cover",
-            "background-width": "132px",
-            "background-height": "94px",
-            "background-position-x": "50%",
-            "background-position-y": "50%",
-            "border-width": 1,
-            "border-color": "transparent",
-            color: "#E0E0E3",
-            label: "data(label)",
-            "font-family": "Inter, Space Grotesk, system-ui, sans-serif",
-            "font-size": 10,
-            "font-weight": 700,
-            "text-wrap": "ellipsis",
-            "text-max-width": 78,
-            "text-valign": "bottom",
-            "text-halign": "center",
-            "text-margin-x": 0,
-            "text-margin-y": -22,
-            "text-background-color": "transparent",
-            "text-background-opacity": 0,
-            "text-background-padding": 0,
-            "overlay-opacity": 0,
-            opacity: 1,
-          },
-        },
-        {
-          selector: "node:selected",
-          style: {
-            "border-width": 2,
-            "border-color": "#60A5FA",
-            "background-color": "#1A1A1C",
-          },
-        },
-        {
-          selector: "node.hovered",
-          style: { "border-width": 2, "border-color": "#E0E0E3" },
-        },
-        {
-          selector: ".neighbor-dim",
-          style: { opacity: 0.18 },
-        },
-        {
-          selector: "node.low-confidence",
-          style: { "border-style": "dashed", "border-color": "#F59E0B", color: "#B9BEC7", opacity: 0.86 },
-        },
-        {
-          selector: "node.censored-entity",
-          style: { "border-style": "dashed", "border-color": "#2DD4BF", "background-color": "#1A1A1C" },
-        },
-        {
-          selector: "node.location-entity",
-          style: { "background-color": "#1A1A1C", "border-color": "#F472B6" },
-        },
-        {
-          selector: "node.root-entity",
-          style: { width: 148, height: 104, "background-width": "148px", "background-height": "104px", "border-width": 2, "border-color": "#EF4444", "font-size": 10.5, "text-max-width": 90, "text-margin-y": -24 },
-        },
-        {
-          selector: "node.processing",
-          style: { "border-width": 3, "border-color": "#3B82F6" },
-        },
-        {
-          selector: "node.hub-amber",
-          style: { "border-width": 3, "border-color": "#F59E0B" },
-        },
-        {
-          selector: "node.hub-red",
-          style: { "border-width": 3, "border-color": "#EF4444" },
-        },
-        {
-          selector: "node.tag-internal",
-          style: { "border-color": "#F59E0B", color: "#FCD34D" },
-        },
-        {
-          selector: "node.tag-suspicious",
-          style: { "border-color": "#EF4444", "background-color": "#1A1A1C" },
-        },
-        {
-          selector: "edge",
-          style: {
-            width: 1,
-            "line-color": "#3a4450",
-            "target-arrow-shape": "triangle",
-            "target-arrow-color": "#647180",
-            "target-arrow-width": 6,
-            "arrow-scale": 0.72,
-            "curve-style": "bezier",
-            label: "data(label)",
-            color: "#a9b1bb",
-            "font-family": "JetBrains Mono, SFMono-Regular, Consolas, monospace",
-            "font-size": 8,
-            "text-background-color": "#07080a",
-            "text-background-opacity": 1,
-            "text-background-padding": 2,
-            "overlay-opacity": 0,
-          },
-        },
-        {
-          selector: "edge.low-confidence",
-          style: { "line-style": "dashed", "line-color": "#52606e", "target-arrow-color": "#52606e" },
-        },
-        {
-          selector: "edge:not(.labels-visible):not(:selected)",
-          style: { label: "" },
-        },
-        {
-          selector: "edge:selected, edge.hovered",
-          style: { label: "data(label)", "line-color": "#7aa7c7", "target-arrow-color": "#7aa7c7", width: 2 },
-        },
-
-        {
-          selector: ".faded",
-          style: { opacity: 0.2 },
-        },
-        {
-          selector: ".time-hidden",
-          style: { display: "none", opacity: 0 },
-        },
-        {
-          selector: "edge.running-flow",
-          style: {
-            "line-style": "dashed",
-            "line-dash-pattern": [8, 6],
-            "line-color": "#7fb3d8",
-            "target-arrow-color": "#7fb3d8",
-            width: 1.4,
-          },
-        },
-      ] as unknown as cytoscape.StylesheetCSS[]),
-      layout: { name: "preset", fit: false },
-    });
-
-    const cy = cyRef.current;
-    cy.on("zoom", () => {
-      const zoomed = cy.zoom() >= 0.68;
-      cy.edges().toggleClass("labels-visible", zoomed);
-    });
-    cy.on("tap", (event) => {
-      if (event.target === cy) {
-        setContextMenu(null);
-        selectStrictNode(null);
-      }
-    });
-    cy.on("tap", "node", (event) => {
-      const strict = graphNodesRef.current.find((item) => item.id === event.target.id()) || null;
-      selectStrictNode(strict);
-      setContextMenu(null);
-    });
-    cy.on("cxttap", "node", (event) => {
-      const strict = graphNodesRef.current.find((item) => item.id === event.target.id());
-      if (!strict || !containerRef.current) return;
-
-      const original = event.originalEvent as MouseEvent | undefined;
-      original?.preventDefault?.();
-      original?.stopPropagation?.();
-
-      const rect = containerRef.current.getBoundingClientRect();
-      const rendered = event.renderedPosition;
-      const nodeRendered = event.target.renderedPosition();
-      const anchor = rendered && Number.isFinite(rendered.x) && Number.isFinite(rendered.y)
-        ? rendered
-        : nodeRendered && Number.isFinite(nodeRendered.x) && Number.isFinite(nodeRendered.y)
-          ? nodeRendered
-          : { x: (original?.clientX || rect.left + rect.width / 2) - rect.left, y: (original?.clientY || rect.top + rect.height / 2) - rect.top };
-
-      selectStrictNode(strict);
-      setContextTab("transforms");
-      setContextMenu({ x: rect.left + anchor.x, y: rect.top + anchor.y, node: strict });
-    });
-    cy.on("mouseover", "node", (event) => {
-      event.target.addClass("hovered");
-      event.target.connectedEdges().addClass("hovered");
-      cy.elements().not(event.target.closedNeighborhood()).addClass("neighbor-dim");
-    });
-    cy.on("mouseout", "node", (event) => {
-      event.target.removeClass("hovered");
-      event.target.connectedEdges().removeClass("hovered");
-      cy.elements().removeClass("neighbor-dim");
-    });
-
-    cy.on("dragfree", "node", (event) => {
-      const id = event.target.id();
-      const position = event.target.position();
-      setGraphNodes((previous) => previous.map((node) => (node.id === id ? { ...node, x: position.x, y: position.y } : node)));
-    });
-
-    return () => {
-      Object.values(pollers.current).forEach((id) => window.clearInterval(id));
-      pollers.current = {};
-      if (dashAnimation.current) cancelAnimationFrame(dashAnimation.current);
-      cy.destroy();
-      cyRef.current = null;
-    };
-  }, [selectStrictNode]);
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element || typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(() => resizeGraph(false));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [resizeGraph]);
-
-  useEffect(() => {
-    resizeGraph(false);
-    const timer = window.setTimeout(() => resizeGraph(false), 340);
-    return () => window.clearTimeout(timer);
-  }, [effectiveDataPanelOpen, effectiveTerminalOpen, resizeGraph, timelineMode]);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.resize();
-    const nodeMap = new Map(graphNodes.map((node) => [node.id, node]));
-    const edgeMap = new Map(graphEdges.map((edge) => [edge.id, edge]));
-    const typeById = new Map(graphNodes.map((node) => [node.id, node.nodeType]));
-
-    cy.batch(() => {
-      cy.nodes().forEach((node) => {
-        if (!nodeMap.has(node.id())) node.remove();
-      });
-      cy.edges().forEach((edge) => {
-        if (!edgeMap.has(edge.id())) edge.remove();
-      });
-
-      graphNodes.forEach((node) => {
-        const existing = cy.getElementById(node.id);
-        const element = nodeElement(node);
-        const faded = highlightType !== "all" && (node.nodeType !== highlightType || confidenceLevelForNode(node) < highlightMinConfidence);
-        const degree = degreeById.get(node.id) || 0;
-        const hubClass = degree > 10 ? "hub-red" : degree > 5 ? "hub-amber" : "";
-        const timeHidden = temporalActive && !visibleNodeIds.has(node.id);
-        const classes = `${element.classes || ""} ${node.id === runningNodeId ? "processing" : ""} ${hubClass} ${faded ? "faded" : ""} ${timeHidden ? "time-hidden" : ""}`.trim();
-        if (existing.length) {
-          existing.data(element.data || {});
-          existing.classes(classes);
-          if (!existing.grabbed()) existing.position({ x: node.x, y: node.y });
-        } else {
-          const added = cy.add(element);
-          added.classes(classes);
-          added.style("opacity", 0);
-          added.animate({ style: { opacity: 1 }, position: { x: node.x, y: node.y } }, { duration: 360, easing: "ease-out" });
+    setPositions((current) => {
+      const rect = stageRef.current?.getBoundingClientRect();
+      const width = rect?.width || 1240;
+      const height = rect?.height || 760;
+      let changed = false;
+      const next = { ...current };
+      visibleNodes.forEach((node, index) => {
+        if (!next[node.id]) {
+          const dataX = Number(node.data?.x);
+          const dataY = Number(node.data?.y);
+          next[node.id] = Number.isFinite(dataX) && Number.isFinite(dataY) ? { x: dataX, y: dataY } : positionFor(index, visibleNodes.length, width, height, layoutMode);
+          changed = true;
         }
       });
-
-      graphEdges.forEach((edge) => {
-        if (!cy.getElementById(edge.source).length || !cy.getElementById(edge.target).length) return;
-        const existing = cy.getElementById(edge.id);
-        const edgeConfidence = edge.confidence_level || 60;
-        const edgeTimestamp = timestampForEdge(edge);
-        const timeHidden = temporalActive && (!visibleNodeIds.has(edge.source) || !visibleNodeIds.has(edge.target) || (edgeTimestamp > 0 && edgeTimestamp > temporalCutoff));
-        const faded = highlightType !== "all" && ((typeById.get(edge.source) !== highlightType && typeById.get(edge.target) !== highlightType) || edgeConfidence < highlightMinConfidence);
-        const element = edgeElement(edge, runningNodeId, faded);
-        const classes = `${element.classes || ""} ${timeHidden ? "time-hidden" : ""}`.trim();
-        if (existing.length) {
-          existing.data(element.data || {});
-          existing.classes(classes);
-        } else {
-          const added = cy.add({ ...element, classes });
-          added.style("opacity", 0);
-          added.animate({ style: { opacity: 1 } }, { duration: 320, easing: "ease-out" });
+      Object.keys(next).forEach((id) => {
+        if (!visibleNodeIds.has(id)) {
+          delete next[id];
+          changed = true;
         }
       });
+      return changed ? next : current;
     });
+  }, [layoutMode, visibleNodeIds, visibleNodes]);
 
-    if (!hasFitRef.current && graphNodes.length) {
-      runLayout(layoutMode, true);
-      hasFitRef.current = true;
-    } else {
-      resizeGraph(false);
-    }
-  }, [degreeById, graphEdges, graphNodes, highlightMinConfidence, highlightType, layoutMode, resizeGraph, runLayout, runningNodeId, temporalActive, temporalCutoff, visibleNodeIds]);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.nodes().unselect();
-    if (selectedNode) cy.getElementById(selectedNode.id).select();
-  }, [selectedNode]);
-
-  useEffect(() => {
-    runLayout(layoutMode, true);
-  }, [layoutMode, runLayout]);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return undefined;
-    if (!runningTask) return undefined;
-    let offset = 0;
-    const tick = () => {
-      offset = (offset + 1) % 28;
-      cy.edges(".running-flow").style("line-dash-offset", -offset);
-      dashAnimation.current = requestAnimationFrame(tick);
-    };
-    dashAnimation.current = requestAnimationFrame(tick);
-    return () => {
-      if (dashAnimation.current) cancelAnimationFrame(dashAnimation.current);
-      dashAnimation.current = null;
-    };
-  }, [runningTask]);
-
-  useEffect(() => {
-    const close = () => setContextMenu(null);
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContextMenu(null);
-    };
-    window.addEventListener("click", close);
-    window.addEventListener("resize", close);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, []);
-
-
-  useEffect(() => {
-    const handleOracleCommand = (event: Event) => {
-      const detail = (event as CustomEvent).detail || {};
-      if (detail.type === "highlight_type" && detail.nodeType) {
-        setHighlightType(String(detail.nodeType));
-        setHighlightMinConfidence(Number(detail.minConfidence || 0));
-        onSystemLog?.(`[ORACLE] Highlighting ${detail.nodeType}${detail.minConfidence ? ` above ${detail.minConfidence}% confidence` : ""}.`);
-      }
-      if (detail.type === "clear_highlight") {
-        setHighlightType("all");
-        setHighlightMinConfidence(0);
-        onSystemLog?.("[ORACLE] Graph highlight cleared.");
-      }
-      if (detail.type === "suggest_transform" && detail.transform) {
-        onSystemLog?.(`[ORACLE] Suggested transform ${detail.transform}${detail.reason ? `: ${detail.reason}` : ""}`);
-      }
-    };
-    window.addEventListener("nexus:oracle-command", handleOracleCommand);
-    return () => window.removeEventListener("nexus:oracle-command", handleOracleCommand);
+  const fitGraph = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    onSystemLog?.("Graph viewport fitted.");
   }, [onSystemLog]);
 
-  useEffect(() => {
-    const onFit = () => cyRef.current?.fit(undefined, 90);
-    const onExport = () => exportReport();
-    const onTimeline = () => setTimelineMode((open) => !open);
-    const onLayout = (event: Event) => {
-      const mode = (event as CustomEvent).detail?.mode;
-      if (["tree", "circular", "force"].includes(mode)) setLayoutMode(mode);
-    };
-    window.addEventListener("nexus:graph-fit", onFit);
-    window.addEventListener("nexus:graph-export", onExport);
-    window.addEventListener("nexus:graph-timeline", onTimeline);
-    window.addEventListener("nexus:graph-layout", onLayout);
-    return () => {
-      window.removeEventListener("nexus:graph-fit", onFit);
-      window.removeEventListener("nexus:graph-export", onExport);
-      window.removeEventListener("nexus:graph-timeline", onTimeline);
-      window.removeEventListener("nexus:graph-layout", onLayout);
-    };
-  }, [exportReport]);
+  const exportGraph = useCallback(() => {
+    const reportNodes = visibleNodes.map((node, index) => graphNodeForReport(node, positions[node.id] || positionFor(index, visibleNodes.length, 1240, 760, layoutMode)));
+    const reportEdges = visibleEdges.map(graphEdgeForReport);
+    const blob = new Blob([reportHtml(reportNodes, reportEdges, investigationId)], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `nexusintel-graph-${investigationId || "local"}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
+    onSystemLog?.("Graph report exported from Studio renderer.");
+  }, [investigationId, layoutMode, onSystemLog, positions, visibleEdges, visibleNodes]);
 
   useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
-      const key = event.key.toLowerCase();
-      if (event.ctrlKey || event.metaKey) {
-        if (!["t", "z", "y"].includes(key)) return;
-        event.preventDefault();
-        if (key === "t") setTimelineMode((open) => !open);
-        if (key === "z") undoGraph();
-        if (key === "y") redoGraph();
+    const handleFit = () => fitGraph();
+    const handleLayout = (event: Event) => applyLayout(((event as CustomEvent<{ mode?: LayoutMode }>).detail?.mode || "force") as LayoutMode);
+    const handleExport = () => exportGraph();
+    window.addEventListener("nexus:graph-fit", handleFit);
+    window.addEventListener("nexus:graph-layout", handleLayout);
+    window.addEventListener("nexus:graph-export", handleExport);
+    return () => {
+      window.removeEventListener("nexus:graph-fit", handleFit);
+      window.removeEventListener("nexus:graph-layout", handleLayout);
+      window.removeEventListener("nexus:graph-export", handleExport);
+    };
+  }, [applyLayout, exportGraph, fitGraph]);
+
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      if (dragging) {
+        setPositions((current) => ({
+          ...current,
+          [dragging.id]: { x: (event.clientX - pan.x) / zoom - dragging.offsetX, y: (event.clientY - pan.y) / zoom - dragging.offsetY },
+        }));
         return;
       }
-      if (typing) return;
-      if (key === "f") {
-        event.preventDefault();
-        cyRef.current?.fit(undefined, 90);
-      }
-      if (key === "i") {
-        event.preventDefault();
-        effectiveSetDataPanelOpen((open) => !open);
-      }
-      if (key === "t") {
-        event.preventDefault();
-        setTimelineMode((open) => !open);
-      }
-      if (key === "l") {
-        event.preventDefault();
-        setLayoutMode((current) => (current === "force" ? "tree" : current === "tree" ? "circular" : "force"));
-      }
-      if (event.key === "Delete" && selectedStrictNode) {
-        event.preventDefault();
-        void deleteNode(selectedStrictNode);
-      }
+      if (panning) setPan({ x: panning.x + event.clientX - panning.startX, y: panning.y + event.clientY - panning.startY });
     };
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [deleteNode, effectiveSetDataPanelOpen, redoGraph, selectedStrictNode, undoGraph]);
-
-  const contextPosition = useMemo(() => {
-    if (!contextMenu) return { left: 0, top: 0 };
-    const menuWidth = 342;
-    const menuHeight = 430;
-    const viewportMargin = 10;
-    const nodeGap = 50;
-    const toolbarSafeTop = 76;
-    const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
-    const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-
-    const rightSideLeft = contextMenu.x + nodeGap;
-    const leftSideLeft = contextMenu.x - menuWidth - nodeGap;
-    const preferredLeft = rightSideLeft + menuWidth + viewportMargin > viewportWidth ? leftSideLeft : rightSideLeft;
-    const preferredTop = contextMenu.y - 72;
-
-    return {
-      left: Math.max(viewportMargin, Math.min(preferredLeft, viewportWidth - menuWidth - viewportMargin)),
-      top: Math.max(toolbarSafeTop, Math.min(preferredTop, viewportHeight - viewportMargin - Math.min(menuHeight, viewportHeight - viewportMargin * 2))),
+    const onUp = () => {
+      setDragging(null);
+      setPanning(null);
     };
-  }, [contextMenu]);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging, pan.x, pan.y, panning, zoom]);
+
+  const nodeById = useMemo(() => new Map(studioNodes.map((node) => [node.api.id, node])), [studioNodes]);
+  const worldBounds = useMemo(() => {
+    const values = Object.values(positions);
+    if (!values.length) return { width: 1600, height: 1000 };
+    return { width: Math.max(1600, Math.max(...values.map((item) => item.x)) + 260), height: Math.max(1000, Math.max(...values.map((item) => item.y)) + 210) };
+  }, [positions]);
+
+  if (!visibleNodes.length) {
+    return (
+      <div className="studio-graph-canvas osint-grid">
+        <div className="studio-empty-launch">
+          <span className="studio-empty-kicker">NEXUSINTEL LINK ANALYSIS</span>
+          <h2>Start a Link Analysis</h2>
+          <p>Add a seed entity, run a lookup, or import evidence.</p>
+          <div className="studio-empty-actions">
+            <button type="button" onClick={() => onOpenAddEntity?.("username")}>Add Username</button>
+            <button type="button" onClick={() => onOpenAddEntity?.("email")}>Add Email</button>
+            <button type="button" onClick={() => onOpenAddEntity?.("domain")}>Add Domain</button>
+            <button type="button" onClick={() => onOpenAddEntity?.("phone")}>Add Phone</button>
+            <button type="button" onClick={() => onOpenImport?.()}>Import CSV/JSON</button>
+            <button type="button" onClick={() => onOpenAddEntity?.()}>Open Entity Palette</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <section className={dropHint ? "tactical-graph-shell drop-active" : "tactical-graph-shell"}>
-      {!hideToolbar && (
-      <header className="tactical-graph-toolbar">
-        <div className="graph-toolbar-stats">
-          <span className="micro-label">Visual Link Analysis</span>
-          <strong>{graphNodes.length} entities</strong>
-          <span>{graphEdges.length} relationships</span>
-        </div>
-
-        <form className="graph-launcher" onSubmit={onLaunch || ((event) => { event.preventDefault(); onError("Use the Command Center graph route to launch investigations."); })}>
-          <Search size={15} />
-          <input value={effectiveSearchTarget} onChange={(event) => effectiveSetSearchTarget(event.target.value)} placeholder="username, email, domain, IP, phone" />
-          <select value={effectiveReconMode} onChange={(event) => effectiveSetReconMode(event.target.value as "passive" | "standard" | "aggressive")}>
-            <option value="passive">Passive</option>
-            <option value="standard">Standard</option>
-            <option value="aggressive">Aggressive</option>
-          </select>
-          <button
-            className="graph-add-button"
-            type="button"
-            disabled={Boolean(isLaunching) || !effectiveSearchTarget.trim()}
-            onClick={() => {
-              if (!onAddSeed) {
-                onError("Add Entity is only available inside the Command Center graph route.");
-                return;
-              }
-              void onAddSeed(effectiveSearchTarget.trim(), effectiveReconMode);
-            }}
-          >
-            <Plus size={14} />
-            <span>Add Entity</span>
-          </button>
-          <button className="graph-launch-button" type="submit" disabled={Boolean(isLaunching)}>
-            <Radio size={14} />
-            <span>{isLaunching ? "Running" : "Lookup"}</span>
-          </button>
-        </form>
-
-        <div className="entity-pipeline" aria-label="Entity palette">
-          <button className="icon-button" type="button" onClick={addEntityFromToolbar} title="Add entity at canvas center">
-            <Plus size={16} />
-          </button>
-          {PALETTE_TYPES.map((kind) => <EntityPaletteItem kind={kind} key={kind} />)}
-        </div>
-
-        <div className="graph-toolbar-controls">
-          <div className="graph-smart-selector">
-            <span>Highlight</span>
-            <select value={highlightType} onChange={(event) => { setHighlightType(event.target.value); setHighlightMinConfidence(0); }}>
-              <option value="all">All entities</option>
-              <option value="username">Username</option>
-              <option value="email">Email</option>
-              <option value="domain">Domain</option>
-              <option value="ip">IP address</option>
-              <option value="phone">Phone</option>
-              <option value="profile">Profile</option>
-              <option value="platform">Platform</option>
-            </select>
-          </div>
-
-          <div className="layout-switcher" aria-label="Graph layout modes">
-            <button className={layoutMode === "tree" ? "active" : ""} type="button" onClick={() => setLayoutMode("tree")} title="Tree layout">
-              <GitBranch size={14} />
-              <span>Tree</span>
-            </button>
-            <button className={layoutMode === "circular" ? "active" : ""} type="button" onClick={() => setLayoutMode("circular")} title="Circular layout">
-              <Crosshair size={14} />
-              <span>Orbit</span>
-            </button>
-            <button className={layoutMode === "force" ? "active" : ""} type="button" onClick={() => setLayoutMode("force")} title="Force layout">
-              <Network size={14} />
-              <span>Force</span>
-            </button>
-          </div>
-
-          <div className="tactical-graph-actions">
-            <button className={timelineMode ? "icon-button active" : "icon-button"} type="button" onClick={() => setTimelineMode((open) => !open)} title="Timeline mode (Ctrl+T)">
-              <Clock3 size={16} />
-            </button>
-            <button className="icon-button" type="button" onClick={undoGraph} title="Undo graph state (Ctrl+Z)">
-              <Undo2 size={16} />
-            </button>
-            <button className="icon-button" type="button" onClick={() => runLayout(layoutMode, true)} title="Re-layout current graph">
-              <RotateCcw size={16} />
-            </button>
-            <button className="icon-button" type="button" onClick={() => cyRef.current?.fit(undefined, 90)} title="Fit graph">
-              <Crosshair size={16} />
-            </button>
-            <button className={effectiveDataPanelOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => effectiveSetDataPanelOpen((open) => !open)} title="Toggle entity data panel">
-              <PanelRight size={16} />
-            </button>
-            <button className={effectiveTerminalOpen ? "icon-button active" : "icon-button"} type="button" onClick={() => effectiveSetTerminalOpen((open) => !open)} title="Toggle terminal HUD">
-              <PanelBottom size={16} />
-            </button>
-            <button className="graph-report-button" type="button" onClick={exportReport} title="Export Intelligence report">
-              <Download size={15} />
-              <span>Export</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      )}
-
-      {timelineMode ? (
-        <TimelineView nodes={graphNodes} edges={graphEdges} onSelectNode={selectStrictNode} />
-      ) : (
-        <div
-          className="tactical-graph-canvas"
-          ref={containerRef}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDropHint(true);
-          }}
-          onDragLeave={() => setDropHint(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDropHint(false);
-            const kind = event.dataTransfer.getData("application/x-nexus-entity");
-            if (!kind || !containerRef.current) return;
-            const rect = containerRef.current.getBoundingClientRect();
-            const rendered = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-            const pan = cyRef.current?.pan() || { x: 0, y: 0 };
-            const zoom = cyRef.current?.zoom() || 1;
-            addEntityFromDrop(kind, { x: (rendered.x - pan.x) / zoom, y: (rendered.y - pan.y) / zoom });
-          }}
-        >
-          {!graphNodes.length && (
-            <div className="empty-graph">
-              <Plus size={22} />
-              <strong>No investigation graph loaded</strong>
-              <span>Create or select a target, then drag entities into the canvas.</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!timelineMode && graphNodes.length > 1 && (
-        <div className="time-machine-slider" aria-label="Temporal playback slider">
-          <div>
-            <Clock3 size={13} />
-            <span>Time Machine</span>
-            <code>{timeMachineLabel}</code>
-          </div>
-          <input type="range" min="0" max="100" value={timeCursor} onChange={(event) => setTimeCursor(Number(event.target.value))} />
-        </div>
-      )}
-
-      {!timelineMode && (
-        <>
-          <div className="graph-mini-stats" aria-label="Graph stats">
-            <span>Entities <strong>{graphNodes.length}</strong></span>
-            <span>Relations <strong>{graphEdges.length}</strong></span>
-            <span>Layout <strong>{layoutMode}</strong></span>
-          </div>
-          <div className="graph-floating-controls" aria-label="Graph viewport controls">
-            <button type="button" onClick={() => cyRef.current?.zoom({ level: Math.min((cyRef.current?.zoom() || 1) + 0.16, 2.8), renderedPosition: { x: (containerRef.current?.clientWidth || 0) / 2, y: (containerRef.current?.clientHeight || 0) / 2 } })} title="Zoom in"><ZoomIn size={15} /></button>
-            <button type="button" onClick={() => cyRef.current?.zoom({ level: Math.max((cyRef.current?.zoom() || 1) - 0.16, 0.18), renderedPosition: { x: (containerRef.current?.clientWidth || 0) / 2, y: (containerRef.current?.clientHeight || 0) / 2 } })} title="Zoom out"><ZoomOut size={15} /></button>
-            <button type="button" onClick={() => cyRef.current?.fit(undefined, 90)} title="Fit graph"><Maximize2 size={15} /></button>
-            <button type="button" onClick={() => runLayout(layoutMode, true)} title="Refresh layout"><RotateCcw size={15} /></button>
-          </div>
-        </>
-      )}
-
-      {contextMenu && typeof document !== "undefined" && createPortal(
-        <div
-          className="graph-context-menu"
-          style={{ "--context-x": `${contextPosition.left}px`, "--context-y": `${contextPosition.top}px` } as CSSProperties}
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          <div className="context-node-card">
-            <div className="context-node-mark">{contextMenu.node.nodeIcon || "NX"}</div>
-            <div>
-              <strong>{contextMenu.node.nodeLabel}</strong>
-              <span>{contextMenu.node.nodeType} / {String(contextMenu.node.nodeProperties.confidence || "medium")}</span>
-            </div>
-          </div>
-
-          {onOracleNode && (
-            <button
-              className="context-oracle"
-              type="button"
-              onClick={() => {
-                const apiNode = apiNodesRef.current.get(contextMenu.node.id) || apiNodeFromStrict(contextMenu.node);
-                setContextMenu(null);
-                onOracleNode(apiNode);
-              }}
-            >
-              <Network size={14} />
-              <span>
-                <strong>Ask Oracle</strong>
-                <small>Analyze this node and suggest the next OSINT transform</small>
-              </span>
-            </button>
-          )}
-          <div className="context-tabs">
-            <button className={contextTab === "transforms" ? "active" : ""} type="button" onClick={() => setContextTab("transforms")}>Transforms</button>
-            <button className={contextTab === "playbooks" ? "active" : ""} type="button" onClick={() => setContextTab("playbooks")}>Playbooks</button>
-          </div>
-          <div className="context-actions">
-            {(contextTab === "transforms" ? transformsFor(contextMenu.node) : playbooksFor(contextMenu.node)).map((action) => (
-              <button key={action.id} type="button" disabled={Boolean(runningTask)} onClick={() => runTransform(contextMenu.node, action.id)}>
-                <Play size={14} />
-                <span>
-                  <strong>{action.label}</strong>
-                  <small>{action.description}</small>
+    <div
+      ref={stageRef}
+      className="studio-graph-canvas osint-grid"
+      onMouseDown={(event) => {
+        if (event.button === 0 && event.target === event.currentTarget) setPanning({ x: pan.x, y: pan.y, startX: event.clientX, startY: event.clientY });
+      }}
+      onWheel={(event) => {
+        event.preventDefault();
+        setZoom((current) => Math.max(0.45, Math.min(1.7, current + (event.deltaY > 0 ? -0.08 : 0.08))));
+      }}
+    >
+      <div className="studio-graph-world" style={{ width: worldBounds.width, height: worldBounds.height, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+        <svg className="studio-edge-layer" width={worldBounds.width} height={worldBounds.height}>
+          {studioEdges.map(({ api, ui }) => {
+            const source = nodeById.get(api.source);
+            const target = nodeById.get(api.target);
+            if (!source || !target) return null;
+            const sourcePosition = positions[source.api.id] || { x: 0, y: 0 };
+            const targetPosition = positions[target.api.id] || { x: 0, y: 0 };
+            const sx = sourcePosition.x + 66;
+            const sy = sourcePosition.y + 35;
+            const tx = targetPosition.x + 66;
+            const ty = targetPosition.y + 35;
+            const dx = tx - sx;
+            const path = `M ${sx} ${sy} C ${sx + dx * 0.36} ${sy}, ${tx - dx * 0.36} ${ty}, ${tx} ${ty}`;
+            const midX = (sx + tx) / 2;
+            const midY = (sy + ty) / 2;
+            const active = hoveredEdgeId === api.id || Boolean(selectedId && (api.source === selectedId || api.target === selectedId));
+            return (
+              <g key={api.id} onMouseEnter={() => setHoveredEdgeId(api.id)} onMouseLeave={() => setHoveredEdgeId(null)} className={active ? "studio-edge active" : "studio-edge"}>
+                <path d={path} style={{ opacity: Math.max(0.18, ui.confidence / 115) }} />
+                <text x={midX} y={midY - 8}>{upperSnake(ui.label || api.type)}</text>
+              </g>
+            );
+          })}
+        </svg>
+        <div className="studio-node-layer">
+          {studioNodes.map(({ api, ui }) => {
+            const position = positions[api.id] || { x: 0, y: 0 };
+            const visual = visualForNodeType(api.type);
+            const selected = selectedId === api.id;
+            const hovered = hoveredNodeId === api.id;
+            const confidence = nodeConfidence(api);
+            const source = nodeSource(api);
+            const icon = NODE_ICON_PATHS[visual.icon] || NODE_ICON_PATHS.target;
+            const risk = nodeRiskTag(api);
+            return (
+              <button
+                type="button"
+                key={api.id}
+                className={`studio-node family-${visual.family} ${selected ? "selected" : ""} ${hovered ? "hovered" : ""}`}
+                style={{ "--node-accent": visual.accent, transform: `translate(${position.x}px, ${position.y}px)` } as CSSProperties}
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                  setDragging({ id: api.id, offsetX: (event.clientX - pan.x) / zoom - position.x, offsetY: (event.clientY - pan.y) / zoom - position.y });
+                }}
+                onMouseEnter={() => setHoveredNodeId(api.id)}
+                onMouseLeave={() => setHoveredNodeId(null)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectNode(api);
+                  setDataPanelOpen?.(true);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onSelectNode(api);
+                  setDataPanelOpen?.(true);
+                  onSystemLog?.("Selected entity. Run contextual transforms from the inspector.");
+                }}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  onOracleNode?.(api);
+                }}
+              >
+                <span className="studio-node-bubble">
+                  <svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: icon }} /></svg>
+                  <i className="studio-confidence-dot" style={{ background: confidence >= 80 ? "#10B981" : confidence >= 50 ? "#F59E0B" : "#EF4444" }} />
+                </span>
+                <span className="studio-node-card">
+                  <span className="studio-node-card-top"><span className="studio-node-type">{visual.code}</span>{risk && <span className="studio-risk-badge">{risk}</span>}</span>
+                  <strong>{compactLabel(ui.label || api.label || api.value || api.type)}</strong>
+                  <small>{confidence}% / {source}</small>
                 </span>
               </button>
-            ))}
-            <button className="context-danger" type="button" onClick={() => deleteNode(contextMenu.node)}>
-              <Trash2 size={14} />
-              <span>
-                <strong>Delete Entity</strong>
-                <small>Remove this node and attached relationships from UI and API</small>
-              </span>
-            </button>
-          </div>
-        </div>,
-        document.body,
+            );
+          })}
+        </div>
+      </div>
+      {hoveredNodeId && nodeById.has(hoveredNodeId) && (
+        <div className="studio-hover-card">
+          <strong>{nodeById.get(hoveredNodeId)?.ui.label}</strong>
+          <span>{nodeById.get(hoveredNodeId)?.ui.type} / {nodeById.get(hoveredNodeId)?.ui.confidence}% confidence</span>
+          <small>{nodeById.get(hoveredNodeId)?.ui.source}</small>
+        </div>
       )}
-    </section>
+      <div className="graph-mini-stats"><span>E <strong>{visibleNodes.length}</strong></span><span>R <strong>{visibleEdges.length}</strong></span><span>{layoutMode}</span></div>
+      <div className="graph-floating-controls">
+        <button type="button" onClick={() => setZoom((value) => Math.min(1.7, value + 0.1))} title="Zoom in"><ZoomIn size={15} /></button>
+        <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value - 0.1))} title="Zoom out"><ZoomOut size={15} /></button>
+        <button type="button" onClick={fitGraph} title="Fit graph"><Maximize2 size={15} /></button>
+        <button type="button" onClick={() => applyLayout(layoutMode)} title="Reflow layout"><RotateCcw size={15} /></button>
+      </div>
+    </div>
   );
 }
