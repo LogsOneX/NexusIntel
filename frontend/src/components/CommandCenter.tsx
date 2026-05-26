@@ -73,9 +73,10 @@ function LoginPage({ onLogin }: { onLogin: (session: SessionState) => void }) {
 function markFallbackTransforms(transforms: TransformDefinition[]): TransformDefinition[] {
   return transforms.map((item) => ({
     ...item,
+    enabled: false,
     source_category: item.source_category || "fallback",
     confidence_profile: item.confidence_profile || "fallback registry",
-    disabled_reason: item.disabled_reason || (item.enabled ? null : "Fallback definition; backend registry unavailable"),
+    disabled_reason: item.disabled_reason || "Registry unavailable — fallback transform catalog shown",
   }));
 }
 
@@ -663,6 +664,7 @@ function GraphHub({ token, navigate }: PageProps) {
             onOpenEvidenceVault={() => navigate("/evidence")}
             onOpenTransformLibrary={() => navigate("/transforms")}
             onMarkNoiseNode={(node) => void markSelectedNoise(node)}
+            onRunCorrelation={() => void runCorrelationEngine()}
             hideToolbar
           />
         </GraphCanvasStage>
