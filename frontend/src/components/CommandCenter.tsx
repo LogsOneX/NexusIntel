@@ -589,6 +589,18 @@ function GraphHub({ token, navigate }: PageProps) {
     const onKey = (event: KeyboardEvent) => {
       const targetElement = event.target as HTMLElement | null;
       const typing = targetElement?.tagName === "INPUT" || targetElement?.tagName === "TEXTAREA" || targetElement?.tagName === "SELECT" || targetElement?.isContentEditable;
+      if (event.key === "Escape") {
+        if (commandPaletteOpen) { event.preventDefault(); setCommandPaletteOpen(false); return; }
+        if (addDialogOpen) { event.preventDefault(); setAddDialogOpen(false); return; }
+        if (deleteCase) { event.preventDefault(); setDeleteCase(null); return; }
+        if (evidenceDrawer) { event.preventDefault(); setEvidenceDrawer(null); return; }
+        if (terminalOpen) { event.preventDefault(); setTerminalOpen(false); return; }
+        if (paletteOpen) { event.preventDefault(); setPaletteOpen(false); return; }
+        if (dataPanelOpen) { event.preventDefault(); setDataPanelOpen(false); return; }
+        if (caseDockOpen) { event.preventDefault(); setCaseDockOpen(false); return; }
+        if (investigatorOpen) { event.preventDefault(); setInvestigatorOpen(false); return; }
+        if (oracleNode) { event.preventDefault(); setOracleNode(null); return; }
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setCommandPaletteOpen(true); return; }
       if (typing) return;
       if (event.key.toLowerCase() === "d") { event.preventDefault(); setCaseDockOpen((open) => !open); }
@@ -596,7 +608,7 @@ function GraphHub({ token, navigate }: PageProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [addDialogOpen, caseDockOpen, commandPaletteOpen, dataPanelOpen, deleteCase, evidenceDrawer, investigatorOpen, oracleNode, paletteOpen, terminalOpen]);
 
   const activeCase = useMemo(() => investigations.find((item) => item.id === activeInvestigationId) || null, [activeInvestigationId, investigations]);
 
@@ -669,7 +681,7 @@ function GraphHub({ token, navigate }: PageProps) {
           />
         </GraphCanvasStage>
         <CaseDockDrawer open={caseDockOpen} onClose={() => setCaseDockOpen(false)}>
-          <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} leads={graph.leads || []} noise={graph.noise || []} compliance={graph.compliance || []} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} onPromoteLead={(id) => void promoteLead(id)} onRestoreNoise={(id) => void restoreNoise(id)} loading={loading} />
+          <CaseDock investigations={investigations} activeCase={activeCase} health={caseHealth} leads={graph.leads || []} noise={graph.noise || []} compliance={graph.compliance || []} onSelect={selectInvestigation} onCreateBlank={createBlankInvestigation} onDeleteActive={() => activeCase && setDeleteCase(activeCase)} onClearActive={clearActiveInvestigation} onPromoteLead={(id) => void promoteLead(id)} onRestoreNoise={(id) => void restoreNoise(id)} loading={loading} onClose={() => setCaseDockOpen(false)} />
         </CaseDockDrawer>
         <InspectorDrawer open={dataPanelOpen} onClose={() => setDataPanelOpen(false)}>
           <EntityInspector
@@ -689,6 +701,7 @@ function GraphHub({ token, navigate }: PageProps) {
             onRunCorrelationEngine={() => void runCorrelationEngine()}
             onExportPacket={(format) => void exportPacket(format)}
             onMarkNoise={() => void markSelectedNoise()}
+            onClose={() => setDataPanelOpen(false)}
           />
         </InspectorDrawer>
         <TelemetryDrawer open={terminalOpen} lines={terminalLines} taskLabel={taskLabel || "idle"} onClose={() => setTerminalOpen(false)} onClear={() => setTerminalLines([])} onRunCommand={runTelemetryCommand} />

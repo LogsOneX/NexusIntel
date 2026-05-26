@@ -46,7 +46,7 @@ export default function EntityPaletteDrawer({ open, onClose, onPick }: { open: b
   })).filter((group) => group.items.length > 0);
   return (
     <aside className={open ? "nexus-drawer-left entity-palette-drawer open reference-palette" : "nexus-drawer-left entity-palette-drawer reference-palette"} aria-label="Entity palette" aria-hidden={!open}>
-      <header><div><strong>Entity Palette</strong><span>Structured seeds and pivots</span></div><button type="button" onClick={onClose} aria-label="Close entity palette"><X size={15} /></button></header>
+      <header><div><strong>Entity Palette</strong><span>Structured seeds and pivots</span></div><button type="button" onClick={onClose} aria-label="Close entity palette" title="Close"><X size={15} /></button></header>
       <label className="ref-palette-search"><Search size={12} /><input aria-label="Search entity types" placeholder="Filter entity types..." value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <div className="entity-palette-groups">
         {filteredGroups.map((group) => (

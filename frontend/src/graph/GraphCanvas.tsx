@@ -1,6 +1,6 @@
 import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
-import { mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
+import { getStudioNodeConfidence, getStudioNodeIcon, getStudioNodeRisk, getStudioNodeVisual, mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
 import NodeActionPopover from "../components/graph/NodeActionPopover";
 import type { TransformDefinition } from "../lib/types";
 
@@ -417,7 +417,6 @@ export default function GraphCanvas({
     if (!actionNode) return [] as TransformDefinition[];
     return transforms.filter((item) => item.input_types.includes(actionNode.api.type) || item.input_types.includes("*"));
   }, [actionNode, transforms]);
-  const recommendedTransform = actionTransforms.find((item) => item.enabled) || null;
   const actionPosition = actionNode ? positions[actionNode.api.id] : null;
   const menuStyle = actionPosition ? {
     left: Math.max(16, Math.min((stageRef.current?.clientWidth || 1200) - 360, pan.x + (actionPosition.x + 138) * zoom + 12)),
@@ -513,13 +512,13 @@ export default function GraphCanvas({
         <div className="studio-node-layer">
           {studioNodes.map(({ api, ui }) => {
             const position = positions[api.id] || { x: 0, y: 0 };
-            const visual = visualForNodeType(api.type);
+            const visual = getStudioNodeVisual(api.type);
             const selected = selectedId === api.id;
             const hovered = hoveredNodeId === api.id;
-            const confidence = nodeConfidence(api);
+            const confidence = getStudioNodeConfidence(api);
             const source = nodeSource(api);
-            const icon = NODE_ICON_PATHS[visual.icon] || NODE_ICON_PATHS.target;
-            const risk = nodeRiskTag(api);
+            const icon = NODE_ICON_PATHS[getStudioNodeIcon(api.type)] || NODE_ICON_PATHS.target;
+            const risk = getStudioNodeRisk(api);
             return (
               <button
                 type="button"
@@ -553,7 +552,7 @@ export default function GraphCanvas({
               >
                 <span className="studio-node-bubble">
                   <svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: icon }} /></svg>
-                  <i className="studio-confidence-dot" style={{ background: confidence >= 80 ? "#10B981" : confidence >= 50 ? "#F59E0B" : "#EF4444" }} />
+                  <i className="studio-confidence-dot" style={{ background: confidence >= 80 ? "#10B981" : confidence >= 50 ? "#F59E0B" : "#EF4444" }}>{confidence}</i>
                 </span>
                 <span className="studio-node-card">
                   <span className="studio-node-card-top"><span className="studio-node-type">{visual.code}</span>{risk && <span className="studio-risk-badge">{risk}</span>}</span>

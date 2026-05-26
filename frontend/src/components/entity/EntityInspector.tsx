@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Database, Download, FileJson, GitBranch, NotebookPen, ShieldAlert, Sparkles } from "lucide-react";
+import { Database, Download, FileJson, GitBranch, NotebookPen, ShieldAlert, Sparkles, X } from "lucide-react";
 import type { AnalystPipeline, ApiNode, EvidenceRecord, Investigation, TransformDefinition } from "../../lib/types";
 import { readLocalJson, writeLocalJson } from "../../lib/storage";
 import Tabs from "../common/Tabs";
@@ -29,6 +29,7 @@ export default function EntityInspector({
   onRunCorrelationEngine,
   onExportPacket,
   onMarkNoise,
+  onClose,
 }: {
   open: boolean;
   selectedNode: ApiNode | null;
@@ -46,6 +47,7 @@ export default function EntityInspector({
   onRunCorrelationEngine: () => void;
   onExportPacket: (format: "html" | "pdf" | "json" | "csv" | "graph_json") => void;
   onMarkNoise?: () => void;
+  onClose?: () => void;
 }) {
   const [tab, setTab] = useState("overview");
   const noteKey = selectedNode ? `nexusintel.note.${selectedNode.id}` : "nexusintel.note.pending";
@@ -77,7 +79,10 @@ export default function EntityInspector({
     <aside className={open ? "entity-spec premium-entity-inspector reference-inspector" : "entity-spec premium-entity-inspector reference-inspector closed"}>
       <header className="ref-inspector-toolbar">
         <div><FileJson size={14} /><span>{selectedNode ? "Entity Inspector" : "System Inspector"}</span></div>
-        <code>{selectedEvidenceRefs.length} proof</code>
+        <div className="ref-inspector-toolbar-actions">
+          <code>{selectedEvidenceRefs.length} proof</code>
+          {onClose && <button className="ref-panel-close" type="button" onClick={onClose} aria-label="Close entity inspector" title="Close"><X size={14} /></button>}
+        </div>
       </header>
       <section className="ref-inspector-hero">
         <div className="ref-entity-glyph">{entityType.slice(0, 3).toUpperCase()}</div>
