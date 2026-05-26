@@ -51,7 +51,7 @@ export default function DashboardPage({ token, navigate }: PageProps) {
 
   const firstHealth = (Object.values(health).find(Boolean) as CaseHealth | undefined) || null;
   return (
-    <section className="dashboard-page premium-page">
+    <section className="dashboard-page premium-page studio-page scroll-page">
       <header className="page-header premium-page-header"><div><span className="micro-label">Threat Intelligence Portal</span><h1>Threat Intelligence Portal</h1><p>Platform aggregated cyber tracking, scans frequency and active threat levels overview</p></div><div className="page-actions"><button className="nx-secondary" type="button" onClick={() => setShowImport((open) => !open)}><FileUp size={15} />Import</button><button className="nx-primary" type="button" onClick={() => navigate("/graph")}><Network size={15} />Open Graph</button></div></header>
       <form className="dashboard-selector premium-card" onSubmit={(event) => { event.preventDefault(); if (selector.trim()) navigate(`/identity?seed=${encodeURIComponent(selector.trim())}`); }}>
         <Search size={18} />

@@ -55,7 +55,7 @@ export default function SettingsPage({ token }: PageProps) {
   const categories = ["all", ...Array.from(new Set(CONNECTORS.map((item) => item.category)))];
 
   return (
-    <section className="settings-page premium-page">
+    <section className="settings-page premium-page studio-page scroll-page">
       <header className="page-header premium-page-header">
         <div><span className="micro-label">Connector Center</span><h1>BYOK, Local AI, and Rate Limits</h1></div>
         <button className="nx-primary" type="button" onClick={save}><Save size={15} />Save Settings</button>

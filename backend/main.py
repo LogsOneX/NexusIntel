@@ -31,7 +31,7 @@ from backend.modules.proxy_rotator import ProxyRotator
 from backend.osint.importers.csv_importers import preview_csv, spiderfoot_mapping
 from backend.osint.registry import registry
 from backend.osint.types import EntityInput, RawEvidenceObject, RunContext
-from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, html_packet, ioc_csv, json_packet, minimal_pdf
+from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, designed_pdf_packet, html_packet, ioc_csv, json_packet
 from backend.artifact_classifier import append_artifact_to_meta, artifact_record, classify_artifact, dedupe_records, route_artifact
 from backend.investigator.brain import InvestigatorBrain
 from backend.investigator.hypothesis import HypothesisEngine
@@ -2082,19 +2082,7 @@ def export_analyst_packet(investigation_id: str, format: Literal["html", "pdf", 
     if format == "csv":
         return Response(ioc_csv(graph), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename_base}-iocs.csv"})
     if format == "pdf":
-        lines = [
-            f"Case: {case.get('target')}",
-            f"Entities: {len(graph.get('nodes') or [])}",
-            f"Relationships: {len(graph.get('edges') or [])}",
-            f"Evidence objects: {len(evidence)}",
-            f"Generated: {pipeline.get('generated_at')}",
-            "Lead Queue:",
-        ]
-        for group, items in (pipeline.get("lead_queue") or {}).items():
-            lines.append(str(group).upper())
-            for item in items[:8] if isinstance(items, list) else []:
-                lines.append(str(item))
-        return Response(minimal_pdf("NexusIntel Analyst Packet", lines), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename_base}.pdf"})
+        return Response(designed_pdf_packet(case, graph, pipeline, evidence), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename_base}.pdf"})
     return Response(html_packet(case, graph, pipeline, evidence), media_type="text/html", headers={"Content-Disposition": f"attachment; filename={filename_base}.html"})
 
 

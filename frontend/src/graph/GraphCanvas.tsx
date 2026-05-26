@@ -1,8 +1,10 @@
-import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type Dispatch, type FormEvent, type PointerEvent as ReactPointerEvent, type SetStateAction, type WheelEvent as ReactWheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { getStudioNodeConfidence, getStudioNodeIcon, getStudioNodeRisk, getStudioNodeVisual, mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
 import NodeActionPopover from "../components/graph/NodeActionPopover";
 import type { TransformDefinition } from "../lib/types";
+import { clamp, fitBoundsToViewport, screenToWorld, worldToScreen, zoomToCursor, type ViewportPoint } from "./viewportMath";
+import { graphPositionStorageKey, readGraphPositions, writeGraphPositions } from "./positionStore";
 
 export type GraphNode = {
   id: string;
@@ -57,8 +59,10 @@ type ApiGraphPayload = {
   metadata?: Record<string, unknown>;
 };
 
-type LayoutMode = "tree" | "circular" | "force";
-type StudioPosition = { x: number; y: number };
+type LayoutMode = "manual" | "tree" | "circular" | "force";
+type InteractionState =
+  | { type: "node"; pointerId: number; target: HTMLElement; nodeId: string; offsetX: number; offsetY: number; startClientX: number; startClientY: number; hasDragged: boolean }
+  | { type: "pan"; pointerId: number; target: HTMLElement; startClientX: number; startClientY: number; startPan: ViewportPoint; hasDragged: boolean };
 
 type GraphCanvasProps = {
   investigationId: string | null;
@@ -95,22 +99,11 @@ type GraphCanvasProps = {
   onRunCorrelation?: () => void;
 };
 
+const NODE_WIDTH = 120;
+const NODE_HEIGHT = 130;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 2.5;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-
-function upperSnake(value: string): string {
-  const normalized = value.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  return (normalized || "RELATED_TO").toUpperCase();
-}
-
-function confidenceScore(value?: string): number | undefined {
-  const raw = String(value || "").toLowerCase();
-  if (["confirmed", "verified", "high", "strong", "success", "true"].includes(raw)) return 90;
-  if (["medium", "observed", "probable"].includes(raw)) return 60;
-  if (["low", "weak", "candidate", "false"].includes(raw)) return 30;
-  return undefined;
-}
-
-type NodeVisual = { accent: string; code: string; icon: string; family: string };
 
 const NODE_ICON_PATHS: Record<string, string> = {
   identity: `<circle cx="32" cy="21" r="9"/><path d="M15 53c3-12 10-18 17-18s14 6 17 18"/>`,
@@ -125,50 +118,8 @@ const NODE_ICON_PATHS: Record<string, string> = {
   wallet: `<path d="M10 20h44v30H10z"/><path d="M44 30h12v12H44z"/><path d="M22 42V18h24"/>`,
   transaction: `<path d="M12 22h34l-8-8M46 22l-8 8"/><path d="M52 42H18l8-8M18 42l8 8"/>`,
   file: `<path d="M18 10h21l9 9v35H18z"/><path d="M39 10v12h9M25 32h15M25 41h12"/>`,
-  star: `<path d="M32 10l6 15h16l-13 9 5 16-14-10-14 10 5-16-13-9h16z"/>`,
-  lock: `<path d="M16 30h32v22H16z"/><path d="M23 30v-7a9 9 0 0118 0v7"/><path d="M32 39v6"/>`,
   alert: `<path d="M32 9l25 44H7z"/><path d="M32 24v13M32 45h.1"/>`,
   target: `<circle cx="32" cy="32" r="20"/><circle cx="32" cy="32" r="8"/><path d="M32 6v10M32 48v10M6 32h10M48 32h10"/>`,
-};
-
-const NODE_VISUALS: Record<string, NodeVisual> = {
-  username: { accent: "#3B82F6", code: "USER", icon: "fingerprint", family: "identity" },
-  name: { accent: "#3B82F6", code: "ALIAS", icon: "identity", family: "identity" },
-  person_alias: { accent: "#3B82F6", code: "ALIAS", icon: "identity", family: "identity" },
-  profile: { accent: "#3B82F6", code: "PROF", icon: "fingerprint", family: "identity" },
-  account: { accent: "#3B82F6", code: "ACCT", icon: "identity", family: "identity" },
-  email: { accent: "#10B981", code: "EMAIL", icon: "mail", family: "contact" },
-  masked_email: { accent: "#10B981", code: "MASK", icon: "lock", family: "contact" },
-  phone: { accent: "#10B981", code: "PHONE", icon: "phone", family: "contact" },
-  domain: { accent: "#A855F7", code: "DNS", icon: "globe", family: "infra" },
-  url: { accent: "#A855F7", code: "URL", icon: "link", family: "infra" },
-  ip: { accent: "#A855F7", code: "IP", icon: "server", family: "infra" },
-  dns_record: { accent: "#A855F7", code: "DNS", icon: "server", family: "infra" },
-  certificate: { accent: "#A855F7", code: "CERT", icon: "file", family: "infra" },
-  service: { accent: "#A855F7", code: "SVC", icon: "server", family: "infra" },
-  technology: { accent: "#A855F7", code: "TECH", icon: "server", family: "infra" },
-  google_profile: { accent: "#F59E0B", code: "MAPS", icon: "pin", family: "geo" },
-  google_maps_profile: { accent: "#F59E0B", code: "MAPS", icon: "pin", family: "geo" },
-  google_review: { accent: "#F59E0B", code: "REVIEW", icon: "star", family: "geo" },
-  location: { accent: "#F59E0B", code: "LOC", icon: "pin", family: "geo" },
-  place: { accent: "#F59E0B", code: "PLACE", icon: "pin", family: "geo" },
-  image_asset: { accent: "#F59E0B", code: "IMG", icon: "image", family: "asset" },
-  avatar: { accent: "#F59E0B", code: "IMG", icon: "image", family: "asset" },
-  favicon: { accent: "#F59E0B", code: "HASH", icon: "image", family: "asset" },
-  hash: { accent: "#F59E0B", code: "HASH", icon: "file", family: "asset" },
-  document: { accent: "#8B8B91", code: "DOC", icon: "file", family: "asset" },
-  evidence: { accent: "#8B8B91", code: "EV", icon: "file", family: "asset" },
-  crypto_wallet: { accent: "#10B981", code: "WALLET", icon: "wallet", family: "crypto" },
-  wallet: { accent: "#10B981", code: "WALLET", icon: "wallet", family: "crypto" },
-  crypto_transaction: { accent: "#10B981", code: "TX", icon: "transaction", family: "crypto" },
-  transaction: { accent: "#10B981", code: "TX", icon: "transaction", family: "crypto" },
-  suspicious_domain: { accent: "#EF4444", code: "RISK", icon: "alert", family: "threat" },
-  breach_record: { accent: "#EF4444", code: "BREACH", icon: "alert", family: "threat" },
-  indicator: { accent: "#EF4444", code: "IOC", icon: "alert", family: "threat" },
-  target: { accent: "#EF4444", code: "ROOT", icon: "target", family: "system" },
-  investigation_root: { accent: "#EF4444", code: "ROOT", icon: "target", family: "system" },
-  note: { accent: "#8B8B91", code: "NOTE", icon: "file", family: "system" },
-  signal: { accent: "#8B8B91", code: "SIG", icon: "target", family: "system" },
 };
 
 const HIDDEN_NODE_TYPES = new Set([
@@ -180,11 +131,17 @@ const CANDIDATE_NODE_TYPES = new Set([
   "profile_candidate", "candidate_profile", "candidate_url_only", "username_candidate", "email_candidate", "phone_deeplink_candidate", "possible_profile", "possible_same_actor",
 ]);
 
-function visualForNodeType(type: string): NodeVisual {
-  const normalized = String(type || "").toLowerCase();
-  if (normalized.includes("risk") || normalized.includes("suspicious")) return NODE_VISUALS.suspicious_domain;
-  if (normalized.includes("candidate") || normalized.includes("possible")) return { accent: "#F59E0B", code: "LEAD", icon: "target", family: "candidate" };
-  return NODE_VISUALS[normalized] || NODE_VISUALS.profile;
+function upperSnake(value: string): string {
+  const normalized = value.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return (normalized || "RELATED_TO").toUpperCase();
+}
+
+function confidenceScore(value?: string): number | undefined {
+  const raw = String(value || "").toLowerCase();
+  if (["confirmed", "verified", "high", "strong", "success", "true"].includes(raw)) return 90;
+  if (["medium", "observed", "probable"].includes(raw)) return 60;
+  if (["low", "weak", "candidate", "false"].includes(raw)) return 30;
+  return undefined;
 }
 
 function isGraphVisible(node: ApiGraphNode): boolean {
@@ -202,40 +159,16 @@ function compactLabel(value: string): string {
   if (clean.length <= 28) return clean;
   if (clean.includes("@")) {
     const [local, domain] = clean.split("@");
-    return `${local.slice(0, 12)}…@${(domain || "").slice(0, 12)}`;
+    return `${local.slice(0, 12)}...@${(domain || "").slice(0, 12)}`;
   }
-  return `${clean.slice(0, 25)}…`;
-}
-
-function nodeConfidence(node: ApiGraphNode): number {
-  const data = node.data || {};
-  const numeric = Number(node.confidence_level ?? data.confidence_score ?? data.confidence_level);
-  if (Number.isFinite(numeric)) return Math.max(0, Math.min(100, numeric));
-  return confidenceScore(node.confidence) || 50;
+  return `${clean.slice(0, 25)}...`;
 }
 
 function nodeSource(node: ApiGraphNode): string {
   return String(node.source || node.data?.source || node.data?.adapter_id || "graph");
 }
 
-function isPrivateOrBogonIp(value: string): boolean {
-  const ip = value.trim().toLowerCase();
-  return /^(10|127|0)\./.test(ip) || /^192\.168\./.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip) || /^169\.254\./.test(ip) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip) || ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80:");
-}
-
-function suspiciousDomain(value: string): boolean {
-  const domain = value.toLowerCase();
-  return ["login-", "secure-", "verify-", "account-", "wallet-", "signin-", "-login", "-verify", "password", "update-billing"].some((term) => domain.includes(term));
-}
-
-function nodeRiskTag(node: ApiGraphNode): "INTERNAL" | "SUSPICIOUS" | null {
-  const value = String(node.value || node.label || "");
-  if (node.type === "ip" && isPrivateOrBogonIp(value)) return "INTERNAL";
-  if (node.type === "domain" && suspiciousDomain(value)) return "SUSPICIOUS";
-  return null;
-}
-
-function positionFor(index: number, total: number, width: number, height: number, mode: LayoutMode): StudioPosition {
+function positionFor(index: number, total: number, width: number, height: number, mode: LayoutMode): ViewportPoint {
   const centerX = Math.max(440, width / 2);
   const centerY = Math.max(280, height / 2);
   if (mode === "tree") {
@@ -245,23 +178,23 @@ function positionFor(index: number, total: number, width: number, height: number
   if (mode === "circular") {
     const radius = Math.max(190, Math.min(width, height) * 0.32);
     const angle = total <= 1 ? -Math.PI / 2 : (index / total) * Math.PI * 2 - Math.PI / 2;
-    return { x: centerX + Math.cos(angle) * radius - 66, y: centerY + Math.sin(angle) * radius - 38 };
+    return { x: centerX + Math.cos(angle) * radius - NODE_WIDTH / 2, y: centerY + Math.sin(angle) * radius - 32 };
   }
   const radius = 92 + Math.sqrt(index + 1) * 58;
   const angle = index * GOLDEN_ANGLE;
-  return { x: centerX + Math.cos(angle) * radius - 66, y: centerY + Math.sin(angle) * radius - 38 };
+  return { x: centerX + Math.cos(angle) * radius - NODE_WIDTH / 2, y: centerY + Math.sin(angle) * radius - 32 };
 }
 
-function graphNodeForReport(node: ApiGraphNode, position: StudioPosition): GraphNode {
+function graphNodeForReport(node: ApiGraphNode, position: ViewportPoint): GraphNode {
   return {
     id: node.id,
     nodeType: node.type,
     nodeLabel: node.label || node.value || node.type,
-    nodeProperties: { ...(node.data || {}), value: node.value, source: node.source || "graph", confidence: node.confidence || "medium", confidence_level: nodeConfidence(node), created_at: node.created_at || new Date().toISOString() },
+    nodeProperties: { ...(node.data || {}), value: node.value, source: node.source || "graph", confidence: node.confidence || "medium", confidence_level: getStudioNodeConfidence(node), created_at: node.created_at || new Date().toISOString() },
     nodeShape: "circle",
     x: position.x,
     y: position.y,
-    nodeIcon: null,
+    nodeIcon: getStudioNodeIcon(node.type),
     nodeFlag: node.confidence === "low" ? "LOW" : null,
   };
 }
@@ -282,6 +215,11 @@ function reportHtml(nodes: GraphNode[], edges: GraphEdge[], investigationId: str
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>NexusIntel Intelligence Report</title><style>body{margin:0;background:#0A0A0B;color:#E0E0E3;font-family:Inter,Arial,sans-serif}main{max-width:1160px;margin:0 auto;padding:32px}header,section{border:1px solid #2D2D30;background:#141416;margin:0 0 18px;padding:18px}h1,h2{margin:0 0 12px}small,td,th,pre{font-family:"JetBrains Mono",monospace}table{width:100%;border-collapse:collapse;font-size:12px}td,th{border:1px solid #2D2D30;padding:8px;text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0F0F11;padding:12px}</style></head><body><main><header><small>NEXUSINTEL / STUDIO GRAPH EXPORT</small><h1>Intelligence Graph Export</h1><p>Investigation: ${escapeHtml(investigationId || "local")}</p><p>Generated: ${escapeHtml(generatedAt)}</p></header><section><h2>Entities</h2><table><thead><tr><th>Type</th><th>Label</th><th>Value</th><th>Confidence</th></tr></thead><tbody>${rows}</tbody></table></section><section><h2>Relationships</h2><table><thead><tr><th>Source</th><th>Label</th><th>Target</th><th>Confidence</th></tr></thead><tbody>${edgeRows}</tbody></table></section><section><h2>Structured Graph JSON</h2><pre>${graphJson}</pre></section></main></body></html>`;
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  return element?.tagName === "INPUT" || element?.tagName === "TEXTAREA" || element?.tagName === "SELECT" || Boolean(element?.isContentEditable);
+}
+
 export default function GraphCanvas({
   investigationId,
   nodes,
@@ -289,7 +227,6 @@ export default function GraphCanvas({
   selectedNode,
   onSelectNode,
   onSystemLog,
-  onOracleNode,
   setDataPanelOpen,
   onOpenAddEntity,
   onOpenImport,
@@ -303,12 +240,19 @@ export default function GraphCanvas({
   onRunCorrelation,
 }: GraphCanvasProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const [positions, setPositions] = useState<Record<string, StudioPosition>>({});
+  const interactionRef = useRef<InteractionState | null>(null);
+  const suppressClickNodeRef = useRef<string | null>(null);
+  const spaceDownRef = useRef(false);
+  const positionsRef = useRef<Record<string, ViewportPoint>>({});
+  const panRef = useRef<ViewportPoint>({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+
+  const [positions, setPositions] = useState<Record<string, ViewportPoint>>({});
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("force");
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
-  const [panning, setPanning] = useState<{ x: number; y: number; startX: number; startY: number } | null>(null);
+  const [pan, setPan] = useState<ViewportPoint>({ x: 0, y: 0 });
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [panning, setPanning] = useState(false);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [actionMenu, setActionMenu] = useState<{ nodeId: string; mode: "compact" | "full" } | null>(null);
@@ -320,28 +264,55 @@ export default function GraphCanvas({
   const studioNodes = useMemo(() => visibleNodes.map((node, index) => ({ api: node, ui: mapApiNodeToStudioNode(node, index) })), [visibleNodes]);
   const studioEdges = useMemo(() => visibleEdges.map((edge, index) => ({ api: edge, ui: mapApiEdgeToStudioEdge(edge, index) })), [visibleEdges]);
   const selectedId = selectedNode?.id || null;
+  const positionKey = useMemo(() => graphPositionStorageKey(investigationId), [investigationId]);
+
+  useEffect(() => { positionsRef.current = positions; }, [positions]);
+  useEffect(() => { panRef.current = pan; }, [pan]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  const persistPositions = useCallback((nextPositions: Record<string, ViewportPoint> = positionsRef.current) => {
+    writeGraphPositions(positionKey, nextPositions);
+  }, [positionKey]);
+
+  const setViewport = useCallback((nextPan: ViewportPoint, nextZoom: number) => {
+    const cleanZoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    const cleanPan = { x: Number.isFinite(nextPan.x) ? nextPan.x : 0, y: Number.isFinite(nextPan.y) ? nextPan.y : 0 };
+    panRef.current = cleanPan;
+    zoomRef.current = cleanZoom;
+    setPan(cleanPan);
+    setZoom(cleanZoom);
+  }, []);
 
   const applyLayout = useCallback((mode: LayoutMode = layoutMode) => {
     const rect = stageRef.current?.getBoundingClientRect();
     const width = rect?.width || 1240;
     const height = rect?.height || 760;
     setLayoutMode(mode);
-    setPositions(Object.fromEntries(visibleNodes.map((node, index) => [node.id, positionFor(index, visibleNodes.length, width, height, mode)])));
+    if (mode === "manual") {
+      persistPositions();
+      onSystemLog?.("Graph layout switched to manual; dragged node positions preserved.");
+      return;
+    }
+    const next = Object.fromEntries(visibleNodes.map((node, index) => [node.id, positionFor(index, visibleNodes.length, width, height, mode)]));
+    positionsRef.current = next;
+    setPositions(next);
+    persistPositions(next);
     onSystemLog?.(`Graph layout switched to ${mode}.`);
-  }, [layoutMode, onSystemLog, visibleNodes]);
+  }, [layoutMode, onSystemLog, persistPositions, visibleNodes]);
 
   useEffect(() => {
+    const stored = readGraphPositions(positionKey);
     setPositions((current) => {
       const rect = stageRef.current?.getBoundingClientRect();
       const width = rect?.width || 1240;
       const height = rect?.height || 760;
       let changed = false;
-      const next = { ...current };
+      const next = { ...stored, ...current };
       visibleNodes.forEach((node, index) => {
         if (!next[node.id]) {
           const dataX = Number(node.data?.x);
           const dataY = Number(node.data?.y);
-          next[node.id] = Number.isFinite(dataX) && Number.isFinite(dataY) ? { x: dataX, y: dataY } : positionFor(index, visibleNodes.length, width, height, layoutMode);
+          next[node.id] = Number.isFinite(dataX) && Number.isFinite(dataY) ? { x: dataX, y: dataY } : positionFor(index, visibleNodes.length, width, height, layoutMode === "manual" ? "force" : layoutMode);
           changed = true;
         }
       });
@@ -351,18 +322,50 @@ export default function GraphCanvas({
           changed = true;
         }
       });
-      return changed ? next : current;
+      positionsRef.current = next;
+      if (changed) writeGraphPositions(positionKey, next);
+      return changed || Object.keys(current).length === 0 ? next : current;
     });
-  }, [layoutMode, visibleNodeIds, visibleNodes]);
+  }, [layoutMode, positionKey, visibleNodeIds, visibleNodes]);
+
+  const screenToWorldPoint = useCallback((clientX: number, clientY: number): ViewportPoint => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return screenToWorld(clientX, clientY, rect, panRef.current, zoomRef.current);
+  }, []);
 
   const fitGraph = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    onSystemLog?.("Graph viewport fitted.");
-  }, [onSystemLog]);
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !visibleNodes.length) {
+      setViewport({ x: 0, y: 0 }, 1);
+      return;
+    }
+    const activePositions = visibleNodes.map((node, index) => positionsRef.current[node.id] || positionFor(index, visibleNodes.length, rect.width, rect.height, layoutMode));
+    const viewport = fitBoundsToViewport({ positions: activePositions, rect, nodeWidth: NODE_WIDTH, nodeHeight: NODE_HEIGHT, padding: 120, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM });
+    setViewport(viewport.pan, viewport.zoom);
+    onSystemLog?.("Graph viewport fitted to visible entities.");
+  }, [layoutMode, onSystemLog, setViewport, visibleNodes]);
+
+  const zoomAt = useCallback((clientX: number, clientY: number, nextZoom: number) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const viewport = zoomToCursor({ clientX, clientY, rect, pan: panRef.current, zoom: zoomRef.current, nextZoom: clamp(nextZoom, MIN_ZOOM, MAX_ZOOM) });
+    setViewport(viewport.pan, viewport.zoom);
+  }, [setViewport]);
+
+  const zoomAtCenter = useCallback((factor: number) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, zoomRef.current * factor);
+  }, [zoomAt]);
+
+  const resetZoom = useCallback(() => {
+    setViewport({ x: 0, y: 0 }, 1);
+    onSystemLog?.("Graph zoom reset to 100%.");
+  }, [onSystemLog, setViewport]);
 
   const exportGraph = useCallback(() => {
-    const reportNodes = visibleNodes.map((node, index) => graphNodeForReport(node, positions[node.id] || positionFor(index, visibleNodes.length, 1240, 760, layoutMode)));
+    const reportNodes = visibleNodes.map((node, index) => graphNodeForReport(node, positionsRef.current[node.id] || positionFor(index, visibleNodes.length, 1240, 760, layoutMode)));
     const reportEdges = visibleEdges.map(graphEdgeForReport);
     const blob = new Blob([reportHtml(reportNodes, reportEdges, investigationId)], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -372,7 +375,7 @@ export default function GraphCanvas({
     link.click();
     URL.revokeObjectURL(url);
     onSystemLog?.("Graph report exported from Studio renderer.");
-  }, [investigationId, layoutMode, onSystemLog, positions, visibleEdges, visibleNodes]);
+  }, [investigationId, layoutMode, onSystemLog, visibleEdges, visibleNodes]);
 
   useEffect(() => {
     const handleFit = () => fitGraph();
@@ -389,27 +392,50 @@ export default function GraphCanvas({
   }, [applyLayout, exportGraph, fitGraph]);
 
   useEffect(() => {
-    const onMove = (event: MouseEvent) => {
-      if (dragging) {
-        setPositions((current) => ({
-          ...current,
-          [dragging.id]: { x: (event.clientX - pan.x) / zoom - dragging.offsetX, y: (event.clientY - pan.y) / zoom - dragging.offsetY },
-        }));
+    const onPointerMove = (event: PointerEvent) => {
+      const interaction = interactionRef.current;
+      if (!interaction || interaction.pointerId !== event.pointerId) return;
+      if (interaction.type === "node") {
+        const world = screenToWorldPoint(event.clientX, event.clientY);
+        const movement = Math.hypot(event.clientX - interaction.startClientX, event.clientY - interaction.startClientY);
+        if (movement > 3) interaction.hasDragged = true;
+        const nextPosition = { x: world.x - interaction.offsetX, y: world.y - interaction.offsetY };
+        setPositions((current) => {
+          const next = { ...current, [interaction.nodeId]: nextPosition };
+          positionsRef.current = next;
+          return next;
+        });
+        if (interaction.hasDragged) setLayoutMode("manual");
         return;
       }
-      if (panning) setPan({ x: panning.x + event.clientX - panning.startX, y: panning.y + event.clientY - panning.startY });
+      const movement = Math.hypot(event.clientX - interaction.startClientX, event.clientY - interaction.startClientY);
+      if (movement > 3) interaction.hasDragged = true;
+      setViewport({ x: interaction.startPan.x + event.clientX - interaction.startClientX, y: interaction.startPan.y + event.clientY - interaction.startClientY }, zoomRef.current);
     };
-    const onUp = () => {
-      setDragging(null);
-      setPanning(null);
+
+    const onPointerUp = (event: PointerEvent) => {
+      const interaction = interactionRef.current;
+      if (!interaction || interaction.pointerId !== event.pointerId) return;
+      try { interaction.target.releasePointerCapture(event.pointerId); } catch { /* ignored */ }
+      if (interaction.type === "node") {
+        if (interaction.hasDragged) suppressClickNodeRef.current = interaction.nodeId;
+        persistPositions();
+        setDraggingNodeId(null);
+      } else {
+        setPanning(false);
+      }
+      interactionRef.current = null;
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
     };
-  }, [dragging, pan.x, pan.y, panning, zoom]);
+  }, [persistPositions, screenToWorldPoint, setViewport]);
 
   const nodeById = useMemo(() => new Map(studioNodes.map((node) => [node.api.id, node])), [studioNodes]);
   const actionNode = actionMenu ? nodeById.get(actionMenu.nodeId) || null : null;
@@ -418,28 +444,50 @@ export default function GraphCanvas({
     return transforms.filter((item) => item.input_types.includes(actionNode.api.type) || item.input_types.includes("*"));
   }, [actionNode, transforms]);
   const actionPosition = actionNode ? positions[actionNode.api.id] : null;
-  const menuStyle = actionPosition ? {
-    left: Math.max(16, Math.min((stageRef.current?.clientWidth || 1200) - 360, pan.x + (actionPosition.x + 138) * zoom + 12)),
-    top: Math.max(12, Math.min((stageRef.current?.clientHeight || 760) - 390, pan.y + actionPosition.y * zoom + 4)),
-  } : undefined;
+  const menuStyle = actionPosition ? (() => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    const width = rect?.width || 1200;
+    const height = rect?.height || 760;
+    const point = worldToScreen(actionPosition.x + NODE_WIDTH + 14, actionPosition.y + 4, pan, zoom);
+    const menuWidth = actionMenu?.mode === "full" ? 380 : 330;
+    const menuHeight = actionMenu?.mode === "full" ? 520 : 390;
+    return {
+      left: clamp(point.x, 16, Math.max(16, width - menuWidth - 16)),
+      top: clamp(point.y, 12, Math.max(12, height - menuHeight - 16)),
+    };
+  })() : undefined;
   const confirmNoiseNode = confirmNoiseNodeId ? nodeById.get(confirmNoiseNodeId)?.api || null : null;
   const worldBounds = useMemo(() => {
     const values = Object.values(positions);
-    if (!values.length) return { width: 1600, height: 1000 };
-    return { width: Math.max(1600, Math.max(...values.map((item) => item.x)) + 260), height: Math.max(1000, Math.max(...values.map((item) => item.y)) + 210) };
+    if (!values.length) return { width: 5000, height: 5000 };
+    const minX = Math.min(0, ...values.map((item) => item.x));
+    const minY = Math.min(0, ...values.map((item) => item.y));
+    const maxX = Math.max(1600, ...values.map((item) => item.x + NODE_WIDTH + 260));
+    const maxY = Math.max(1000, ...values.map((item) => item.y + NODE_HEIGHT + 210));
+    return { width: maxX - minX, height: maxY - minY };
   }, [positions]);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
-      if (typing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      if (event.code === "Space") {
+        spaceDownRef.current = true;
+        event.preventDefault();
+        return;
+      }
       if (event.key === "Escape") { setActionMenu(null); setConfirmNoiseNodeId(null); return; }
       if (event.key === "Enter" && selectedId) { event.preventDefault(); setActionMenu({ nodeId: selectedId, mode: "full" }); return; }
       if (event.key === "Delete" && selectedId) { event.preventDefault(); setConfirmNoiseNodeId(selectedId); }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") spaceDownRef.current = false;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [selectedId]);
 
   useEffect(() => {
@@ -452,9 +500,39 @@ export default function GraphCanvas({
     return () => window.removeEventListener("nexus:open-node-transform-menu", openNodeMenu);
   }, [nodeById, selectedId]);
 
+  const beginNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>, node: ApiGraphNode, position: ViewportPoint) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    const world = screenToWorldPoint(event.clientX, event.clientY);
+    const target = event.currentTarget;
+    try { target.setPointerCapture(event.pointerId); } catch { /* ignored */ }
+    interactionRef.current = { type: "node", pointerId: event.pointerId, target, nodeId: node.id, offsetX: world.x - position.x, offsetY: world.y - position.y, startClientX: event.clientX, startClientY: event.clientY, hasDragged: false };
+    setDraggingNodeId(node.id);
+  };
+
+  const beginPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(".studio-node,.studio-node-action-menu,.studio-confirm-popover,.graph-floating-controls,.graph-mini-stats")) return;
+    if (!(event.button === 0 || event.button === 1 || spaceDownRef.current)) return;
+    event.preventDefault();
+    setActionMenu(null);
+    setConfirmNoiseNodeId(null);
+    const element = event.currentTarget;
+    try { element.setPointerCapture(event.pointerId); } catch { /* ignored */ }
+    interactionRef.current = { type: "pan", pointerId: event.pointerId, target: element, startClientX: event.clientX, startClientY: event.clientY, startPan: panRef.current, hasDragged: false };
+    setPanning(true);
+  };
+
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const speed = event.ctrlKey || event.metaKey ? 0.0008 : 0.0016;
+    const factor = clamp(Math.exp(-event.deltaY * speed), 0.82, 1.18);
+    zoomAt(event.clientX, event.clientY, zoomRef.current * factor);
+  };
+
   if (!visibleNodes.length) {
     return (
-      <div className="studio-graph-canvas osint-grid">
+      <div className="studio-graph-canvas osint-grid" ref={stageRef}>
         <div className="studio-empty-launch">
           <span className="studio-empty-kicker">NEXUSINTEL LINK ANALYSIS</span>
           <h2>Start a Link Analysis</h2>
@@ -475,36 +553,40 @@ export default function GraphCanvas({
   return (
     <div
       ref={stageRef}
-      className="studio-graph-canvas osint-grid"
-      onMouseDown={(event) => {
-        if (event.button === 0 && event.target === event.currentTarget) setPanning({ x: pan.x, y: pan.y, startX: event.clientX, startY: event.clientY });
-      }}
-      onWheel={(event) => {
+      className={panning ? "studio-graph-canvas osint-grid is-panning" : "studio-graph-canvas osint-grid"}
+      onPointerDown={beginPan}
+      onWheel={handleWheel}
+      onContextMenu={(event) => {
+        if ((event.target as HTMLElement | null)?.closest(".studio-node")) return;
         event.preventDefault();
-        setZoom((current) => Math.max(0.45, Math.min(1.7, current + (event.deltaY > 0 ? -0.08 : 0.08))));
       }}
     >
       <div className="studio-graph-world" style={{ width: worldBounds.width, height: worldBounds.height, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
         <svg className="studio-edge-layer" width={worldBounds.width} height={worldBounds.height}>
+          <defs>
+            <marker id="nexus-arrow" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#2d3748" /></marker>
+            <marker id="nexus-arrow-active" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#3b82f6" /></marker>
+          </defs>
           {studioEdges.map(({ api, ui }) => {
             const source = nodeById.get(api.source);
             const target = nodeById.get(api.target);
             if (!source || !target) return null;
             const sourcePosition = positions[source.api.id] || { x: 0, y: 0 };
             const targetPosition = positions[target.api.id] || { x: 0, y: 0 };
-            const sx = sourcePosition.x + 66;
-            const sy = sourcePosition.y + 35;
-            const tx = targetPosition.x + 66;
-            const ty = targetPosition.y + 35;
-            const dx = tx - sx;
-            const path = `M ${sx} ${sy} C ${sx + dx * 0.36} ${sy}, ${tx - dx * 0.36} ${ty}, ${tx} ${ty}`;
+            const sx = sourcePosition.x + NODE_WIDTH / 2;
+            const sy = sourcePosition.y + 32;
+            const tx = targetPosition.x + NODE_WIDTH / 2;
+            const ty = targetPosition.y + 32;
             const midX = (sx + tx) / 2;
             const midY = (sy + ty) / 2;
             const active = hoveredEdgeId === api.id || Boolean(selectedId && (api.source === selectedId || api.target === selectedId));
+            const label = upperSnake(ui.label || api.type);
             return (
               <g key={api.id} onMouseEnter={() => setHoveredEdgeId(api.id)} onMouseLeave={() => setHoveredEdgeId(null)} className={active ? "studio-edge active" : "studio-edge"}>
-                <path d={path} style={{ opacity: Math.max(0.18, ui.confidence / 115) }} />
-                <text x={midX} y={midY - 8}>{upperSnake(ui.label || api.type)}</text>
+                <line className="edge-hit" x1={sx} y1={sy} x2={tx} y2={ty} stroke="transparent" strokeWidth="12" />
+                {active && <line className="edge-glow" x1={sx} y1={sy} x2={tx} y2={ty} stroke="#3b82f6" strokeWidth="6" />}
+                <line className="edge-line" x1={sx} y1={sy} x2={tx} y2={ty} markerEnd={active ? "url(#nexus-arrow-active)" : "url(#nexus-arrow)"} style={{ opacity: Math.max(0.2, ui.confidence / 115) }} />
+                {(zoom >= 0.7 || active) && <g className="edge-label" transform={`translate(${midX}, ${midY})`}><rect x={-(label.length * 2.8) - 4} y={-7} width={label.length * 5.6 + 8} height={14} rx="3" /><text textAnchor="middle" y="2.5">{label}</text></g>}
               </g>
             );
           })}
@@ -523,22 +605,25 @@ export default function GraphCanvas({
               <button
                 type="button"
                 key={api.id}
-                className={`studio-node family-${visual.family} ${selected ? "selected" : ""} ${hovered ? "hovered" : ""}`}
+                className={`studio-node family-${visual.family} ${selected ? "selected" : ""} ${hovered ? "hovered" : ""} ${draggingNodeId === api.id ? "dragging" : ""}`}
                 style={{ "--node-accent": visual.accent, transform: `translate(${position.x}px, ${position.y}px)` } as CSSProperties}
-                onMouseDown={(event) => {
-                  event.stopPropagation();
-                  setDragging({ id: api.id, offsetX: (event.clientX - pan.x) / zoom - position.x, offsetY: (event.clientY - pan.y) / zoom - position.y });
-                }}
+                onPointerDown={(event) => beginNodeDrag(event, api, position)}
                 onMouseEnter={() => setHoveredNodeId(api.id)}
                 onMouseLeave={() => setHoveredNodeId(null)}
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (suppressClickNodeRef.current === api.id) {
+                    suppressClickNodeRef.current = null;
+                    event.preventDefault();
+                    return;
+                  }
                   onSelectNode(api);
                   setDataPanelOpen?.(true);
                   setActionMenu({ nodeId: api.id, mode: "compact" });
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
+                  event.stopPropagation();
                   onSelectNode(api);
                   setDataPanelOpen?.(true);
                   setActionMenu({ nodeId: api.id, mode: "full" });
@@ -598,10 +683,10 @@ export default function GraphCanvas({
       )}
       <div className="graph-mini-stats"><span>E <strong>{visibleNodes.length}</strong></span><span>R <strong>{visibleEdges.length}</strong></span><span>{layoutMode}</span></div>
       <div className="graph-floating-controls">
-        <button type="button" onClick={() => setZoom((value) => Math.min(1.7, value + 0.1))} title="Zoom in"><ZoomIn size={15} /></button>
-        <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value - 0.1))} title="Zoom out"><ZoomOut size={15} /></button>
+        <button type="button" onClick={() => zoomAtCenter(1.12)} title="Zoom in"><ZoomIn size={15} /></button>
+        <button type="button" onClick={() => zoomAtCenter(0.88)} title="Zoom out"><ZoomOut size={15} /></button>
         <button type="button" onClick={fitGraph} title="Fit graph"><Maximize2 size={15} /></button>
-        <button type="button" onClick={() => applyLayout(layoutMode)} title="Reflow layout"><RotateCcw size={15} /></button>
+        <button type="button" onClick={resetZoom} title="Reset zoom"><RotateCcw size={15} /><span>{Math.round(zoom * 100)}%</span></button>
       </div>
     </div>
   );

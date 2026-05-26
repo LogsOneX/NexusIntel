@@ -66,7 +66,7 @@ export default function ReportsPage({ token }: PageProps) {
   };
 
   return (
-    <section className="reports-page studio-report-page">
+    <section className="reports-page studio-report-page studio-page scroll-page">
       <header className="studio-page-hero">
         <div>
           <span className="micro-label">Report Builder</span>
@@ -84,7 +84,7 @@ export default function ReportsPage({ token }: PageProps) {
           <label>Lead Analyst<input value={analyst} onChange={(event) => setAnalyst(event.target.value)} /></label>
           <div className="studio-section-list"><strong>Section Bundle</strong>{REPORT_SECTIONS.map((section) => <label key={section} className="studio-check-row"><input type="checkbox" checked={sections.has(section)} onChange={() => toggleSection(section)} /><span>{section}</span></label>)}</div>
           <div className="studio-report-actions">
-            <button className="nx-primary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("pdf")}><Download size={15} />Compile & Export PDF Dossier</button>
+            <button className="nx-primary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("pdf")}><Download size={15} />{exporting ? "Compiling Dossier" : "Compile & Export PDF Dossier"}</button>
             <button className="nx-secondary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("html")}>Export HTML</button>
             <button className="nx-secondary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("json")}>JSON Bundle</button>
           </div>

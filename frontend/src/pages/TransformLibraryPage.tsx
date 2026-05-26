@@ -31,7 +31,7 @@ export default function TransformLibraryPage({ token }: PageProps) {
   const filtered = useMemo(() => transforms.filter((item) => category === "all" || categoryFor(item) === category), [category, transforms]);
   const disabled = transforms.filter((item) => !item.enabled).length;
   return (
-    <section className="transform-page premium-page">
+    <section className="transform-page transform-library-page premium-page studio-page scroll-page">
       <header className="page-header premium-page-header">
         <div>
           <span className="micro-label">Maltego-style transform registry</span>
