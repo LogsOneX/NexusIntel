@@ -831,7 +831,7 @@ pre {
   background: #050b12;
 }
 
-.tactical-graph-toolbar {
+.legacy-graph-toolbar-disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -840,7 +840,7 @@ pre {
   padding: 10px 12px;
 }
 
-.tactical-graph-toolbar div:first-child {
+.legacy-graph-toolbar-disabled div:first-child {
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -854,7 +854,7 @@ pre {
   text-transform: uppercase;
 }
 
-.tactical-graph-toolbar span:not(.micro-label) {
+.legacy-graph-toolbar-disabled span:not(.micro-label) {
   color: #8aa0b5;
   font-size: 12px;
 }
@@ -1503,7 +1503,7 @@ select:focus {
   border-color: #ffffff !important;
 }
 
-.tactical-graph-toolbar {
+.legacy-graph-toolbar-disabled {
   display: grid;
   grid-template-columns: minmax(170px, 1fr) auto auto;
   gap: 14px;
@@ -1514,15 +1514,15 @@ select:focus {
   background: #000000 !important;
 }
 
-.tactical-graph-toolbar strong,
-.tactical-graph-toolbar span:not(.micro-label) {
+.legacy-graph-toolbar-disabled strong,
+.legacy-graph-toolbar-disabled span:not(.micro-label) {
   display: block;
   color: #ffffff !important;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px;
 }
 
-.entity-pipeline {
+.legacy-entity-row-disabled {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1667,7 +1667,7 @@ select:focus {
   color: #ffffff;
 }
 
-.custom-node {
+.legacy-rect-node-disabled {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   width: 192px;
@@ -1678,16 +1678,16 @@ select:focus {
   transform: translate3d(0, 0, 0);
 }
 
-.custom-node.selected {
+.legacy-rect-node-disabled.selected {
   border-color: #ffffff;
 }
 
-.custom-node.low-confidence {
+.legacy-rect-node-disabled.low-confidence {
   border-style: dashed;
   color: #888888;
 }
 
-.custom-node-mark {
+.legacy-rect-node-disabled-mark {
   display: grid;
   place-items: center;
   border-right: 1px solid #333333;
@@ -1695,13 +1695,13 @@ select:focus {
   font-size: 11px;
 }
 
-.custom-node-body {
+.legacy-rect-node-disabled-body {
   min-width: 0;
   padding: 8px;
 }
 
-.custom-node-body span,
-.custom-node-body code {
+.legacy-rect-node-disabled-body span,
+.legacy-rect-node-disabled-body code {
   display: block;
   color: #888888;
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -1711,7 +1711,7 @@ select:focus {
   white-space: nowrap;
 }
 
-.custom-node-body strong {
+.legacy-rect-node-disabled-body strong {
   display: block;
   margin: 3px 0;
   overflow: hidden;
@@ -1959,11 +1959,11 @@ select:focus {
     grid-template-columns: minmax(0, 1fr) 340px;
   }
 
-  .tactical-graph-toolbar {
+  .legacy-graph-toolbar-disabled {
     grid-template-columns: minmax(140px, 1fr) auto;
   }
 
-  .entity-pipeline {
+  .legacy-entity-row-disabled {
     grid-column: 1 / -1;
     order: 3;
   }
@@ -2150,7 +2150,7 @@ select:focus {
   min-height: 0;
 }
 
-.nx-shell.focus-mode .tactical-graph-toolbar {
+.nx-shell.focus-mode .legacy-graph-toolbar-disabled {
   min-height: 48px;
 }
 
@@ -2278,7 +2278,7 @@ select:focus {
   top: 12px !important;
 }
 
-.nx-shell.focus-mode .tactical-graph-toolbar {
+.nx-shell.focus-mode .legacy-graph-toolbar-disabled {
   padding-left: 58px;
 }
 
@@ -2299,7 +2299,7 @@ select:focus {
     top: 8px !important;
   }
 
-  .nx-shell.focus-mode .tactical-graph-toolbar {
+  .nx-shell.focus-mode .legacy-graph-toolbar-disabled {
     padding-left: 54px;
   }
 }
@@ -2313,7 +2313,7 @@ select:focus {
   overflow: auto;
 }
 
-.tactical-graph-toolbar {
+.legacy-graph-toolbar-disabled {
   grid-template-columns: minmax(150px, 0.9fr) minmax(220px, 1.1fr) auto auto !important;
   overflow: visible;
 }
@@ -2494,7 +2494,7 @@ select:focus {
 }
 
 @media (max-width: 1180px) {
-  .tactical-graph-toolbar {
+  .legacy-graph-toolbar-disabled {
     grid-template-columns: minmax(150px, 1fr) auto !important;
   }
 
@@ -2505,13 +2505,13 @@ select:focus {
 }
 
 @media (max-width: 920px) {
-  .tactical-graph-toolbar {
+  .legacy-graph-toolbar-disabled {
     grid-template-columns: 1fr !important;
   }
 
   .layout-switcher,
   .tactical-graph-actions,
-  .entity-pipeline {
+  .legacy-entity-row-disabled {
     width: 100%;
     overflow-x: auto;
   }
@@ -3139,7 +3139,7 @@ select:focus {
   background: #000000 !important;
 }
 
-.tactical-graph-toolbar {
+.legacy-graph-toolbar-disabled {
   position: absolute !important;
   top: 8px !important;
   left: 8px !important;
@@ -3159,7 +3159,7 @@ select:focus {
 
 .graph-toolbar-stats,
 .graph-launcher,
-.entity-pipeline,
+.legacy-entity-row-disabled,
 .graph-toolbar-controls,
 .graph-smart-selector,
 .tactical-graph-actions {
@@ -3259,13 +3259,13 @@ select:focus {
   font-size: 10px;
 }
 
-.entity-pipeline {
+.legacy-entity-row-disabled {
   justify-content: center;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
-.entity-pipeline::-webkit-scrollbar {
+.legacy-entity-row-disabled::-webkit-scrollbar {
   display: none;
 }
 
@@ -3352,7 +3352,7 @@ select:focus {
 }
 
 @media (max-width: 1420px) {
-  .tactical-graph-toolbar {
+  .legacy-graph-toolbar-disabled {
     grid-template-columns: minmax(112px, 0.4fr) minmax(300px, 1fr) minmax(220px, 0.7fr) minmax(360px, 1fr) !important;
   }
 
@@ -3364,7 +3364,7 @@ select:focus {
 }
 
 @media (max-width: 980px) {
-  .tactical-graph-toolbar {
+  .legacy-graph-toolbar-disabled {
     grid-template-columns: 1fr !important;
     align-items: stretch !important;
     max-height: 45vh;
@@ -3811,7 +3811,7 @@ select:focus {
 
 
 /* Flat Terminal Polish: dense toolbar, hard dividers, crypto graph cards */
-.tactical-graph-toolbar {
+.legacy-graph-toolbar-disabled {
   display: flex !important;
   flex-direction: row !important;
   align-items: stretch !important;
@@ -3823,7 +3823,7 @@ select:focus {
 
 .graph-toolbar-stats,
 .graph-launcher,
-.entity-pipeline,
+.legacy-entity-row-disabled,
 .graph-toolbar-controls {
   border-right: 1px solid #333333 !important;
   padding: 0 10px !important;
@@ -3842,7 +3842,7 @@ select:focus {
   background: #000000 !important;
 }
 
-.entity-pipeline {
+.legacy-entity-row-disabled {
   flex: 0 0 auto !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -3960,7 +3960,7 @@ select:focus {
 }
 
 @media (max-width: 1420px) {
-  .tactical-graph-toolbar {
+  .legacy-graph-toolbar-disabled {
     flex-wrap: wrap !important;
     max-height: 38vh;
     overflow: auto;
@@ -3968,7 +3968,7 @@ select:focus {
 
   .graph-toolbar-stats,
   .graph-launcher,
-  .entity-pipeline,
+  .legacy-entity-row-disabled,
   .graph-toolbar-controls {
     min-height: 38px;
   }
@@ -3976,7 +3976,7 @@ select:focus {
 
 
 /* Final graph UX hardening: anchored transform menu + non-overlapping high-density toolbar */
-.tactical-graph-toolbar {
+.legacy-graph-toolbar-disabled {
   position: absolute !important;
   top: 8px !important;
   left: 8px !important;
@@ -4001,21 +4001,21 @@ select:focus {
   scrollbar-color: #333333 #000000 !important;
 }
 
-.tactical-graph-toolbar::-webkit-scrollbar {
+.legacy-graph-toolbar-disabled::-webkit-scrollbar {
   height: 6px !important;
 }
 
-.tactical-graph-toolbar::-webkit-scrollbar-track {
+.legacy-graph-toolbar-disabled::-webkit-scrollbar-track {
   background: #000000 !important;
 }
 
-.tactical-graph-toolbar::-webkit-scrollbar-thumb {
+.legacy-graph-toolbar-disabled::-webkit-scrollbar-thumb {
   background: #333333 !important;
 }
 
 .graph-toolbar-stats,
 .graph-launcher,
-.entity-pipeline,
+.legacy-entity-row-disabled,
 .graph-toolbar-controls {
   flex-shrink: 0 !important;
   min-height: 50px !important;
@@ -4085,7 +4085,7 @@ select:focus {
   white-space: nowrap !important;
 }
 
-.entity-pipeline {
+.legacy-entity-row-disabled {
   flex: 0 0 auto !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -4149,7 +4149,7 @@ select:focus {
 }
 
 @media (max-width: 1420px) {
-  .tactical-graph-toolbar {
+  .legacy-graph-toolbar-disabled {
     flex-wrap: nowrap !important;
     max-height: 58px !important;
     overflow-x: auto !important;
@@ -4175,7 +4175,7 @@ select:focus {
   padding-left: 0 !important;
 }
 
-.tactical-graph-toolbar {
+.legacy-graph-toolbar-disabled {
   left: 8px !important;
   right: max(8px, min(390px, 22vw)) !important;
   width: auto !important;
@@ -4692,7 +4692,7 @@ textarea:focus-visible {
   background: #050607 !important;
 }
 
-.premium-graph-grid .tactical-graph-toolbar {
+.premium-graph-grid .legacy-graph-toolbar-disabled {
   left: clamp(334px, 23vw, 392px) !important;
   right: clamp(354px, 22vw, 410px) !important;
   min-width: 0 !important;
@@ -4700,7 +4700,7 @@ textarea:focus-visible {
   background: rgba(11, 13, 16, 0.96) !important;
 }
 
-.premium-graph-grid:has(.premium-entity-inspector.closed) .tactical-graph-toolbar {
+.premium-graph-grid:has(.premium-entity-inspector.closed) .legacy-graph-toolbar-disabled {
   right: 8px !important;
 }
 
@@ -5266,7 +5266,7 @@ textarea:focus-visible {
   .top-intel-bar {
     grid-template-columns: repeat(3, minmax(140px, 1fr));
   }
-  .premium-graph-grid .tactical-graph-toolbar {
+  .premium-graph-grid .legacy-graph-toolbar-disabled {
     left: 318px !important;
     right: 360px !important;
   }
@@ -5281,7 +5281,7 @@ textarea:focus-visible {
   .premium-settings.settings-grid {
     grid-template-columns: 1fr !important;
   }
-  .premium-graph-grid .tactical-graph-toolbar {
+  .premium-graph-grid .legacy-graph-toolbar-disabled {
     left: 8px !important;
     right: 8px !important;
     top: 8px !important;
@@ -5603,7 +5603,7 @@ button {
   background-size: 42px 42px, 42px 42px, auto, auto !important;
 }
 
-.premium-graph-grid .tactical-graph-toolbar {
+.premium-graph-grid .legacy-graph-toolbar-disabled {
   min-height: 54px !important;
   border-color: rgba(61, 70, 82, 0.82) !important;
   border-radius: var(--radius-md) !important;
@@ -5613,7 +5613,7 @@ button {
 
 .graph-toolbar-stats,
 .graph-launcher,
-.entity-pipeline,
+.legacy-entity-row-disabled,
 .graph-toolbar-controls {
   background: transparent !important;
   border-right-color: rgba(61, 70, 82, 0.6) !important;
@@ -5868,7 +5868,7 @@ button {
 }
 
 @media (min-width: 1720px) {
-  .premium-graph-grid .tactical-graph-toolbar {
+  .premium-graph-grid .legacy-graph-toolbar-disabled {
     left: clamp(350px, 22vw, 410px) !important;
     right: clamp(390px, 23vw, 450px) !important;
   }
@@ -9116,7 +9116,7 @@ body,
   color: #e0e0e3;
 }
 
-.nexus-graph-stage .tactical-graph-toolbar,
+.nexus-graph-stage .legacy-graph-toolbar-disabled,
 .nexus-graph-stage .graph-hud,
 .nexus-graph-stage .entity-spec,
 .nexus-graph-stage .graph-terminal {
