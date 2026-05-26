@@ -1,6 +1,7 @@
 import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
-import { mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
+import { getStudioNodeConfidence, getStudioNodeIcon, getStudioNodeRisk, getStudioNodeVisual, mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
+import NodeActionPopover from "../components/graph/NodeActionPopover";
 import type { TransformDefinition } from "../lib/types";
 
 export type GraphNode = {
@@ -91,6 +92,7 @@ type GraphCanvasProps = {
   onOpenEvidenceVault?: (node?: ApiGraphNode) => void;
   onOpenTransformLibrary?: () => void;
   onMarkNoiseNode?: (node: ApiGraphNode) => void;
+  onRunCorrelation?: () => void;
 };
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -298,6 +300,7 @@ export default function GraphCanvas({
   onOpenEvidenceVault,
   onOpenTransformLibrary,
   onMarkNoiseNode,
+  onRunCorrelation,
 }: GraphCanvasProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [positions, setPositions] = useState<Record<string, StudioPosition>>({});
@@ -414,7 +417,6 @@ export default function GraphCanvas({
     if (!actionNode) return [] as TransformDefinition[];
     return transforms.filter((item) => item.input_types.includes(actionNode.api.type) || item.input_types.includes("*"));
   }, [actionNode, transforms]);
-  const recommendedTransform = actionTransforms.find((item) => item.enabled) || null;
   const actionPosition = actionNode ? positions[actionNode.api.id] : null;
   const menuStyle = actionPosition ? {
     left: Math.max(16, Math.min((stageRef.current?.clientWidth || 1200) - 360, pan.x + (actionPosition.x + 138) * zoom + 12)),
@@ -510,13 +512,13 @@ export default function GraphCanvas({
         <div className="studio-node-layer">
           {studioNodes.map(({ api, ui }) => {
             const position = positions[api.id] || { x: 0, y: 0 };
-            const visual = visualForNodeType(api.type);
+            const visual = getStudioNodeVisual(api.type);
             const selected = selectedId === api.id;
             const hovered = hoveredNodeId === api.id;
-            const confidence = nodeConfidence(api);
+            const confidence = getStudioNodeConfidence(api);
             const source = nodeSource(api);
-            const icon = NODE_ICON_PATHS[visual.icon] || NODE_ICON_PATHS.target;
-            const risk = nodeRiskTag(api);
+            const icon = NODE_ICON_PATHS[getStudioNodeIcon(api.type)] || NODE_ICON_PATHS.target;
+            const risk = getStudioNodeRisk(api);
             return (
               <button
                 type="button"
@@ -550,7 +552,7 @@ export default function GraphCanvas({
               >
                 <span className="studio-node-bubble">
                   <svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: icon }} /></svg>
-                  <i className="studio-confidence-dot" style={{ background: confidence >= 80 ? "#10B981" : confidence >= 50 ? "#F59E0B" : "#EF4444" }} />
+                  <i className="studio-confidence-dot" style={{ background: confidence >= 80 ? "#10B981" : confidence >= 50 ? "#F59E0B" : "#EF4444" }}>{confidence}</i>
                 </span>
                 <span className="studio-node-card">
                   <span className="studio-node-card-top"><span className="studio-node-type">{visual.code}</span>{risk && <span className="studio-risk-badge">{risk}</span>}</span>
@@ -563,38 +565,22 @@ export default function GraphCanvas({
         </div>
       </div>
       {actionNode && menuStyle && (
-        <section className={actionMenu?.mode === "full" ? "studio-node-action-menu full" : "studio-node-action-menu"} style={menuStyle as CSSProperties}>
-          <header>
-            <span className="studio-action-glyph" style={{ "--node-accent": visualForNodeType(actionNode.api.type).accent } as CSSProperties}>
-              <svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: NODE_ICON_PATHS[visualForNodeType(actionNode.api.type).icon] || NODE_ICON_PATHS.target }} /></svg>
-            </span>
-            <div><strong>{actionNode.ui.label}</strong><span>{actionNode.ui.type} / {nodeConfidence(actionNode.api)}% confidence</span></div>
-            <button type="button" onClick={() => setActionMenu(null)} aria-label="Close node actions">×</button>
-          </header>
-          <div className="studio-node-primary-actions">
-            <button type="button" disabled={!recommendedTransform || Boolean(transformLoading)} onClick={() => recommendedTransform && onRunTransform?.(recommendedTransform.id, actionNode.api)}>Run Recommended</button>
-            <button type="button" onClick={() => setDataPanelOpen?.(true)}>Open Inspector</button>
-            <button type="button" onClick={() => onOpenEvidenceVault?.(actionNode.api)}>Evidence</button>
-            <button type="button" className="danger" onClick={() => setConfirmNoiseNodeId(actionNode.api.id)}>Mark Noise</button>
-          </div>
-          {transformError && <div className="studio-node-transform-error">{transformError}</div>}
-          <div className="studio-node-transform-list">
-            {!actionTransforms.length && <div className="studio-node-transform-empty"><strong>No valid transforms for this entity type</strong><button type="button" onClick={() => onOpenTransformLibrary?.()}>Open Transform Library</button></div>}
-            {(actionMenu?.mode === "full" ? actionTransforms : actionTransforms.slice(0, 4)).map((transform) => {
-              const disabledReason = !transform.enabled ? transform.disabled_reason || "Disabled by registry" : "";
-              return (
-                <article key={transform.id} className={disabledReason ? "studio-node-transform-card disabled" : "studio-node-transform-card"}>
-                  <div><strong>{transform.label}</strong><p>{transform.description}</p><code>{transform.input_types.join(", ")} → {transform.output_types.join(", ")}</code></div>
-                  <span>{transform.requires_api_key ? "API KEY" : transform.passive === false ? "DEEP" : "PASSIVE"}</span>
-                  {transform.source_category === "fallback" && <em>FALLBACK</em>}
-                  {disabledReason && <small>{disabledReason}</small>}
-                  <button type="button" disabled={Boolean(disabledReason) || transformLoading === transform.id} onClick={() => onRunTransform?.(transform.id, actionNode.api)}>{transformLoading === transform.id ? "Running" : "Run"}</button>
-                </article>
-              );
-            })}
-          </div>
-          {actionMenu?.mode !== "full" && actionTransforms.length > 4 && <button className="studio-node-expand-menu" type="button" onClick={() => setActionMenu({ nodeId: actionNode.api.id, mode: "full" })}>Show all {actionTransforms.length} transforms</button>}
-        </section>
+        <NodeActionPopover
+          node={actionNode.api}
+          mode={actionMenu?.mode || "compact"}
+          style={menuStyle as CSSProperties}
+          transforms={actionTransforms}
+          loadingId={transformLoading}
+          error={transformError}
+          onClose={() => setActionMenu(null)}
+          onRun={(id, node) => onRunTransform?.(id, node)}
+          onOpenInspector={() => setDataPanelOpen?.(true)}
+          onOpenEvidence={(node) => onOpenEvidenceVault?.(node)}
+          onMarkNoise={(node) => setConfirmNoiseNodeId(node.id)}
+          onCorrelate={() => onRunCorrelation?.()}
+          onOpenTransformLibrary={() => onOpenTransformLibrary?.()}
+          onExpand={() => setActionMenu({ nodeId: actionNode.api.id, mode: "full" })}
+        />
       )}
       {confirmNoiseNode && (
         <section className="studio-confirm-popover">

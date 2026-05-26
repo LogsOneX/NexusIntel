@@ -99,3 +99,8 @@ export function getNodeRisk(apiNode: any): "INTERNAL" | "SUSPICIOUS" | null {
 export function mapStudioNodeToApiNode(studioNode: any) {
   return studioNode?.raw || studioNode?.api || studioNode;
 }
+
+export const getStudioNodeConfidence = getNodeConfidence;
+export const getStudioNodeVisual = getNodeVisual;
+export const getStudioNodeIcon = getNodeGlyph;
+export const getStudioNodeRisk = getNodeRisk;

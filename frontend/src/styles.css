@@ -9836,3 +9836,140 @@ body,
 .ref-inspector-quick-actions button:hover { border-color: #3B82F6; }
 .ref-inspector-quick-actions button.danger { border-color: rgba(239,68,68,.42); color: #FCA5A5; }
 .ref-inspector-quick-actions button:disabled { opacity: .45; cursor: not-allowed; }
+
+
+/* Drawer close controls live inside each active panel header */
+.ref-dock-header-actions,
+.ref-inspector-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ref-dock-header-actions > span,
+.ref-inspector-toolbar-actions > code {
+  border: 1px solid #2d2d30;
+  border-radius: 6px;
+  background: #0f0f11;
+  color: #8c8c95;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  padding: 3px 7px;
+  text-transform: capitalize;
+}
+
+.ref-panel-close {
+  display: inline-grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid #2d2d30;
+  border-radius: 7px;
+  background: #232326;
+  color: #8b8b91;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+
+.ref-panel-close:hover {
+  border-color: #3b82f6;
+  background: #2d2d30;
+  color: #ffffff;
+}
+
+/* Google AI Studio graph node pattern: circular glyph + detached label card */
+.studio-node {
+  width: 120px;
+  height: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.studio-node-bubble {
+  width: 64px;
+  height: 64px;
+  background: #1A1A1C;
+  border-color: #2D2D30;
+  box-shadow: 0 8px 24px rgba(0,0,0,.36);
+}
+
+.studio-node-bubble svg {
+  width: 20px;
+  height: 20px;
+  transform: scale(1.25);
+}
+
+.studio-confidence-dot {
+  top: -4px;
+  right: -4px;
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #141416;
+  color: #ffffff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.studio-node-card {
+  position: relative;
+  top: auto;
+  width: 115px;
+  min-height: auto;
+  gap: 3px;
+  border-color: rgba(45,45,48,.6);
+  border-radius: 8px;
+  background: rgba(26,26,28,.90);
+  padding: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.5);
+  backdrop-filter: blur(10px);
+}
+
+.studio-node-card::after { display: none; }
+
+.studio-node-card strong {
+  max-width: 101px;
+  color: #e2e8f0;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.studio-node-card small {
+  max-width: 101px;
+  font-size: 7.5px;
+}
+
+.studio-node-type,
+.studio-risk-badge {
+  max-width: 65px;
+  border-radius: 3px;
+  font-size: 7px;
+  padding: 1px 3px;
+}
+
+.studio-node.selected .studio-node-bubble {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59,130,246,.10), 0 12px 30px rgba(0,0,0,.52);
+  z-index: 30;
+}
+
+.studio-node.hovered .studio-node-bubble {
+  border-color: rgba(96,165,250,.86);
+  box-shadow: 0 0 16px rgba(59,130,246,.30), 0 12px 30px rgba(0,0,0,.44);
+}
+
+.studio-node.selected .studio-node-card,
+.studio-node.hovered .studio-node-card {
+  border-color: rgba(59,130,246,.50);
+}

@@ -72,8 +72,8 @@ export default function TelemetryDrawer({
           {categories.map((category) => <button className={filter === category ? "active" : ""} key={category} type="button" onClick={() => setFilter(category)}>{category}</button>)}
         </nav>
         <div>
-          <button type="button" onClick={onClear} aria-label="Clear telemetry"><Trash2 size={13} /></button>
-          <button type="button" onClick={onClose} aria-label="Close telemetry"><X size={13} /></button>
+          <button type="button" onClick={onClear} aria-label="Clear telemetry" title="Clear"><Trash2 size={13} /></button>
+          <button type="button" onClick={onClose} aria-label="Close telemetry" title="Close"><X size={13} /></button>
         </div>
       </header>
       <div className="ref-telemetry-lines" ref={scrollRef}>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, Briefcase, ChevronDown, ChevronRight, Database, EyeOff, FileCheck, FolderOpen, Inbox, Network, Plus, PlusCircle, Radio, ShieldAlert, Trash2 } from "lucide-react";
+import { Activity, Briefcase, ChevronDown, ChevronRight, Database, EyeOff, FileCheck, FolderOpen, Inbox, Network, Plus, PlusCircle, Radio, ShieldAlert, Trash2, X } from "lucide-react";
 import type { ArtifactBinItem, CaseHealth, Investigation } from "../../lib/types";
 import { caseTitle } from "../../lib/format";
 
@@ -17,7 +17,7 @@ function itemReason(item: ArtifactBinItem) {
   return item.confidence_reason || item.noise_reason || item.public_source_note || item.legal_basis || item.relationship || "Awaiting analyst review.";
 }
 
-export default function CaseDock({ investigations, activeCase, health, leads = [], noise = [], compliance = [], onSelect, onCreateBlank, onDeleteActive, onClearActive, onPromoteLead, onRestoreNoise, loading }: { investigations: Investigation[]; activeCase: Investigation | null; health: CaseHealth | null; leads?: ArtifactBinItem[]; noise?: ArtifactBinItem[]; compliance?: ArtifactBinItem[]; onSelect: (id: string) => void; onCreateBlank: () => void; onDeleteActive: () => void; onClearActive: () => void; onPromoteLead?: (id: string) => void; onRestoreNoise?: (id: string) => void; loading: boolean }) {
+export default function CaseDock({ investigations, activeCase, health, leads = [], noise = [], compliance = [], onSelect, onCreateBlank, onDeleteActive, onClearActive, onPromoteLead, onRestoreNoise, loading, onClose }: { investigations: Investigation[]; activeCase: Investigation | null; health: CaseHealth | null; leads?: ArtifactBinItem[]; noise?: ArtifactBinItem[]; compliance?: ArtifactBinItem[]; onSelect: (id: string) => void; onCreateBlank: () => void; onDeleteActive: () => void; onClearActive: () => void; onPromoteLead?: (id: string) => void; onRestoreNoise?: (id: string) => void; loading: boolean; onClose?: () => void }) {
   const [activeAccordion, setActiveAccordion] = useState<"candidates" | "noise" | "compliance" | null>(null);
   const score = health?.score ?? (activeCase ? 70 : 100);
   const risk = score < 45 ? "Critical" : score < 65 ? "High" : score < 82 ? "Medium" : "Low";
@@ -30,7 +30,10 @@ export default function CaseDock({ investigations, activeCase, health, leads = [
     <aside className="graph-case-dock premium-case-dock reference-case-dock" aria-label="Investigation lifecycle controls">
       <header className="ref-dock-header">
         <div><Briefcase size={14} /><strong>Investigation Dock</strong></div>
-        <span>{activeCase ? activeCase.status : "Detached"}</span>
+        <div className="ref-dock-header-actions">
+          <span>{activeCase ? activeCase.status : "Detached"}</span>
+          {onClose && <button className="ref-panel-close" type="button" onClick={onClose} aria-label="Close case dock" title="Close"><X size={14} /></button>}
+        </div>
       </header>
 
       <section className="ref-dock-context">
