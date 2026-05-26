@@ -17,7 +17,10 @@ class PhoneNumberingPlanAdapter(BaseAdapter):
 
     async def run(self, entity: EntityInput, context: RunContext) -> AdapterResult:
         resolver = PhoneResolver(timeout=8)
-        result = await resolver.resolve(entity.value.strip())
+        try:
+            result = await resolver.resolve(entity.value.strip())
+        except Exception as exc:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=[f"Phone numbering-plan lookup failed: {exc.__class__.__name__}"], status="completed")
         conf = assess(direct=True, reliability=SourceReliability.PRIMARY, fp_risk="low", reason="Public numbering plan/phonenumbers metadata; not an account registration claim.")
         artifacts = [OSINTArtifact(type="phone_posture", label=f"Phone posture {entity.value}", value=entity.value.strip(), source=self.id, source_url=None, fetched_at=utc_now(), confidence_score=conf.score, confidence_reason=conf.reason, evidence_grade=evidence_grade(conf.score, conf.source_reliability), raw_evidence_ref=None, relationship="HAS_PHONE_POSTURE", tags=["numbering_plan"], data=result, legal_basis=LEGAL)]
         return AdapterResult(adapter_id=self.id, input=entity, artifacts=artifacts, raw_evidence=[RawEvidenceObject(source=self.id, source_url=None, payload=result, content_type="application/json")])

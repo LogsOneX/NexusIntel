@@ -27,6 +27,12 @@ class PlaybookEngine:
             if not compatible:
                 row["disabled_reason"] = f"Playbook expects {', '.join(playbook.input_types)} but graph has {', '.join(sorted(node_types)) or 'no entities'}"
                 blocked.append(row)
+            elif step.transform_id and not transform:
+                row["disabled_reason"] = "Transform registry entry unavailable"
+                blocked.append(row)
+            elif transform and not transform.get("enabled", True):
+                row["disabled_reason"] = transform.get("disabled_reason") or "Transform disabled by registry"
+                blocked.append(row)
             elif missing:
                 row["disabled_reason"] = f"Missing API key(s): {', '.join(missing)}"
                 blocked.append(row)

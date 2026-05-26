@@ -56,6 +56,7 @@ class EmailDomainWorkspaceAdapter(BaseAdapter):
             return AdapterResult(adapter_id=self.id, input=entity, warnings=["Invalid email; no domain"], status="skipped")
         domain = email.rsplit("@", 1)[1]
         evidence_payload: dict[str, list[str]] = {"MX": [], "TXT": []}
+        warnings: list[str] = []
         for rtype in ["MX", "TXT"]:
             try:
                 answers = dns.resolver.resolve(domain, rtype, lifetime=5)
@@ -65,10 +66,11 @@ class EmailDomainWorkspaceAdapter(BaseAdapter):
                     else:
                         strings = getattr(answer, "strings", None)
                         evidence_payload[rtype].append("".join(part.decode("utf-8", "ignore") for part in strings) if strings else str(answer).strip('"'))
-            except Exception:
-                pass
+            except Exception as exc:
+                warnings.append(f"DNS {rtype} lookup failed for {domain}: {exc.__class__.__name__}")
         raw = RawEvidenceObject(source=self.id, source_url=f"dns:{domain}", payload=evidence_payload, content_type="application/json")
-        conf = assess(direct=True, reliability=SourceReliability.PRIMARY, fp_risk="low", reason="DNS records resolved directly from public DNS.")
+        has_records = bool(evidence_payload["MX"] or evidence_payload["TXT"])
+        conf = assess(direct=has_records, reliability=SourceReliability.PRIMARY, fp_risk="low" if has_records else "high", reason="DNS records resolved directly from public DNS." if has_records else "Public DNS returned no MX/TXT records or timed out; weak domain posture only.")
         artifacts = [artifact("domain", domain, domain, self.id, f"dns:{domain}", conf, "HAS_DOMAIN", {"email": email})]
         for mx in sorted(set(evidence_payload["MX"])):
             artifacts.append(artifact("mx_record", mx, mx, self.id, f"dns:{domain}", conf, "HAS_MX", {"domain": domain}))
@@ -80,7 +82,9 @@ class EmailDomainWorkspaceAdapter(BaseAdapter):
             if marker in joined:
                 providers.append(name)
                 artifacts.append(artifact("workspace_signal", name, f"{domain}:{name}", self.id, f"dns:{domain}", conf, "USES_WORKSPACE", {"domain": domain, "provider": name}))
-        return AdapterResult(adapter_id=self.id, input=entity, artifacts=artifacts, raw_evidence=[raw])
+        if not has_records:
+            warnings.append(f"No MX/TXT records observed for {domain}; workspace signal unavailable")
+        return AdapterResult(adapter_id=self.id, input=entity, artifacts=artifacts, raw_evidence=[raw], warnings=warnings)
 
 
 class GravatarAdapter(BaseAdapter):
@@ -96,18 +100,23 @@ class GravatarAdapter(BaseAdapter):
         avatar_url = f"https://www.gravatar.com/avatar/{digest}?d=404"
         artifacts = []
         raw_evidence = []
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
-            response = await client.get(avatar_url)
-            raw_evidence.append(RawEvidenceObject(source=self.id, source_url=avatar_url, payload={"status_code": response.status_code, "headers": dict(response.headers)}, content_type="application/json", headers=dict(response.headers)))
-            conf = assess(direct=response.status_code == 200, reliability=SourceReliability.PUBLIC_WEB, fp_risk="low" if response.status_code == 200 else "high", reason="Public Gravatar avatar endpoint returned HTTP status for the normalized email hash.")
-            artifacts.append(artifact("avatar_hash", digest, digest, self.id, avatar_url, conf, "HAS_GRAVATAR_HASH", {"email_hash_md5": digest, "status_code": response.status_code}))
-            if response.status_code == 200:
-                artifacts.append(artifact("avatar", f"Gravatar avatar {digest[:8]}", avatar_url, self.id, avatar_url, conf, "HAS_AVATAR", {"email_hash_md5": digest}))
-            profile_url = f"https://gravatar.com/{digest}.json"
-            profile_response = await client.get(profile_url)
-            raw_evidence.append(RawEvidenceObject(source=self.id, source_url=profile_url, payload={"status_code": profile_response.status_code, "body": profile_response.text[:200000]}, content_type="application/json", headers=dict(profile_response.headers)))
-            if profile_response.status_code == 200:
-                artifacts.append(artifact("public_profile", "Gravatar public profile", profile_url, self.id, profile_url, conf, "HAS_PUBLIC_PROFILE", {"email_hash_md5": digest}))
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
+                response = await client.get(avatar_url)
+                raw_evidence.append(RawEvidenceObject(source=self.id, source_url=avatar_url, payload={"status_code": response.status_code, "headers": dict(response.headers)}, content_type="application/json", headers=dict(response.headers)))
+                conf = assess(direct=response.status_code == 200, reliability=SourceReliability.PUBLIC_WEB, fp_risk="low" if response.status_code == 200 else "high", reason="Public Gravatar avatar endpoint returned HTTP status for the normalized email hash.")
+                artifacts.append(artifact("avatar_hash", digest, digest, self.id, avatar_url, conf, "HAS_GRAVATAR_HASH", {"email_hash_md5": digest, "status_code": response.status_code}))
+                if response.status_code == 200:
+                    artifacts.append(artifact("avatar", f"Gravatar avatar {digest[:8]}", avatar_url, self.id, avatar_url, conf, "HAS_AVATAR", {"email_hash_md5": digest}))
+                profile_url = f"https://gravatar.com/{digest}.json"
+                profile_response = await client.get(profile_url)
+                raw_evidence.append(RawEvidenceObject(source=self.id, source_url=profile_url, payload={"status_code": profile_response.status_code, "body": profile_response.text[:200000]}, content_type="application/json", headers=dict(profile_response.headers)))
+                if profile_response.status_code == 200:
+                    artifacts.append(artifact("public_profile", "Gravatar public profile", profile_url, self.id, profile_url, conf, "HAS_PUBLIC_PROFILE", {"email_hash_md5": digest}))
+        except httpx.HTTPError as exc:
+            conf = assess(direct=False, reliability=SourceReliability.PUBLIC_WEB, fp_risk="high", reason="Gravatar endpoint could not be reached; hash retained as weak derived pivot only.")
+            artifacts.append(artifact("avatar_hash", digest, digest, self.id, avatar_url, conf, "HAS_GRAVATAR_HASH", {"email_hash_md5": digest, "warning": str(exc)}))
+            return AdapterResult(adapter_id=self.id, input=entity, artifacts=artifacts, raw_evidence=raw_evidence, warnings=[f"Gravatar request failed: {exc.__class__.__name__}"])
         return AdapterResult(adapter_id=self.id, input=entity, artifacts=artifacts, raw_evidence=raw_evidence)
 
 
@@ -172,7 +181,7 @@ class UsernameCandidateAdapter(BaseAdapter):
     name = "Username Candidates"
     description = "Generate low-confidence username candidates from email local-part."
     input_types = ["email"]
-    output_types = ["username"]
+    output_types = ["username_candidate"]
 
     async def run(self, entity: EntityInput, context: RunContext) -> AdapterResult:
         email = entity.value.strip().lower()
@@ -185,5 +194,5 @@ class UsernameCandidateAdapter(BaseAdapter):
                 candidates.add(parts[0] + parts[-1])
                 candidates.add(parts[0][0] + parts[-1])
         conf = assess(direct=False, reliability=SourceReliability.DERIVED, fp_risk="high", reason="Local-part username candidate; requires corroboration before attribution.")
-        artifacts = [artifact("username", item, item, self.id, None, conf, "HAS_USERNAME_CANDIDATE", {"derived_from": email}, ["candidate", "needs_corroboration"]) for item in sorted(candidates) if item]
+        artifacts = [artifact("username_candidate", f"Candidate username: {item}", item, self.id, None, conf, "HAS_USERNAME_CANDIDATE", {"derived_from": email, "graph_visibility": "candidate_bin", "artifact_class": "candidate"}, ["candidate", "needs_corroboration"]) for item in sorted(candidates) if item]
         return AdapterResult(adapter_id=self.id, input=entity, artifacts=artifacts)

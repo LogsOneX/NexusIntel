@@ -21,12 +21,17 @@ function categoryFor(transform: TransformDefinition) {
 
 export default function TransformLibraryPage({ token }: PageProps) {
   const [transforms, setTransforms] = useState<TransformDefinition[]>(FALLBACK_TRANSFORMS);
+  const [diagnostics, setDiagnostics] = useState<Record<string, any> | null>(null);
   const [category, setCategory] = useState("all");
   const [error, setError] = useState<string | null>(null);
+  const loadDiagnostics = () => apiJson<any>("/api/v1/transforms/registry/diagnostics", undefined, token)
+    .then((payload) => setDiagnostics(payload.data || null))
+    .catch((caught) => setError(caught instanceof Error ? caught.message : "Transform diagnostics unavailable"));
   useEffect(() => {
     apiJson<any>("/api/v1/transforms/registry", undefined, token)
       .then((payload) => setTransforms(payload.data.transforms?.length ? payload.data.transforms : FALLBACK_TRANSFORMS))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Transform registry unavailable"));
+    void loadDiagnostics();
   }, [token]);
   const filtered = useMemo(() => transforms.filter((item) => category === "all" || categoryFor(item) === category), [category, transforms]);
   const disabled = transforms.filter((item) => !item.enabled).length;
@@ -41,6 +46,16 @@ export default function TransformLibraryPage({ token }: PageProps) {
         <div className="page-actions"><StatusChip label={`${transforms.length} transforms`} tone="info" /><StatusChip label={`${disabled} disabled`} tone={disabled ? "warning" : "ok"} /></div>
       </header>
       {error && <div className="nx-alert"><span>{error}</span></div>}
+      <section className="command-card premium-card transform-diagnostics-panel">
+        <header><GitBranch size={15} /><strong>Registry Diagnostics</strong><button className="nx-secondary" type="button" onClick={() => void loadDiagnostics()}>Run Registry Diagnostics</button></header>
+        {!diagnostics ? <p className="muted-copy">Backend diagnostics unavailable.</p> : <div className="connector-mini-grid">
+          <StatusChip label={`${diagnostics.errors?.length || 0} errors`} tone={diagnostics.errors?.length ? "danger" : "ok"} />
+          <StatusChip label={`${diagnostics.warnings?.length || 0} warnings`} tone={diagnostics.warnings?.length ? "warning" : "ok"} />
+          <StatusChip label={`${diagnostics.transforms?.filter((item: any) => item.enabled).length || 0} enabled`} tone="info" />
+          <StatusChip label={`${diagnostics.transforms?.filter((item: any) => !item.enabled).length || 0} disabled`} tone="muted" />
+        </div>}
+        {diagnostics?.errors?.length ? <pre className="brief-box">{JSON.stringify(diagnostics.errors.slice(0, 8), null, 2)}</pre> : null}
+      </section>
       <section className="transform-category-bar premium-card">
         {CATEGORIES.map((item) => <button className={category === item ? "active" : ""} type="button" onClick={() => setCategory(item)} key={item}>{item}</button>)}
       </section>

@@ -6,7 +6,7 @@ const TYPE_ALIASES: Record<string, string[]> = {
   google_profile: ["google_profile", "google_maps_profile", "google_maps_place", "maps_profile"],
   wallet: ["wallet", "crypto_wallet", "cryptocurrency_wallet", "address"],
   profile: ["profile", "public_profile", "social_profile", "person_alias", "alias", "name"],
-  username: ["username", "handle", "screen_name", "user"],
+  username: ["username", "username_candidate", "email_local_part", "handle", "screen_name", "user"],
   domain: ["domain", "hostname", "fqdn"],
   email: ["email", "email_address"],
   phone: ["phone", "phone_number", "e164"],

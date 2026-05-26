@@ -425,7 +425,18 @@ function GraphHub({ token, navigate }: PageProps) {
       const updatedNode = payload.data.node || nextGraph.nodes.find((item) => item.id === node.id) || node;
       setSelectedNode(updatedNode);
       setDataPanelOpen(true);
-      setTerminalLines((previous) => [...previous.slice(-260), { level: "success", message: `Transform queued/completed via registry: ${transformId}`, time: new Date().toISOString() }]);
+      const persisted = payload.data.result?.persisted || {};
+      const adapterResult = payload.data.result?.adapter_result || {};
+      const nodeCount = Array.isArray(persisted.nodes) ? persisted.nodes.length : 0;
+      const edgeCount = Array.isArray(persisted.edges) ? persisted.edges.length : 0;
+      const evidenceCount = Array.isArray(persisted.evidence) ? persisted.evidence.length : Number(adapterResult.raw_evidence?.length || 0);
+      const warnings = Array.isArray(adapterResult.warnings) ? adapterResult.warnings : [];
+      setTerminalLines((previous) => [
+        ...previous.slice(-260),
+        { level: "success", message: `Transform accepted: ${transformId} status=${payload.data.status || "completed"}`, time: new Date().toISOString() },
+        { level: "success", message: `Persisted ${nodeCount} node(s), ${edgeCount} edge(s), ${evidenceCount} evidence object(s), ${Number(persisted.candidate_count || 0)} candidate(s), ${Number(persisted.noise_count || 0)} noise item(s), ${Number(persisted.compliance_count || 0)} compliance item(s).`, time: new Date().toISOString(), payload: persisted },
+        ...warnings.map((warning: string) => ({ level: "warning", message: String(warning), time: new Date().toISOString() })),
+      ]);
       await loadCaseHealth(activeInvestigationId);
       await loadEvidence(activeInvestigationId);
       await loadAnalystPipeline(activeInvestigationId, updatedNode?.id || node.id);
