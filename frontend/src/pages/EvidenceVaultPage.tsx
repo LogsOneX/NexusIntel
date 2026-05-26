@@ -31,7 +31,7 @@ export default function EvidenceVaultPage({ token }: PageProps) {
   }, [grade, items, query]);
 
   return (
-    <section className="evidence-vault-page premium-page">
+    <section className="evidence-vault-page premium-page studio-page scroll-page">
       <header className="page-header premium-page-header">
         <div>
           <span className="micro-label">Raw proof store</span>

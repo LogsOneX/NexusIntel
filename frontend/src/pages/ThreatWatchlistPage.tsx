@@ -52,7 +52,7 @@ export default function ThreatWatchlistPage({ token, navigate }: PageProps) {
   const byCase = useMemo(() => new Map(cases.map((item) => [item.id, caseTitle(item)])), [cases]);
 
   return (
-    <section className="watchlist-page premium-page">
+    <section className="watchlist-page premium-page studio-page scroll-page">
       <header className="page-header premium-page-header">
         <div>
           <span className="micro-label">Passive monitoring posture</span>

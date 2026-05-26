@@ -23,6 +23,13 @@ export default function CaseDock({ investigations, activeCase, health, leads = [
   const risk = score < 45 ? "Critical" : score < 65 ? "High" : score < 82 ? "Medium" : "Low";
   const sourceCount = health ? Object.values(health.coverage || {}).filter((value) => value > 0).length : 0;
   const clusterCount = Math.max(0, Math.floor((health?.node_count || 0) / 3));
+  const weakCount = health?.weak_nodes?.length || 0;
+  const isolatedCount = health?.isolated_nodes?.length || 0;
+  const evidenceQuality = health ? Math.max(0, Math.min(100, Math.round(score + sourceCount * 2 - weakCount * 4))) : 0;
+  const reportReadiness = activeCase ? Math.max(0, Math.min(100, Math.round((score + evidenceQuality - noise.length * 2 - weakCount * 3) / 2))) : 0;
+  const coverageGaps = health ? Object.entries(health.coverage || {}).filter(([, value]) => !value).map(([key]) => key).slice(0, 4) : [];
+  const nextActions = health?.recommendations?.slice(0, 3) || [];
+  const strongestPivots = health?.intelligence?.lead_queue?.slice(0, 3) || [];
 
   const toggleAccordion = (section: "candidates" | "noise" | "compliance") => setActiveAccordion((current) => current === section ? null : section);
 
@@ -60,6 +67,31 @@ export default function CaseDock({ investigations, activeCase, health, leads = [
         <div><span>Threat Risk <ShieldAlert size={10} /></span><strong className={risk === "Critical" || risk === "High" ? "risk-hot" : "risk-low"}>{risk}</strong><small>Evidence weighted</small></div>
         <div><span>Sources <Database size={10} /></span><strong>{sourceCount}</strong><small>Coverage domains</small></div>
         <div><span>Clusters <Network size={10} /></span><strong>{clusterCount}</strong><small>Graph components</small></div>
+      </section>
+
+      <section className="ref-dock-intel">
+        <article>
+          <span>Evidence Quality</span>
+          <strong>{activeCase ? `${evidenceQuality}%` : "--"}</strong>
+          <p>{activeCase ? `${weakCount} weak and ${isolatedCount} isolated entities need review.` : "Load a case to calculate evidence support."}</p>
+        </article>
+        <article>
+          <span>Report Readiness</span>
+          <strong>{activeCase ? `${reportReadiness}%` : "--"}</strong>
+          <p>{activeCase ? "Weighted from health, evidence quality, noise, and weak findings." : "Awaiting case context."}</p>
+        </article>
+        <article>
+          <span>Collection Gaps</span>
+          {coverageGaps.length ? <ul>{coverageGaps.map((gap) => <li key={gap}>{gap}</li>)}</ul> : <p>{activeCase ? "No empty coverage domains reported." : "No case selected."}</p>}
+        </article>
+        <article>
+          <span>Strongest Pivots</span>
+          {strongestPivots.length ? <ul>{strongestPivots.map((pivot) => <li key={`${pivot.node_id}-${pivot.label}`}>{pivot.label || pivot.node_id}: {pivot.action}</li>)}</ul> : <p>No backend pivot recommendations yet.</p>}
+        </article>
+        <article className="wide">
+          <span>Next Recommended Actions</span>
+          {nextActions.length ? <ul>{nextActions.map((action) => <li key={`${action.priority}-${action.action}`}>{action.action}: {action.reason}</li>)}</ul> : <p>No backend recommendations yet. Run validation or a targeted transform to generate next actions.</p>}
+        </article>
       </section>
 
       <section className="ref-dock-accordions">

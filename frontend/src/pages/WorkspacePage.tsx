@@ -79,7 +79,7 @@ export default function WorkspacePage({ token, navigate }: PageProps) {
   };
 
   return (
-    <section className="workspace-page premium-page">
+    <section className="workspace-page premium-page studio-page scroll-page">
       <header className="page-header premium-page-header"><div><span className="micro-label">Case & Folder Manager</span><h1>Case & Folder Manager</h1><p>Manage active threat folder records, security logs, and analyst dossiers</p></div><div className="page-actions"><button className="nx-secondary" type="button" onClick={() => setShowImport((open) => !open)}><FileUp size={15} />Import</button><button className="nx-secondary" type="button" onClick={() => navigate("/graph")}><Plus size={15} />Create New Custom Case</button><button className="nx-secondary" type="button" onClick={autoBrief} disabled={!activeId}><Bot size={15} />AI Auto-Briefing</button></div></header>
       {error && <div className="nx-alert"><span>{error}</span></div>}
       {showImport && <ImportWizard token={token} investigationId={activeId} />}
@@ -92,4 +92,3 @@ export default function WorkspacePage({ token, navigate }: PageProps) {
     </section>
   );
 }
-

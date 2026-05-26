@@ -9973,3 +9973,207 @@ body,
 .studio-node.hovered .studio-node-card {
   border-color: rgba(59,130,246,.50);
 }
+
+/* Enterprise scroll containment: shell stays fixed, non-graph pages scroll internally */
+.nexus-main.command-content {
+  overflow: hidden !important;
+}
+
+.nexus-main.command-content > .premium-page,
+.nexus-main.command-content > .dashboard-page,
+.nexus-main.command-content > .workspace-page,
+.nexus-main.command-content > .reports-page,
+.nexus-main.command-content > .studio-report-page,
+.nexus-main.command-content > .evidence-vault-page,
+.nexus-main.command-content > .settings-page,
+.nexus-main.command-content > .watchlist-page,
+.nexus-main.command-content > .oracle-page,
+.nexus-main.command-content > .account-page,
+.nexus-main.command-content > .transform-library-page,
+.page-scroll,
+.scroll-page {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 64px !important;
+}
+
+.nexus-main.command-content > .graph-page.premium-graph-page,
+.graph-workspace,
+.nexus-graph-workspace,
+.nexus-graph-stage,
+.graph-canvas-stage {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding-bottom: 0 !important;
+}
+
+/* Drawer internals scroll while headers remain reachable */
+.case-dock-drawer,
+.inspector-drawer,
+.entity-palette-drawer,
+.drawer-panel {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.reference-case-dock,
+.reference-palette,
+.premium-entity-inspector,
+.drawer-panel.open {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.ref-dock-header,
+.ref-inspector-toolbar,
+.reference-palette > header,
+.drawer-panel > header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 5 !important;
+  flex-shrink: 0 !important;
+}
+
+.ref-dock-accordions,
+.reference-palette .entity-palette-groups,
+.premium-entity-inspector,
+.drawer-panel > div,
+.raw-evidence-viewer pre {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.ref-dock-context,
+.ref-dock-metrics,
+.ref-inspector-hero,
+.ref-inspector-quick-actions,
+.inspector-actions,
+.premium-entity-inspector > .tabs,
+.reference-palette .ref-palette-search,
+.reference-palette .ref-palette-footer {
+  flex-shrink: 0 !important;
+}
+
+.reference-telemetry .ref-telemetry-lines {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+}
+
+.graph-investigator-popover,
+.graph-oracle-popover {
+  max-height: calc(100% - 88px) !important;
+  overflow: hidden !important;
+}
+
+.graph-investigator-popover .investigator-panel,
+.graph-oracle-popover > *:not(button) {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+}
+
+/* Pointer-driven Studio graph interaction */
+.studio-graph-canvas {
+  touch-action: none !important;
+  overscroll-behavior: none !important;
+  user-select: none !important;
+}
+
+.studio-graph-canvas.is-panning,
+.studio-graph-canvas.is-panning * {
+  cursor: grabbing !important;
+}
+
+.studio-edge-layer { pointer-events: auto !important; }
+.studio-edge .edge-hit { pointer-events: stroke; }
+.studio-edge .edge-glow { opacity: .18; pointer-events: none; }
+.studio-edge .edge-line {
+  fill: none;
+  stroke: #232935;
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 160ms ease, opacity 160ms ease, stroke-width 160ms ease;
+}
+.studio-edge.active .edge-line {
+  stroke: #60a5fa;
+  stroke-width: 2px;
+  opacity: .92 !important;
+}
+.studio-edge .edge-label rect {
+  fill: #1A1A1C;
+  stroke: #2D2D30;
+  stroke-width: .8;
+}
+.studio-edge.active .edge-label rect { stroke: #3b82f6; }
+.studio-edge .edge-label text {
+  fill: #64748b;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8.5px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.studio-edge.active .edge-label text { fill: #93c5fd; }
+.studio-node.dragging .studio-node-bubble {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59,130,246,.16), 0 18px 44px rgba(0,0,0,.56);
+}
+.graph-floating-controls span {
+  color: #8b8b91;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ref-dock-intel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(45, 45, 48, 0.74);
+}
+
+.ref-dock-intel article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(45, 45, 48, 0.9);
+  background: #0f0f11;
+}
+
+.ref-dock-intel article.wide {
+  grid-column: 1 / -1;
+}
+
+.ref-dock-intel span {
+  display: block;
+  margin-bottom: 5px;
+  color: #8b8b91;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ref-dock-intel strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #e0e0e3;
+  font-size: 18px;
+}
+
+.ref-dock-intel p,
+.ref-dock-intel li {
+  margin: 0;
+  color: #a7a7ad;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ref-dock-intel ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 14px;
+}

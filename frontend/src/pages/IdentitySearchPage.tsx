@@ -65,7 +65,7 @@ export default function IdentitySearchPage({ token, navigate }: PageProps) {
   };
 
   return (
-    <section className="identity-page premium-page">
+    <section className="identity-page premium-page studio-page scroll-page">
       <header className="page-header premium-page-header">
         <div>
           <span className="micro-label">Selector-first investigation</span>

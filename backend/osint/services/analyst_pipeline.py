@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import re
@@ -447,6 +448,249 @@ def ioc_csv(graph: dict[str, Any]) -> str:
         data = _data(node)
         writer.writerow([_node_type(node), _value(node), _label(node), node.get("confidence") or data.get("confidence_score") or "", _source(node), _source_url(node), data.get("raw_evidence_ref") or ""])
     return output.getvalue()
+
+
+def _pdf_safe(value: Any) -> str:
+    return re.sub(r"[^\x20-\x7E]", "?", str(value or "")).replace("\\", "/").replace("(", "[").replace(")", "]")
+
+
+def _wrap_pdf(value: Any, width: int = 88, limit: int = 8) -> list[str]:
+    words = _pdf_safe(value).split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        if len(current) + len(word) + 1 > width:
+            if current:
+                lines.append(current)
+            current = word[:width]
+        else:
+            current = f"{current} {word}".strip()
+        if len(lines) >= limit:
+            break
+    if current and len(lines) < limit:
+        lines.append(current)
+    return lines or ["Insufficient evidence recorded."]
+
+
+def _pdf_text(x: int, y: int, text: Any, size: int = 9, font: str = "F1", color: tuple[float, float, float] = (0.07, 0.08, 0.1)) -> str:
+    r, g, b = color
+    return f"BT {r:.3f} {g:.3f} {b:.3f} rg /{font} {size} Tf {x} {y} Td ({_pdf_safe(text)[:145]}) Tj ET"
+
+
+def _pdf_rect(x: int, y: int, w: int, h: int, color: tuple[float, float, float]) -> str:
+    r, g, b = color
+    return f"q {r:.3f} {g:.3f} {b:.3f} rg {x} {y} {w} {h} re f Q"
+
+
+def _pdf_table_row(columns: list[Any], widths: list[int], y: int, bold: bool = False) -> list[str]:
+    commands = [_pdf_rect(36, y - 5, 540, 17, (0.95, 0.96, 0.97) if bold else (1, 1, 1))]
+    x = 42
+    for column, width in zip(columns, widths, strict=False):
+        commands.append(_pdf_text(x, y, str(column)[: max(8, width // 5)], 7, "F2" if bold else "F1"))
+        x += width
+    return commands
+
+
+def designed_pdf_packet(case: dict[str, Any], graph: dict[str, Any], pipeline: dict[str, Any], evidence: list[dict[str, Any]]) -> bytes:
+    """Generate a compact intelligence dossier without adding a PDF dependency.
+
+    The export endpoint stays intact; this renderer only improves the PDF
+    presentation. Every line is sourced from the case, graph, pipeline, and
+    evidence payloads already returned by the backend.
+    """
+
+    nodes = graph.get("nodes") or []
+    edges = graph.get("edges") or []
+    generated = str(pipeline.get("generated_at") or utc_now())
+    case_target = str(case.get("target") or case.get("id") or "Detached case")
+    analyst = str(case.get("operator") or case.get("created_by") or "Operator")
+    packet_hash = hashlib.sha256(json.dumps({"case": case, "graph": graph, "pipeline": pipeline, "evidence": evidence}, default=str, sort_keys=True).encode()).hexdigest()
+    coverage = pipeline.get("coverage_matrix") or {}
+    noise = pipeline.get("noise_killer") or {}
+    leads = pipeline.get("lead_queue") or {}
+    evidence_summary = pipeline.get("evidence_summary") or {}
+    correlations = pipeline.get("correlations") or []
+
+    pages: list[list[str]] = []
+
+    def new_page(title: str) -> list[str]:
+        page_no = len(pages) + 1
+        commands = [
+            _pdf_rect(0, 0, 612, 792, (1, 1, 1)),
+            _pdf_rect(0, 748, 612, 44, (0.04, 0.04, 0.05)),
+            _pdf_rect(36, 727, 540, 16, (0.74, 0.05, 0.08)),
+            _pdf_text(44, 760, "NEXUSINTEL", 15, "F2", (1, 1, 1)),
+            _pdf_text(446, 760, "CYBER THREAT ASSESSMENT", 8, "F2", (1, 1, 1)),
+            _pdf_text(238, 731, "SECURE / CONFIDENTIAL / EVIDENCE-BACKED", 7, "F2", (1, 1, 1)),
+            _pdf_text(36, 705, title.upper(), 13, "F2"),
+            _pdf_rect(36, 54, 540, 1, (0.78, 0.08, 0.1)),
+            _pdf_text(36, 37, f"Report hash: {packet_hash[:18]}...  Generated: {generated}", 7, "F3", (0.28, 0.3, 0.34)),
+            _pdf_text(520, 37, f"Page {page_no}", 7, "F3", (0.28, 0.3, 0.34)),
+        ]
+        pages.append(commands)
+        return commands
+
+    def add_paragraph(commands: list[str], y: int, text: Any, width: int = 92, color: tuple[float, float, float] = (0.12, 0.13, 0.16)) -> int:
+        for line in _wrap_pdf(text, width=width, limit=10):
+            commands.append(_pdf_text(48, y, line, 8, "F1", color))
+            y -= 12
+        return y - 4
+
+    def ensure(commands: list[str], y: int, title: str) -> tuple[list[str], int]:
+        if y > 82:
+            return commands, y
+        return new_page(title), 690
+
+    cover = new_page("Cyber Threat Assessment Report")
+    cover.extend([
+        _pdf_rect(36, 488, 540, 164, (0.04, 0.04, 0.05)),
+        _pdf_text(58, 612, "CYBER THREAT ASSESSMENT REPORT", 24, "F2", (1, 1, 1)),
+        _pdf_text(60, 584, f"Case Target: {case_target}", 10, "F1", (0.92, 0.92, 0.94)),
+        _pdf_text(60, 563, f"Case ID: {case.get('id') or 'not available'}", 9, "F3", (0.78, 0.8, 0.84)),
+        _pdf_text(60, 543, f"Analyst/Operator: {analyst}", 9, "F1", (0.92, 0.92, 0.94)),
+        _pdf_text(60, 523, f"Generated: {generated}", 9, "F1", (0.92, 0.92, 0.94)),
+        _pdf_text(60, 503, f"Report Hash: {packet_hash}", 7, "F3", (0.86, 0.88, 0.92)),
+        _pdf_text(48, 438, "EXECUTIVE SUMMARY", 13, "F2"),
+    ])
+    add_paragraph(cover, 414, f"This dossier summarizes {len(nodes)} entities, {len(edges)} relationships, and {len(evidence)} evidence records currently associated with the investigation. Findings remain evidence-scoped; unsupported attribution is marked as insufficient evidence.")
+    cover.extend([
+        _pdf_text(48, 334, "KEY COUNTS", 11, "F2"),
+        *_pdf_table_row(["Entities", "Relationships", "Evidence", "Noise removed"], [120, 130, 120, 150], 312, True),
+        *_pdf_table_row([len(nodes), len(edges), len(evidence), noise.get("filtered_count", 0)], [120, 130, 120, 150], 292),
+    ])
+
+    current = new_page("Scope and Methodology")
+    y = 690
+    current.append(_pdf_text(48, y, "SCOPE", 11, "F2")); y -= 20
+    y = add_paragraph(current, y, f"Investigation target: {case_target}. Collection uses public-source OSINT, analyst-provided evidence, configured connectors, and existing NexusIntel transform outputs. No fake or synthetic intelligence is inserted into the packet.")
+    current.append(_pdf_text(48, y, "METHODOLOGY", 11, "F2")); y -= 20
+    y = add_paragraph(current, y, "Confidence is derived from source reliability, directness, freshness, corroboration, contradiction penalties, and noise suppression. AI summaries, when present, are treated as analyst assistance and not as evidence.")
+    current.append(_pdf_text(48, y, "COVERAGE SNAPSHOT", 11, "F2")); y -= 20
+    columns = coverage.get("columns") if isinstance(coverage, dict) else []
+    matrix = coverage.get("matrix") if isinstance(coverage, dict) else {}
+    if columns and isinstance(matrix, dict):
+        for row_name in ("attempted", "found", "verified", "noisy"):
+            values = matrix.get(row_name) or {}
+            current, y = ensure(current, y, "Scope and Methodology")
+            current.append(_pdf_text(52, y, f"{row_name}: " + ", ".join(f"{column}={values.get(column, 0)}" for column in columns[:8]), 7, "F3"))
+            y -= 12
+    else:
+        y = add_paragraph(current, y, "Coverage matrix is not available for this case.")
+
+    current = new_page("Entities and Relationships")
+    y = 690
+    current.extend(_pdf_table_row(["Type", "Label", "Confidence", "Evidence"], [112, 210, 88, 130], y, True)); y -= 18
+    if nodes:
+        for node in nodes[:42]:
+            current, y = ensure(current, y, "Entities and Relationships")
+            data = _data(node)
+            current.extend(_pdf_table_row([_node_type(node), _label(node), data.get("confidence_score", node.get("confidence", "")), data.get("raw_evidence_ref") or _source_url(node) or "insufficient evidence"], [112, 210, 88, 130], y))
+            y -= 18
+    else:
+        y = add_paragraph(current, y, "No graph entities are available.")
+    current, y = ensure(current, y - 8, "Entities and Relationships")
+    current.append(_pdf_text(48, y, "RELATIONSHIPS", 11, "F2")); y -= 22
+    current.extend(_pdf_table_row(["Source", "Type", "Target", "Confidence"], [145, 120, 145, 90], y, True)); y -= 18
+    if edges:
+        for edge in edges[:46]:
+            current, y = ensure(current, y, "Entities and Relationships")
+            current.extend(_pdf_table_row([edge.get("source"), edge.get("type"), edge.get("target"), edge.get("confidence_level", edge.get("confidence", ""))], [145, 120, 145, 90], y))
+            y -= 18
+    else:
+        y = add_paragraph(current, y, "No relationships are available.")
+
+    current = new_page("Evidence and Confidence")
+    y = 690
+    current.append(_pdf_text(48, y, "EVIDENCE TABLE", 11, "F2")); y -= 22
+    current.extend(_pdf_table_row(["Evidence ID", "Source", "URL/Hash", "Captured"], [116, 100, 210, 110], y, True)); y -= 18
+    if evidence:
+        for item in evidence[:46]:
+            current, y = ensure(current, y, "Evidence and Confidence")
+            meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+            current.extend(_pdf_table_row([item.get("id") or item.get("evidence_id") or "evidence", item.get("source") or "unknown", meta.get("source_url") or item.get("sha256") or "not available", item.get("created_at") or item.get("fetched_at") or ""], [116, 100, 210, 110], y))
+            y -= 18
+    else:
+        y = add_paragraph(current, y, "No evidence records are available. Report-safe findings should be treated as insufficient evidence until evidence is attached.")
+    current, y = ensure(current, y - 8, "Evidence and Confidence")
+    current.append(_pdf_text(48, y, "CONFIDENCE ASSESSMENT", 11, "F2")); y -= 20
+    sources = evidence_summary.get("sources") if isinstance(evidence_summary, dict) else {}
+    y = add_paragraph(current, y, f"Evidence sources: {sources or 'not available'}. Hashes captured: {len(evidence_summary.get('hashes') or []) if isinstance(evidence_summary, dict) else 0}. Unsupported findings should not be reported as facts.")
+
+    current = new_page("Noise, Leads, Correlations")
+    y = 690
+    current.append(_pdf_text(48, y, "NOISE REMOVED", 11, "F2")); y -= 20
+    noise_items = noise.get("items") if isinstance(noise, dict) else []
+    if noise_items:
+        for item in noise_items[:14]:
+            current, y = ensure(current, y, "Noise, Leads, Correlations")
+            y = add_paragraph(current, y, f"{item.get('label') or item.get('node_id')}: {', '.join(item.get('reasons') or [])}", width=96, color=(0.2, 0.22, 0.26))
+    else:
+        y = add_paragraph(current, y, "No suppressed noise is recorded.")
+    current, y = ensure(current, y, "Noise, Leads, Correlations")
+    current.append(_pdf_text(48, y, "CANDIDATE LEADS", 11, "F2")); y -= 20
+    flat_leads = [str(item) for group in leads.values() for item in (group if isinstance(group, list) else [])] if isinstance(leads, dict) else []
+    if flat_leads:
+        for item in flat_leads[:16]:
+            current, y = ensure(current, y, "Noise, Leads, Correlations")
+            y = add_paragraph(current, y, item, width=96, color=(0.2, 0.22, 0.26))
+    else:
+        y = add_paragraph(current, y, "No candidate leads are pending.")
+    current, y = ensure(current, y, "Noise, Leads, Correlations")
+    current.append(_pdf_text(48, y, "CORRELATIONS", 11, "F2")); y -= 20
+    if correlations:
+        for item in correlations[:10]:
+            current, y = ensure(current, y, "Noise, Leads, Correlations")
+            y = add_paragraph(current, y, f"{item.get('source')} -> {item.get('target')} score={item.get('score')} status={item.get('relationship') or 'hypothesis'}", width=96)
+    else:
+        y = add_paragraph(current, y, "No reportable correlations are available.")
+
+    current = new_page("Recommended Next Steps and Appendix")
+    y = 690
+    current.append(_pdf_text(48, y, "RECOMMENDED NEXT STEPS", 11, "F2")); y -= 20
+    for item in [
+        "Attach source URLs or raw evidence references to unsupported findings before external reporting.",
+        "Resolve candidate leads through passive, legal transforms before promoting them to verified findings.",
+        "Review noise bin decisions if a suppressed artifact becomes relevant to the investigative objective.",
+        "Export JSON/HTML bundle for full machine-readable lineage when sharing with another analyst.",
+    ]:
+        y = add_paragraph(current, y, f"- {item}", width=96)
+    current, y = ensure(current, y, "Recommended Next Steps and Appendix")
+    current.append(_pdf_text(48, y, "APPENDIX: RAW EVIDENCE HASHES", 11, "F2")); y -= 20
+    hashes = [str(item.get("sha256") or item.get("payload_sha256") or "") for item in evidence if item.get("sha256") or item.get("payload_sha256")]
+    if hashes:
+        for digest in hashes[:34]:
+            current, y = ensure(current, y, "Recommended Next Steps and Appendix")
+            current.append(_pdf_text(52, y, digest, 7, "F3"))
+            y -= 11
+    else:
+        y = add_paragraph(current, y, "No raw evidence hashes are available.")
+
+    content_objects = ["\n".join(commands).encode("latin-1", errors="replace") for commands in pages]
+    base_objects = [
+        b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+        b"2 0 obj << /Type /Pages /Kids [" + b" ".join(f"{6 + index * 2} 0 R".encode() for index in range(len(pages))) + b"] /Count " + str(len(pages)).encode() + b" >> endobj",
+        b"3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
+        b"4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj",
+        b"5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Courier >> endobj",
+    ]
+    page_objects: list[bytes] = []
+    for index, stream in enumerate(content_objects):
+        page_num = 6 + index * 2
+        content_num = page_num + 1
+        page_objects.append(f"{page_num} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents {content_num} 0 R >> endobj".encode())
+        page_objects.append(f"{content_num} 0 obj << /Length {len(stream)} >> stream\n".encode() + stream + b"\nendstream endobj")
+    objects = base_objects + page_objects
+    pdf = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(pdf))
+        pdf.extend(obj + b"\n")
+    xref = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode())
+    pdf.extend(f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(pdf)
 
 
 def minimal_pdf(title: str, lines: list[str]) -> bytes:
