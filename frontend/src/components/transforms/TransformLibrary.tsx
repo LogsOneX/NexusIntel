@@ -23,7 +23,7 @@ export const FALLBACK_TRANSFORMS: TransformDefinition[] = [
 
 export default function TransformLibrary({ transforms, selectedNode, onRun, loadingId, title = "Transform Library" }: { transforms?: TransformDefinition[]; selectedNode?: ApiNode | null; onRun?: (id: string) => void; loadingId?: string | null; title?: string }) {
   const [query, setQuery] = useState("");
-  const source = transforms?.length ? transforms : FALLBACK_TRANSFORMS;
+  const source = transforms?.length ? transforms : FALLBACK_TRANSFORMS.map((item) => ({ ...item, source_category: item.source_category || "fallback", confidence_profile: item.confidence_profile || "fallback registry" }));
   const rows = useMemo(() => {
     const term = query.trim().toLowerCase();
     return source.filter((item) => (!term || `${item.id} ${item.label} ${item.description} ${item.output_types.join(" ")}`.toLowerCase().includes(term)));
