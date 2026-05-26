@@ -87,6 +87,13 @@ export default function EntityInspector({
           <code>{entityValue}</code>
         </div>
       </section>
+      <div className="ref-inspector-quick-actions">
+        <button type="button" disabled={!selectedNode || !selectedTransforms.find((item) => item.enabled)} onClick={() => { const first = selectedTransforms.find((item) => item.enabled); if (first) onRunRegisteredTransform(first.id); }}>Run Recommended Transform</button>
+        <button type="button" disabled={!selectedNode} onClick={() => selectedNode && window.dispatchEvent(new CustomEvent("nexus:open-node-transform-menu", { detail: { node_id: selectedNode.id } }))}>Open Node Transform Menu</button>
+        {selectedNode && onMarkNoise && <button className="danger" type="button" onClick={onMarkNoise}>Mark Noise</button>}
+        <button type="button" onClick={onRunCorrelationEngine}>Correlate</button>
+        <button type="button" onClick={() => onExportPacket("json")}>Export Evidence JSON</button>
+      </div>
       <Tabs items={tabItems} active={tab} onChange={setTab} ariaLabel="Entity inspector tabs" />
       <div className="inspector-body">
         {tab === "overview" && <EntityOverviewTab node={selectedNode} activeCase={activeCase} analystPipeline={analystPipeline} pendingEntityType={pendingEntityType} pendingTransforms={pendingTransforms} />}

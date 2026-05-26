@@ -70,6 +70,15 @@ function LoginPage({ onLogin }: { onLogin: (session: SessionState) => void }) {
   );
 }
 
+function markFallbackTransforms(transforms: TransformDefinition[]): TransformDefinition[] {
+  return transforms.map((item) => ({
+    ...item,
+    source_category: item.source_category || "fallback",
+    confidence_profile: item.confidence_profile || "fallback registry",
+    disabled_reason: item.disabled_reason || (item.enabled ? null : "Fallback definition; backend registry unavailable"),
+  }));
+}
+
 function normalizeGraphPayload(payload: any): GraphPayload {
   return {
     nodes: Array.isArray(payload?.nodes) ? payload.nodes : [],
@@ -91,7 +100,7 @@ function GraphHub({ token, navigate }: PageProps) {
   const [mode, setMode] = useState<"passive" | "standard" | "aggressive">("standard");
   const [caseHealth, setCaseHealth] = useState<CaseHealth | null>(null);
   const [analystPipeline, setAnalystPipeline] = useState<AnalystPipeline | null>(null);
-  const [transformRegistry, setTransformRegistry] = useState<TransformDefinition[]>(FALLBACK_TRANSFORMS);
+  const [transformRegistry, setTransformRegistry] = useState<TransformDefinition[]>(() => markFallbackTransforms(FALLBACK_TRANSFORMS));
   const [evidenceItems, setEvidenceItems] = useState<EvidenceRecord[]>([]);
   const [evidenceDrawer, setEvidenceDrawer] = useState<EvidenceRecord | null>(null);
   const [transformLoading, setTransformLoading] = useState<string | null>(null);
@@ -132,9 +141,9 @@ function GraphHub({ token, navigate }: PageProps) {
     try {
       const payload = await apiJson<any>("/api/v1/transforms/registry", undefined, token);
       const transforms = payload.data.transforms || [];
-      setTransformRegistry(transforms.length ? transforms : FALLBACK_TRANSFORMS);
+      setTransformRegistry(transforms.length ? transforms : markFallbackTransforms(FALLBACK_TRANSFORMS));
     } catch {
-      setTransformRegistry(FALLBACK_TRANSFORMS);
+      setTransformRegistry(markFallbackTransforms(FALLBACK_TRANSFORMS));
     }
   }, [token]);
 
@@ -396,21 +405,33 @@ function GraphHub({ token, navigate }: PageProps) {
     }
   }, [token]);
 
-  const runRegisteredTransform = useCallback(async (transformId: string) => {
-    if (!activeInvestigationId || !selectedNode) return;
+  const runRegisteredTransform = useCallback(async (transformId: string, nodeOverride?: ApiNode | null) => {
+    const node = nodeOverride || selectedNode;
+    if (!activeInvestigationId || !node) return;
     setTransformLoading(transformId);
     setError(null);
+    setTerminalOpen(true);
+    setCurrentTaskId(null);
+    setTaskLabel(`${transformId} / ${node.label || node.value || node.id}`);
+    setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Running transform ${transformId} on ${node.label || node.value || node.id}`, time: new Date().toISOString() }]);
     try {
-      const payload = await apiJson<any>("/api/v1/transforms/run", { method: "POST", body: JSON.stringify({ investigation_id: activeInvestigationId, node_id: selectedNode.id, transform_id: transformId, options: { mode } }) }, token);
-      setGraph(normalizeGraphPayload(payload.data.graph));
-      setCurrentTaskId(payload.data.run_id || null);
-      setTaskLabel(`${transformId} / ${selectedNode.label}`);
-      setTerminalLines((previous) => [...previous.slice(-260), { level: "success", message: `Registered transform completed: ${transformId}`, time: new Date().toISOString() }]);
+      const payload = await apiJson<any>("/api/v1/transforms/run", { method: "POST", body: JSON.stringify({ investigation_id: activeInvestigationId, node_id: node.id, transform_id: transformId, options: { mode } }) }, token);
+      const nextGraph = normalizeGraphPayload(payload.data.graph);
+      setGraph(nextGraph);
+      const runId = payload.data.run_id || payload.data.task_id || null;
+      setCurrentTaskId(runId);
+      setTaskLabel(`${transformId} / ${node.label || node.value || node.id}`);
+      const updatedNode = payload.data.node || nextGraph.nodes.find((item) => item.id === node.id) || node;
+      setSelectedNode(updatedNode);
+      setDataPanelOpen(true);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "success", message: `Transform queued/completed via registry: ${transformId}`, time: new Date().toISOString() }]);
       await loadCaseHealth(activeInvestigationId);
       await loadEvidence(activeInvestigationId);
-      await loadAnalystPipeline(activeInvestigationId, selectedNode.id);
+      await loadAnalystPipeline(activeInvestigationId, updatedNode?.id || node.id);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Registered transform failed");
+      const message = caught instanceof Error ? caught.message : "Registered transform failed";
+      setError(message);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "error", message: `Transform failed: ${message}`, time: new Date().toISOString() }]);
     } finally {
       setTransformLoading(null);
     }
@@ -462,13 +483,14 @@ function GraphHub({ token, navigate }: PageProps) {
     }
   }, [activeInvestigationId, loadAnalystPipeline, loadCaseHealth, selectedNode?.id, token]);
 
-  const markSelectedNoise = useCallback(async () => {
-    if (!activeInvestigationId || !selectedNode) return;
+  const markSelectedNoise = useCallback(async (nodeOverride?: ApiNode | null) => {
+    const node = nodeOverride || selectedNode;
+    if (!activeInvestigationId || !node) return;
     try {
-      const payload = await apiJson<any>(`/api/v1/investigations/${activeInvestigationId}/entities/${selectedNode.id}/mark-noise`, { method: "POST", body: JSON.stringify({ reason: "Analyst removed this entity from the main graph as noise." }) }, token);
+      const payload = await apiJson<any>(`/api/v1/investigations/${activeInvestigationId}/entities/${node.id}/mark-noise`, { method: "POST", body: JSON.stringify({ reason: "Analyst removed this entity from the main graph as noise." }) }, token);
       setGraph(normalizeGraphPayload(payload.data.graph));
       setSelectedNode(null);
-      setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Marked ${selectedNode.label} as graph noise`, time: new Date().toISOString() }]);
+      setTerminalLines((previous) => [...previous.slice(-260), { level: "system", message: `Marked ${node.label || node.value || node.id} as graph noise`, time: new Date().toISOString() }]);
       await loadCaseHealth(activeInvestigationId);
       await loadAnalystPipeline(activeInvestigationId, null);
     } catch (caught) {
@@ -634,6 +656,13 @@ function GraphHub({ token, navigate }: PageProps) {
             setDataPanelOpen={setDataPanelOpen}
             onOpenAddEntity={(kind) => { setAddDialogType(kind || "username"); setAddDialogOpen(true); }}
             onOpenImport={() => navigate("/evidence")}
+            transforms={selectedTransforms}
+            transformLoading={transformLoading}
+            transformError={error}
+            onRunTransform={(id, node) => void runRegisteredTransform(id, node)}
+            onOpenEvidenceVault={() => navigate("/evidence")}
+            onOpenTransformLibrary={() => navigate("/transforms")}
+            onMarkNoiseNode={(node) => void markSelectedNoise(node)}
             hideToolbar
           />
         </GraphCanvasStage>

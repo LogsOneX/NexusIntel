@@ -1,6 +1,7 @@
 import { type CSSProperties, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
+import type { TransformDefinition } from "../lib/types";
 
 export type GraphNode = {
   id: string;
@@ -83,6 +84,13 @@ type GraphCanvasProps = {
   hideToolbar?: boolean;
   onOpenAddEntity?: (kind?: string) => void;
   onOpenImport?: () => void;
+  transforms?: TransformDefinition[];
+  transformLoading?: string | null;
+  transformError?: string | null;
+  onRunTransform?: (transformId: string, node: ApiGraphNode) => void;
+  onOpenEvidenceVault?: (node?: ApiGraphNode) => void;
+  onOpenTransformLibrary?: () => void;
+  onMarkNoiseNode?: (node: ApiGraphNode) => void;
 };
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -283,6 +291,13 @@ export default function GraphCanvas({
   setDataPanelOpen,
   onOpenAddEntity,
   onOpenImport,
+  transforms = [],
+  transformLoading,
+  transformError,
+  onRunTransform,
+  onOpenEvidenceVault,
+  onOpenTransformLibrary,
+  onMarkNoiseNode,
 }: GraphCanvasProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [positions, setPositions] = useState<Record<string, StudioPosition>>({});
@@ -293,6 +308,8 @@ export default function GraphCanvas({
   const [panning, setPanning] = useState<{ x: number; y: number; startX: number; startY: number } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const [actionMenu, setActionMenu] = useState<{ nodeId: string; mode: "compact" | "full" } | null>(null);
+  const [confirmNoiseNodeId, setConfirmNoiseNodeId] = useState<string | null>(null);
 
   const visibleNodes = useMemo(() => nodes.filter(isGraphVisible), [nodes]);
   const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes]);
@@ -392,11 +409,46 @@ export default function GraphCanvas({
   }, [dragging, pan.x, pan.y, panning, zoom]);
 
   const nodeById = useMemo(() => new Map(studioNodes.map((node) => [node.api.id, node])), [studioNodes]);
+  const actionNode = actionMenu ? nodeById.get(actionMenu.nodeId) || null : null;
+  const actionTransforms = useMemo(() => {
+    if (!actionNode) return [] as TransformDefinition[];
+    return transforms.filter((item) => item.input_types.includes(actionNode.api.type) || item.input_types.includes("*"));
+  }, [actionNode, transforms]);
+  const recommendedTransform = actionTransforms.find((item) => item.enabled) || null;
+  const actionPosition = actionNode ? positions[actionNode.api.id] : null;
+  const menuStyle = actionPosition ? {
+    left: Math.max(16, Math.min((stageRef.current?.clientWidth || 1200) - 360, pan.x + (actionPosition.x + 138) * zoom + 12)),
+    top: Math.max(12, Math.min((stageRef.current?.clientHeight || 760) - 390, pan.y + actionPosition.y * zoom + 4)),
+  } : undefined;
+  const confirmNoiseNode = confirmNoiseNodeId ? nodeById.get(confirmNoiseNodeId)?.api || null : null;
   const worldBounds = useMemo(() => {
     const values = Object.values(positions);
     if (!values.length) return { width: 1600, height: 1000 };
     return { width: Math.max(1600, Math.max(...values.map((item) => item.x)) + 260), height: Math.max(1000, Math.max(...values.map((item) => item.y)) + 210) };
   }, [positions]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
+      if (typing) return;
+      if (event.key === "Escape") { setActionMenu(null); setConfirmNoiseNodeId(null); return; }
+      if (event.key === "Enter" && selectedId) { event.preventDefault(); setActionMenu({ nodeId: selectedId, mode: "full" }); return; }
+      if (event.key === "Delete" && selectedId) { event.preventDefault(); setConfirmNoiseNodeId(selectedId); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId]);
+
+  useEffect(() => {
+    const openNodeMenu = (event: Event) => {
+      const detail = (event as CustomEvent<{ node_id?: string }>).detail || {};
+      const nodeId = detail.node_id || selectedId;
+      if (nodeId && nodeById.has(nodeId)) setActionMenu({ nodeId, mode: "full" });
+    };
+    window.addEventListener("nexus:open-node-transform-menu", openNodeMenu);
+    return () => window.removeEventListener("nexus:open-node-transform-menu", openNodeMenu);
+  }, [nodeById, selectedId]);
 
   if (!visibleNodes.length) {
     return (
@@ -481,16 +533,19 @@ export default function GraphCanvas({
                   event.stopPropagation();
                   onSelectNode(api);
                   setDataPanelOpen?.(true);
+                  setActionMenu({ nodeId: api.id, mode: "compact" });
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   onSelectNode(api);
                   setDataPanelOpen?.(true);
-                  onSystemLog?.("Selected entity. Run contextual transforms from the inspector.");
+                  setActionMenu({ nodeId: api.id, mode: "full" });
                 }}
                 onDoubleClick={(event) => {
                   event.stopPropagation();
-                  onOracleNode?.(api);
+                  onSelectNode(api);
+                  setDataPanelOpen?.(true);
+                  setActionMenu({ nodeId: api.id, mode: "full" });
                 }}
               >
                 <span className="studio-node-bubble">
@@ -507,6 +562,47 @@ export default function GraphCanvas({
           })}
         </div>
       </div>
+      {actionNode && menuStyle && (
+        <section className={actionMenu?.mode === "full" ? "studio-node-action-menu full" : "studio-node-action-menu"} style={menuStyle as CSSProperties}>
+          <header>
+            <span className="studio-action-glyph" style={{ "--node-accent": visualForNodeType(actionNode.api.type).accent } as CSSProperties}>
+              <svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: NODE_ICON_PATHS[visualForNodeType(actionNode.api.type).icon] || NODE_ICON_PATHS.target }} /></svg>
+            </span>
+            <div><strong>{actionNode.ui.label}</strong><span>{actionNode.ui.type} / {nodeConfidence(actionNode.api)}% confidence</span></div>
+            <button type="button" onClick={() => setActionMenu(null)} aria-label="Close node actions">×</button>
+          </header>
+          <div className="studio-node-primary-actions">
+            <button type="button" disabled={!recommendedTransform || Boolean(transformLoading)} onClick={() => recommendedTransform && onRunTransform?.(recommendedTransform.id, actionNode.api)}>Run Recommended</button>
+            <button type="button" onClick={() => setDataPanelOpen?.(true)}>Open Inspector</button>
+            <button type="button" onClick={() => onOpenEvidenceVault?.(actionNode.api)}>Evidence</button>
+            <button type="button" className="danger" onClick={() => setConfirmNoiseNodeId(actionNode.api.id)}>Mark Noise</button>
+          </div>
+          {transformError && <div className="studio-node-transform-error">{transformError}</div>}
+          <div className="studio-node-transform-list">
+            {!actionTransforms.length && <div className="studio-node-transform-empty"><strong>No valid transforms for this entity type</strong><button type="button" onClick={() => onOpenTransformLibrary?.()}>Open Transform Library</button></div>}
+            {(actionMenu?.mode === "full" ? actionTransforms : actionTransforms.slice(0, 4)).map((transform) => {
+              const disabledReason = !transform.enabled ? transform.disabled_reason || "Disabled by registry" : "";
+              return (
+                <article key={transform.id} className={disabledReason ? "studio-node-transform-card disabled" : "studio-node-transform-card"}>
+                  <div><strong>{transform.label}</strong><p>{transform.description}</p><code>{transform.input_types.join(", ")} → {transform.output_types.join(", ")}</code></div>
+                  <span>{transform.requires_api_key ? "API KEY" : transform.passive === false ? "DEEP" : "PASSIVE"}</span>
+                  {transform.source_category === "fallback" && <em>FALLBACK</em>}
+                  {disabledReason && <small>{disabledReason}</small>}
+                  <button type="button" disabled={Boolean(disabledReason) || transformLoading === transform.id} onClick={() => onRunTransform?.(transform.id, actionNode.api)}>{transformLoading === transform.id ? "Running" : "Run"}</button>
+                </article>
+              );
+            })}
+          </div>
+          {actionMenu?.mode !== "full" && actionTransforms.length > 4 && <button className="studio-node-expand-menu" type="button" onClick={() => setActionMenu({ nodeId: actionNode.api.id, mode: "full" })}>Show all {actionTransforms.length} transforms</button>}
+        </section>
+      )}
+      {confirmNoiseNode && (
+        <section className="studio-confirm-popover">
+          <strong>Mark entity as noise?</strong>
+          <p>{confirmNoiseNode.label || confirmNoiseNode.value || confirmNoiseNode.id} will be removed from the main graph and kept in the noise bin if the backend accepts it.</p>
+          <div><button type="button" onClick={() => setConfirmNoiseNodeId(null)}>Cancel</button><button type="button" className="danger" onClick={() => { onMarkNoiseNode?.(confirmNoiseNode); setConfirmNoiseNodeId(null); setActionMenu(null); }}>Mark Noise</button></div>
+        </section>
+      )}
       {hoveredNodeId && nodeById.has(hoveredNodeId) && (
         <div className="studio-hover-card">
           <strong>{nodeById.get(hoveredNodeId)?.ui.label}</strong>
