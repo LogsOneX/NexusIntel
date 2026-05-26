@@ -33,6 +33,7 @@ import { apiJson, downloadFile, wsUrl } from "../lib/api";
 import { clearSession, readLocalJson, readSession, saveSession, writeLocalJson } from "../lib/storage";
 import { caseTitle } from "../lib/format";
 import { classifyEntityValue, evidenceRefsForNode } from "../lib/graph";
+import { compatibleTransformsForNode } from "../lib/transformMatching";
 import type { AnalystPipeline, ApiNode, CaseHealth, CommandItem, EvidenceRecord, GraphPayload, Investigation, PageProps, SessionState, TerminalLine, TransformDefinition } from "../lib/types";
 
 function LoginPage({ onLogin }: { onLogin: (session: SessionState) => void }) {
@@ -387,8 +388,7 @@ function GraphHub({ token, navigate }: PageProps) {
   };
 
   const selectedTransforms = useMemo(() => {
-    if (!selectedNode) return [];
-    return transformRegistry.filter((item) => item.input_types.includes(selectedNode.type) || item.input_types.includes("*"));
+    return compatibleTransformsForNode(transformRegistry, selectedNode);
   }, [selectedNode, transformRegistry]);
 
   const selectedEvidenceRefs = useMemo(() => {
@@ -441,7 +441,7 @@ function GraphHub({ token, navigate }: PageProps) {
   const pendingEntityType = useMemo(() => classifyEntityValue(target), [target]);
   const pendingTransforms = useMemo(() => {
     if (!target.trim()) return [] as TransformDefinition[];
-    return transformRegistry.filter((item) => item.input_types.includes(pendingEntityType) || item.input_types.includes("*"));
+    return compatibleTransformsForNode(transformRegistry, { type: pendingEntityType });
   }, [pendingEntityType, target, transformRegistry]);
 
   const runCorrelationEngine = useCallback(async () => {
@@ -669,7 +669,7 @@ function GraphHub({ token, navigate }: PageProps) {
             setDataPanelOpen={setDataPanelOpen}
             onOpenAddEntity={(kind) => { setAddDialogType(kind || "username"); setAddDialogOpen(true); }}
             onOpenImport={() => navigate("/evidence")}
-            transforms={selectedTransforms}
+            transforms={transformRegistry}
             transformLoading={transformLoading}
             transformError={error}
             onRunTransform={(id, node) => void runRegisteredTransform(id, node)}

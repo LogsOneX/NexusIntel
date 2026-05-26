@@ -1,9 +1,10 @@
 import { Play, ShieldCheck, Timer } from "lucide-react";
 import type { ApiNode, TransformDefinition } from "../../lib/types";
+import { transformMatchesEntity } from "../../lib/transformMatching";
 import StatusChip from "../common/StatusChip";
 
 export default function TransformCard({ transform, selectedNode, onRun, loading }: { transform: TransformDefinition; selectedNode?: ApiNode | null; onRun?: (id: string) => void; loading?: boolean }) {
-  const compatible = !selectedNode || transform.input_types.includes(selectedNode.type) || transform.input_types.includes("*");
+  const compatible = !selectedNode || transformMatchesEntity(transform, selectedNode.type);
   const disabledReason = !compatible ? `Requires ${transform.input_types.join(", ")}` : !transform.enabled ? transform.disabled_reason || "Disabled" : "";
   return (
     <article className={compatible && transform.enabled ? "transform-card" : "transform-card disabled"}>
@@ -16,4 +17,3 @@ export default function TransformCard({ transform, selectedNode, onRun, loading 
     </article>
   );
 }
-
