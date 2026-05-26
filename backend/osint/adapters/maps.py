@@ -24,10 +24,15 @@ class MapsProfileReviewsAdapter(BaseAdapter):
         url = entity.value.strip()
         if "google." not in url or "/maps" not in url:
             return AdapterResult(adapter_id=self.id, input=entity, warnings=["Input is not a public Google Maps URL"], status="skipped")
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            html = response.text[:500000]
+        try:
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
+                response = await client.get(url)
+                if response.status_code >= 400:
+                    raw = RawEvidenceObject(source=self.id, source_url=url, payload={"status_code": response.status_code, "body": response.text[:100000]}, content_type="text/html", headers=dict(response.headers))
+                    return AdapterResult(adapter_id=self.id, input=entity, raw_evidence=[raw], warnings=[f"Google Maps public page returned HTTP {response.status_code}"], status="completed")
+                html = response.text[:500000]
+        except httpx.HTTPError as exc:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=[f"Google Maps public fetch failed: {exc.__class__.__name__}"], status="completed")
         final_url = str(response.url)
         meta = _metadata(html)
         gaia = _gaia_from_url(final_url) or _gaia_from_url(url)

@@ -341,6 +341,26 @@ def now_iso() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
 
+def iso_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        try:
+            text = value.isoformat(timespec="seconds")
+        except TypeError:
+            text = value.isoformat()
+        if text.endswith("Z"):
+            return text
+        if text.endswith("+00:00"):
+            text = text[:-6]
+        return f"{text}Z"
+    return str(value)
+
+
+def iso_or_now(value: Any) -> str:
+    return iso_or_none(value) or now_iso()
+
+
 def confidence_level(confidence: str | None, data: dict[str, Any] | None = None) -> int:
     if data and isinstance(data.get("confidence_level"), (int, float)):
         return max(0, min(100, int(data["confidence_level"])))
@@ -398,6 +418,31 @@ def classify_target(value: str) -> str:
     return "username"
 
 
+TRANSFORM_TYPE_ALIASES: dict[str, set[str]] = {
+    "ip": {"ip", "ip_address", "ipv4", "ipv6"},
+    "url": {"url", "uri", "website"},
+    "profile": {"profile", "public_profile", "social_profile"},
+    "google_maps_profile": {"google_maps_profile", "google_profile", "maps_profile"},
+    "crypto_wallet": {"crypto_wallet", "wallet"},
+    "username": {"username", "username_candidate", "email_local_part", "handle"},
+}
+
+
+def normalize_transform_type(value: str) -> str:
+    clean = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if clean == "*":
+        return "*"
+    for canonical, aliases in TRANSFORM_TYPE_ALIASES.items():
+        if clean == canonical or clean in aliases:
+            return canonical
+    return clean
+
+
+def transform_accepts_entity_type(input_types: list[str], entity_type: str) -> bool:
+    normalized_inputs = {normalize_transform_type(item) for item in input_types}
+    return "*" in normalized_inputs or normalize_transform_type(entity_type) in normalized_inputs
+
+
 def fingerprint(kind: str, value: str) -> str:
     return f"{kind}:{value.strip().lower()}"[:768]
 
@@ -411,7 +456,7 @@ def serialize_entity(entity: Entity) -> dict[str, Any]:
         "source": entity.source,
         "confidence": entity.confidence,
         "data": entity.data or {},
-        "created_at": entity.created_at.isoformat() + "Z",
+        "created_at": iso_or_now(entity.created_at),
     }
 
 
@@ -424,7 +469,7 @@ def serialize_relationship(edge: Relationship) -> dict[str, Any]:
         "confidence": edge.confidence,
         "confidence_level": confidence_level(edge.confidence, edge.data or {}),
         "data": edge.data or {},
-        "created_at": edge.created_at.isoformat() + "Z",
+        "created_at": iso_or_now(edge.created_at),
     }
 
 
@@ -523,7 +568,7 @@ def artifact_like_from_entity(entity: Entity) -> dict[str, Any]:
 def record_from_entity(entity: Entity, classification: str) -> dict[str, Any]:
     record = artifact_record(artifact_like_from_entity(entity), classification, default_source=entity.source)
     record["entity_id"] = entity.id
-    record["created_at"] = entity.created_at.isoformat() + "Z"
+    record["created_at"] = iso_or_now(entity.created_at)
     return record
 
 
@@ -594,8 +639,8 @@ def investigation_tasks(db: Session, investigation_id: str) -> list[dict[str, An
             "task_name": item.task_name,
             "status": item.status,
             "target": item.target,
-            "started_at": item.started_at.isoformat() + "Z" if item.started_at else None,
-            "finished_at": item.finished_at.isoformat() + "Z" if item.finished_at else None,
+            "started_at": iso_or_none(item.started_at),
+            "finished_at": iso_or_none(item.finished_at),
             "error": item.error,
             "result": item.result or {},
         }
@@ -681,6 +726,8 @@ def find_meta_record(investigation: Investigation, bucket: str, record_id: str) 
 
 def entity_from_artifact_record(db: Session, investigation_id: str, record: dict[str, Any], *, promoted: bool = False) -> Entity:
     record_type = str(record.get("type") or "profile")
+    if promoted and record_type == "username_candidate":
+        record_type = "username"
     label = str(record.get("label") or record.get("value") or record_type)
     value = str(record.get("value") or label)
     source = str(record.get("source") or "analyst_promotion")
@@ -767,13 +814,13 @@ def serialize_provenance_record(record: DataProvenance, include_payload: bool = 
         "source": record.source,
         "uri": record.uri,
         "source_url": meta.get("source_url") or record.uri,
-        "fetched_at": meta.get("fetched_at") or record.created_at.isoformat() + "Z",
+        "fetched_at": meta.get("fetched_at") or iso_or_now(record.created_at),
         "sha256": record.sha256,
         "content_type": record.content_type,
         "status_code": meta.get("status_code") or meta.get("http_status"),
         "size_bytes": int(record.size_bytes or 0),
         "meta": meta,
-        "created_at": record.created_at.isoformat() + "Z",
+        "created_at": iso_or_now(record.created_at),
     }
     if include_payload:
         path = Path(record.uri)
@@ -979,8 +1026,8 @@ def serialize_task_record_compact(task: TaskRecord) -> dict[str, Any]:
         "task_name": task.task_name,
         "status": task.status,
         "target": task.target,
-        "started_at": task.started_at.isoformat() + "Z" if task.started_at else None,
-        "finished_at": task.finished_at.isoformat() + "Z" if task.finished_at else None,
+        "started_at": iso_or_none(task.started_at),
+        "finished_at": iso_or_none(task.finished_at),
         "error": task.error,
         "result": task.result or {},
     }
@@ -1137,8 +1184,8 @@ def serialize_case(item: Investigation) -> dict[str, Any]:
         "target_type": item.target_type,
         "status": item.status,
         "mode": item.mode,
-        "created_at": item.created_at.isoformat() + "Z",
-        "updated_at": item.updated_at.isoformat() + "Z",
+        "created_at": iso_or_now(item.created_at),
+        "updated_at": iso_or_now(item.updated_at or item.created_at),
         "meta": item.meta or {},
     }
 
@@ -1574,8 +1621,8 @@ def list_investigations(db: Session = Depends(get_db)) -> ApiResponse:
                     "target_type": item.target_type,
                     "status": item.status,
                     "mode": item.mode,
-                    "created_at": item.created_at.isoformat() + "Z",
-                    "updated_at": item.updated_at.isoformat() + "Z",
+                    "created_at": iso_or_now(item.created_at),
+                    "updated_at": iso_or_now(item.updated_at or item.created_at),
                     "meta": item.meta or {},
                 }
                 for item in investigations
@@ -1860,8 +1907,8 @@ def task_status(task_id: str, db: Session = Depends(get_db)) -> ApiResponse:
             "task_name": task.task_name,
             "status": task.status,
             "target": task.target,
-            "started_at": task.started_at.isoformat() + "Z" if task.started_at else None,
-            "finished_at": task.finished_at.isoformat() + "Z" if task.finished_at else None,
+            "started_at": iso_or_none(task.started_at),
+            "finished_at": iso_or_none(task.finished_at),
             "error": task.error,
             "result": task.result or {},
         },
@@ -1884,6 +1931,13 @@ def transform_registry(db: Session = Depends(get_db), _: str = Depends(current_o
     return ApiResponse(ok=True, data={"adapters": registry.list_adapters(), "transforms": registry.list_transforms(configured)})
 
 
+@app.get("/api/v1/transforms/registry/diagnostics", response_model=ApiResponse)
+def transform_registry_diagnostics(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    configured = configured_osint_key_names(db)
+    diagnostics = registry.validate_registry(configured)
+    return ApiResponse(ok=True, data=diagnostics)
+
+
 @app.post("/api/v1/transforms/run", response_model=ApiResponse)
 async def run_registered_transform(payload: TransformRunRequest, db: Session = Depends(get_db), operator: str = Depends(current_operator)) -> ApiResponse:
     investigation = db.get(Investigation, payload.investigation_id)
@@ -1892,6 +1946,8 @@ async def run_registered_transform(payload: TransformRunRequest, db: Session = D
     transform = registry.get_transform(payload.transform_id)
     if not transform:
         raise HTTPException(status_code=404, detail="Transform not found")
+    if not transform.enabled:
+        raise HTTPException(status_code=409, detail=f"Transform disabled: {transform.disabled_reason or 'disabled_by_registry'}")
     adapter = registry.get_adapter(transform.adapter_id)
     if not adapter:
         raise HTTPException(status_code=501, detail=f"Adapter not implemented: {transform.adapter_id}")
@@ -1914,7 +1970,7 @@ async def run_registered_transform(payload: TransformRunRequest, db: Session = D
             raise HTTPException(status_code=422, detail="Transform input requires type and value when node_id is omitted")
         entity_input = EntityInput(type=input_type, value=input_value, label=str(raw_input.get("label") or input_value), data=raw_input.get("data") or {})
 
-    if entity_input.type not in transform.input_types and "*" not in transform.input_types:
+    if not transform_accepts_entity_type(transform.input_types, entity_input.type):
         raise HTTPException(status_code=422, detail=f"Transform {transform.id} does not accept input type {entity_input.type}")
 
     record = create_task_record(db, payload.investigation_id, transform.id, entity_input.value)
@@ -2125,7 +2181,7 @@ def verify_provenance(provenance_id: str, db: Session = Depends(get_db), _: str 
 @app.get("/api/v1/audit", response_model=ApiResponse)
 def list_audit(limit: int = 100, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     rows = db.execute(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(max(1, min(500, limit)))).scalars().all()
-    return ApiResponse(ok=True, data={"items": [{"id": row.id, "user_id": row.user_id, "action": row.action, "target_entity": row.target_entity, "ip_address": row.ip_address, "status_code": row.status_code, "created_at": row.created_at.isoformat() + "Z"} for row in rows]})
+    return ApiResponse(ok=True, data={"items": [{"id": row.id, "user_id": row.user_id, "action": row.action, "target_entity": row.target_entity, "ip_address": row.ip_address, "status_code": row.status_code, "created_at": iso_or_now(row.created_at)} for row in rows]})
 
 
 @app.post("/api/v1/watchlist", response_model=ApiResponse)
@@ -2144,7 +2200,7 @@ def create_watchlist(payload: WatchlistCreate, db: Session = Depends(get_db), _:
 @app.get("/api/v1/watchlists", response_model=ApiResponse)
 def list_watchlists(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     rows = db.execute(select(Watchlist).order_by(Watchlist.updated_at.desc())).scalars().all()
-    return ApiResponse(ok=True, data={"items": [{"id": row.id, "investigation_id": row.investigation_id, "target": row.target, "target_type": row.target_type, "enabled": row.enabled == "true", "interval_hours": int(row.interval_hours), "last_delta": row.last_delta or {}, "updated_at": row.updated_at.isoformat() + "Z"} for row in rows]})
+    return ApiResponse(ok=True, data={"items": [{"id": row.id, "investigation_id": row.investigation_id, "target": row.target, "target_type": row.target_type, "enabled": row.enabled == "true", "interval_hours": int(row.interval_hours), "last_delta": row.last_delta or {}, "updated_at": iso_or_now(row.updated_at)} for row in rows]})
 
 
 @app.patch("/api/v1/watchlists/{watchlist_id}/toggle", response_model=ApiResponse)

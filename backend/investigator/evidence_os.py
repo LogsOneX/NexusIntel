@@ -7,6 +7,26 @@ from typing import Any
 from backend.modules.provenance_store import ProvenanceStore
 
 
+def _iso_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        try:
+            text = value.isoformat(timespec="seconds")
+        except TypeError:
+            text = value.isoformat()
+        if text.endswith("Z"):
+            return text
+        if text.endswith("+00:00"):
+            text = text[:-6]
+        return f"{text}Z"
+    return str(value)
+
+
+def _iso_or_unknown(value: Any) -> str:
+    return _iso_or_none(value) or "not_available"
+
+
 def _read_text(uri: str, limit: int = 20_000) -> tuple[str, bool]:
     path = Path(uri)
     if not path.exists() or not path.is_file():
@@ -21,7 +41,7 @@ def evidence_excerpt(record: Any, limit: int = 2_000) -> dict[str, Any]:
         "evidence_id": record.id,
         "source": record.source,
         "source_url": (record.meta or {}).get("source_url") or record.uri,
-        "fetched_at": (record.meta or {}).get("fetched_at") or (record.created_at.isoformat() + "Z"),
+        "fetched_at": (record.meta or {}).get("fetched_at") or _iso_or_unknown(record.created_at),
         "sha256": record.sha256,
         "content_type": record.content_type,
         "status_code": (record.meta or {}).get("status_code") or (record.meta or {}).get("http_status"),
@@ -39,7 +59,7 @@ def verify_evidence(record: Any) -> dict[str, Any]:
         "expected_sha256": record.sha256,
         "actual_sha256": verification.get("sha256"),
         "source_url": meta.get("source_url") or record.uri,
-        "fetched_at": meta.get("fetched_at") or (record.created_at.isoformat() + "Z"),
+        "fetched_at": meta.get("fetched_at") or _iso_or_unknown(record.created_at),
         "status_code": meta.get("status_code") or meta.get("http_status"),
         "reason": verification.get("reason") or ("sha256 match" if verification.get("ok") else "sha256 mismatch"),
     }

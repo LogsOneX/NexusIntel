@@ -3,6 +3,7 @@ import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { getStudioNodeConfidence, getStudioNodeIcon, getStudioNodeRisk, getStudioNodeVisual, mapApiEdgeToStudioEdge, mapApiNodeToStudioNode } from "../lib/studioMappers";
 import NodeActionPopover from "../components/graph/NodeActionPopover";
 import type { TransformDefinition } from "../lib/types";
+import { compatibleTransformsForNode } from "../lib/transformMatching";
 import { clamp, fitBoundsToViewport, screenToWorld, worldToScreen, zoomToCursor, type ViewportPoint } from "./viewportMath";
 import { graphPositionStorageKey, readGraphPositions, writeGraphPositions } from "./positionStore";
 
@@ -242,6 +243,7 @@ export default function GraphCanvas({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const interactionRef = useRef<InteractionState | null>(null);
   const suppressClickNodeRef = useRef<string | null>(null);
+  const lastTransformMenuLogRef = useRef<string | null>(null);
   const spaceDownRef = useRef(false);
   const positionsRef = useRef<Record<string, ViewportPoint>>({});
   const panRef = useRef<ViewportPoint>({ x: 0, y: 0 });
@@ -440,8 +442,7 @@ export default function GraphCanvas({
   const nodeById = useMemo(() => new Map(studioNodes.map((node) => [node.api.id, node])), [studioNodes]);
   const actionNode = actionMenu ? nodeById.get(actionMenu.nodeId) || null : null;
   const actionTransforms = useMemo(() => {
-    if (!actionNode) return [] as TransformDefinition[];
-    return transforms.filter((item) => item.input_types.includes(actionNode.api.type) || item.input_types.includes("*"));
+    return compatibleTransformsForNode(transforms, actionNode?.api || null);
   }, [actionNode, transforms]);
   const actionPosition = actionNode ? positions[actionNode.api.id] : null;
   const menuStyle = actionPosition ? (() => {
@@ -457,6 +458,16 @@ export default function GraphCanvas({
     };
   })() : undefined;
   const confirmNoiseNode = confirmNoiseNodeId ? nodeById.get(confirmNoiseNodeId)?.api || null : null;
+
+  useEffect(() => {
+    if (!actionMenu || !actionNode) return;
+    const fallbackActive = transforms.length > 0 && transforms.every((item) => item.source_category === "fallback");
+    const key = `${actionMenu.nodeId}:${actionMenu.mode}:${actionTransforms.length}:${transforms.length}:${fallbackActive}`;
+    if (lastTransformMenuLogRef.current === key) return;
+    lastTransformMenuLogRef.current = key;
+    onSystemLog?.(`Transform menu opened for node ${actionNode.api.id}/${actionNode.api.type}: ${actionTransforms.length} compatible transforms / registry ${transforms.length} total / fallback ${fallbackActive ? "yes" : "no"}.`);
+  }, [actionMenu, actionNode, actionTransforms.length, onSystemLog, transforms]);
+
   const worldBounds = useMemo(() => {
     const values = Object.values(positions);
     if (!values.length) return { width: 5000, height: 5000 };

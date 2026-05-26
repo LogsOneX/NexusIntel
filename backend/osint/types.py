@@ -142,13 +142,20 @@ class TransformDefinition:
     required_keys: list[str] = field(default_factory=list)
     passive: bool = True
     legal_note: str = "Passive public-source or official API/BYOK collection only."
+    enabled: bool = True
+    disabled_reason: str | None = None
 
     def to_dict(self, configured_keys: set[str] | None = None) -> dict[str, Any]:
         configured = configured_keys or set()
         missing = [key for key in self.required_keys if key not in configured]
         data = asdict(self)
-        data["enabled"] = not missing
-        data["disabled_reason"] = "missing_api_key:" + ",".join(missing) if missing else None
+        reasons: list[str] = []
+        if not self.enabled:
+            reasons.append(self.disabled_reason or "disabled_by_registry")
+        if missing:
+            reasons.append("missing_api_key:" + ",".join(missing))
+        data["enabled"] = self.enabled and not missing
+        data["disabled_reason"] = ";".join(reasons) if reasons else None
         return data
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+import ipaddress
 from urllib.parse import quote, urlparse
 
 import dns.resolver
@@ -72,11 +73,15 @@ class DomainRDAPAdapter(BaseAdapter):
     async def run(self, entity: EntityInput, context: RunContext) -> AdapterResult:
         domain = normalize_domain(entity.value)
         url = f"https://rdap.org/domain/{quote(domain)}"
-        async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
-            response = await client.get(url)
-            raw = RawEvidenceObject(source=self.id, source_url=url, payload={"status_code": response.status_code, "body": response.text[:300000]}, content_type="application/json")
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
+                response = await client.get(url)
+                raw = RawEvidenceObject(source=self.id, source_url=url, payload={"status_code": response.status_code, "body": response.text[:300000]}, content_type="application/json")
+                if response.status_code >= 400:
+                    return AdapterResult(adapter_id=self.id, input=entity, raw_evidence=[raw], warnings=[f"RDAP returned HTTP {response.status_code}"], status="completed")
+                data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=[f"RDAP lookup failed: {exc.__class__.__name__}"], status="completed")
         artifacts = [art("rdap_record", f"RDAP {domain}", domain, self.id, url, "HAS_RDAP", data)]
         for ns in data.get("nameservers", [])[:20] if isinstance(data, dict) else []:
             name = ns.get("ldhName") if isinstance(ns, dict) else None
@@ -95,11 +100,15 @@ class DomainCTAdapter(BaseAdapter):
     async def run(self, entity: EntityInput, context: RunContext) -> AdapterResult:
         domain = normalize_domain(entity.value)
         url = f"https://crt.sh/?q=%25.{quote(domain)}&output=json"
-        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
-            response = await client.get(url)
-            raw = RawEvidenceObject(source=self.id, source_url=url, payload={"status_code": response.status_code, "body": response.text[:500000]}, content_type="application/json")
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=20, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
+                response = await client.get(url)
+                raw = RawEvidenceObject(source=self.id, source_url=url, payload={"status_code": response.status_code, "body": response.text[:500000]}, content_type="application/json")
+                if response.status_code >= 400:
+                    return AdapterResult(adapter_id=self.id, input=entity, raw_evidence=[raw], warnings=[f"crt.sh returned HTTP {response.status_code}"], status="completed")
+                data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=[f"CT lookup failed: {exc.__class__.__name__}"], status="completed")
         names = set()
         for row in data[:500] if isinstance(data, list) else []:
             for item in str(row.get("name_value", "")).splitlines():
@@ -120,10 +129,13 @@ class WebFingerprintAdapter(BaseAdapter):
     async def run(self, entity: EntityInput, context: RunContext) -> AdapterResult:
         target = entity.value.strip()
         url = target if target.startswith(("http://", "https://")) else f"https://{normalize_domain(target)}"
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
-            response = await client.get(url)
-            html = response.text[:300000]
-            raw = RawEvidenceObject(source=self.id, source_url=str(response.url), payload={"status_code": response.status_code, "headers": dict(response.headers), "body": html}, content_type="text/html", headers=dict(response.headers))
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
+                response = await client.get(url)
+                html = response.text[:300000]
+                raw = RawEvidenceObject(source=self.id, source_url=str(response.url), payload={"status_code": response.status_code, "headers": dict(response.headers), "body": html}, content_type="text/html", headers=dict(response.headers))
+        except httpx.HTTPError as exc:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=[f"HTTP fingerprint failed: {exc.__class__.__name__}"], status="completed")
         soup = BeautifulSoup(html, "html.parser")
         title = soup.title.get_text(" ", strip=True) if soup.title else str(response.url)
         artifacts = [art("web_fingerprint", title[:96], str(response.url), self.id, str(response.url), "HAS_WEB_FINGERPRINT", {"status_code": response.status_code, "headers": dict(response.headers), "title": title})]
@@ -146,12 +158,22 @@ class IPRDAPAdapter(BaseAdapter):
 
     async def run(self, entity: EntityInput, context: RunContext) -> AdapterResult:
         ip = entity.value.strip()
+        try:
+            parsed_ip = ipaddress.ip_address(ip)
+            if parsed_ip.is_private or parsed_ip.is_loopback or parsed_ip.is_link_local or parsed_ip.is_reserved:
+                return AdapterResult(adapter_id=self.id, input=entity, warnings=["Private/reserved IP skipped for public RDAP"], status="completed")
+        except ValueError:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=["Invalid IP address"], status="skipped")
         url = f"https://rdap.org/ip/{quote(ip)}"
-        async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
-            response = await client.get(url)
-            raw = RawEvidenceObject(source=self.id, source_url=url, payload={"status_code": response.status_code, "body": response.text[:300000]}, content_type="application/json")
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "NexusIntel/2.3 public-osint"}) as client:
+                response = await client.get(url)
+                raw = RawEvidenceObject(source=self.id, source_url=url, payload={"status_code": response.status_code, "body": response.text[:300000]}, content_type="application/json")
+                if response.status_code >= 400:
+                    return AdapterResult(adapter_id=self.id, input=entity, raw_evidence=[raw], warnings=[f"IP RDAP returned HTTP {response.status_code}"], status="completed")
+                data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=[f"IP RDAP lookup failed: {exc.__class__.__name__}"], status="completed")
         artifacts = [art("rdap_record", f"RDAP {ip}", ip, self.id, url, "HAS_RDAP", data)]
         if data.get("handle"):
             artifacts.append(art("asn", data.get("handle"), data.get("handle"), self.id, url, "HAS_ALLOCATION", data))

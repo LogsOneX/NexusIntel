@@ -19,7 +19,10 @@ class UsernameProfilesAdapter(BaseAdapter):
     async def run(self, entity: EntityInput, context: RunContext) -> AdapterResult:
         username = entity.value.strip().lstrip("@")
         resolver = IdentityResolver(concurrency=16, timeout=10)
-        result = await resolver.resolve(username, limit=int(context.options.get("limit", 40) or 40))
+        try:
+            result = await resolver.resolve(username, limit=int(context.options.get("limit", 40) or 40))
+        except Exception as exc:
+            return AdapterResult(adapter_id=self.id, input=entity, warnings=[f"Username public profile checks failed: {exc.__class__.__name__}"], status="completed")
         artifacts = []
         raw_evidence = []
         for row in result.get("artifacts", []):
