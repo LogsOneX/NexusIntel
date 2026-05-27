@@ -23,6 +23,8 @@ COPY backend/modules ./backend/modules
 COPY backend/osint ./backend/osint
 COPY backend/investigator ./backend/investigator
 COPY backend/playbooks ./backend/playbooks
+COPY backend/entities ./backend/entities
+COPY backend/reporting ./backend/reporting
 COPY core ./core
 COPY modules ./modules
 COPY nexusrecon ./nexusrecon
