@@ -215,3 +215,27 @@ export type ConnectorDefinition = {
   disabled_reason?: string | null;
 };
 
+
+export type SourceCapability = {
+  id: string;
+  name: string;
+  row: string;
+  source_mode: "LOCAL_NATIVE" | "PUBLIC_PASSIVE" | "BROWSER_ASSISTED" | "IMPORTED_EVIDENCE" | "OPTIONAL_BYOK";
+  cost_profile: string;
+  requires_api_key: boolean;
+  requires_browser: boolean;
+  passive: boolean;
+  input_types: string[];
+  output_types: string[];
+  evidence_behavior: string;
+  noise_risk: string;
+  legal_note: string;
+  enabled: boolean;
+  disabled_reason?: string | null;
+};
+
+export type SourceCapabilityMatrix = {
+  rows: string[];
+  columns: SourceCapability["source_mode"][];
+  matrix: Record<string, Record<string, SourceCapability[]>>;
+};

@@ -1,4 +1,5 @@
 import type { ArtifactBinItem, Investigation, TransformDefinition } from "./types";
+import { entityDefinitionFor } from "./entityTypes";
 import {
   mapApiComplianceToUiCompliance,
   mapApiEdgeToUiEdge,
@@ -80,8 +81,14 @@ export function getNodeConfidence(apiNode: any): number {
 
 export function getNodeVisual(type: string): StudioNodeVisual {
   const clean = String(type || "").toLowerCase();
-  if (clean.includes("risk") || clean.includes("suspicious")) return { accent: "#EF4444", code: "RISK", icon: "alert", family: "threat" };
-  if (clean.includes("candidate") || clean.includes("possible")) return { accent: "#F59E0B", code: "LEAD", icon: "target", family: "candidate" };
+  if (clean.includes("risk") || clean.includes("suspicious") || clean.includes("malware") || clean.includes("phishing")) return { accent: "#EF4444", code: "RISK", icon: "alert", family: "threat" };
+  if (clean.includes("candidate") || clean.includes("possible") || clean.includes("claim")) return { accent: "#F59E0B", code: "LEAD", icon: "target", family: "candidate" };
+  const definition = entityDefinitionFor(clean);
+  if (definition) {
+    const family = String(definition.family || definition.group || "entity").toLowerCase();
+    const icon = family.includes("person") ? "identity" : family.includes("communication") ? "mail" : family.includes("infrastructure") ? "server" : family.includes("geo") || family.includes("location") ? "pin" : family.includes("crypto") ? "wallet" : family.includes("document") || family.includes("evidence") ? "file" : family.includes("cyber") ? "alert" : family.includes("organization") ? "target" : "target";
+    return { accent: definition.color || "#3B82F6", code: clean.slice(0, 8).toUpperCase(), icon, family };
+  }
   return STUDIO_VISUALS[clean] || { accent: "#3B82F6", code: "ENTITY", icon: "target", family: "identity" };
 }
 

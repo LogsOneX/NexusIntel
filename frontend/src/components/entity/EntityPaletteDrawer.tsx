@@ -27,14 +27,19 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   evidence: FileText,
 };
 
-const GROUP_ACCENT: Record<EntityGroup, string> = {
-  Identity: "identity",
-  Contact: "contact",
-  Infrastructure: "infrastructure",
-  Geo: "geo",
-  Asset: "asset",
-  Crypto: "crypto",
-  Analyst: "analyst",
+const GROUP_ACCENT: Partial<Record<EntityGroup, string>> = {
+  "Person / Identity": "identity",
+  "Organization / Company": "organization",
+  "Infrastructure": "infrastructure",
+  "Social / Platform Presence": "identity",
+  "Communication": "contact",
+  "Location / Geo": "geo",
+  "Crypto / Blockchain": "crypto",
+  "Financial / Fraud Signals": "crypto",
+  "Documents / Files": "asset",
+  "Cyber Threat / Security": "infrastructure",
+  "Vehicle / Asset": "asset",
+  "Evidence / Analyst": "analyst",
 };
 
 export default function EntityPaletteDrawer({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (kind: string) => void }) {
@@ -55,7 +60,7 @@ export default function EntityPaletteDrawer({ open, onClose, onPick }: { open: b
             {group.items.map((item) => {
               const Icon = TYPE_ICONS[item.type] || HelpCircle;
               return (
-                <div className={`ref-entity-type-row ${GROUP_ACCENT[item.group]}${item.enabled ? "" : " disabled"}`} key={item.type}>
+                <div className={`ref-entity-type-row ${GROUP_ACCENT[item.group] || "analyst"}${item.enabled ? "" : " disabled"}`} key={item.type}>
                   <GripVertical size={12} />
                   <EntityTypeCard icon={Icon} label={item.label} description={item.description} onClick={() => item.enabled && onPick(item.mapsTo || item.type)} />
                   <span>{item.enabled ? "+ ADD NODE" : "UNSUPPORTED"}</span>

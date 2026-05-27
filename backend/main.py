@@ -30,6 +30,8 @@ from backend.modules.provenance_store import ProvenanceStore
 from backend.modules.proxy_rotator import ProxyRotator
 from backend.osint.importers.csv_importers import preview_import_content
 from backend.osint.registry import registry
+from backend.entities.registry import entity_catalog
+from backend.osint.sources import source_catalog, source_capability_matrix
 from backend.osint.types import EntityInput, RawEvidenceObject, RunContext
 from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, ioc_csv, json_packet
 from backend.artifact_classifier import append_artifact_to_meta, artifact_record, classify_artifact, dedupe_records, route_artifact
@@ -216,12 +218,12 @@ class TransformRunRequest(BaseModel):
 
 
 class ImportPreviewRequest(BaseModel):
-    format: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv", "urlscan_json", "shodan_json", "ghunt_json", "holehe_json", "maigret_json", "sherlock_json"] = "spiderfoot_csv"
+    format: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv", "urlscan_json", "shodan_json", "censys_json", "virustotal_json", "ghunt_json", "holehe_json", "maigret_json", "sherlock_json", "exiftool_json", "nmap_xml", "amass_output", "subfinder_output", "etherscan_csv", "blockchain_csv", "browser_bookmarks_html", "saved_web_page_html", "screenshot_manifest"] = "spiderfoot_csv"
     content: str = Field(..., min_length=1, max_length=5_000_000)
 
 
 class ImportSubmitRequest(BaseModel):
-    type: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv", "urlscan_json", "shodan_json", "ghunt_json", "holehe_json", "maigret_json", "sherlock_json"] = "generic_ioc_csv"
+    type: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv", "urlscan_json", "shodan_json", "censys_json", "virustotal_json", "ghunt_json", "holehe_json", "maigret_json", "sherlock_json", "exiftool_json", "nmap_xml", "amass_output", "subfinder_output", "etherscan_csv", "blockchain_csv", "browser_bookmarks_html", "saved_web_page_html", "screenshot_manifest"] = "generic_ioc_csv"
     investigation_id: str | None = None
     preview_only: bool = True
     rows: list[dict[str, Any]] = Field(default_factory=list)
@@ -1966,6 +1968,16 @@ def task_graph(task_id: str, db: Session = Depends(get_db)) -> ApiResponse:
 def transform_registry(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     configured = configured_osint_key_names(db)
     return ApiResponse(ok=True, data={"adapters": registry.list_adapters(), "transforms": registry.list_transforms(configured)})
+
+@app.get("/api/v1/entities/catalog", response_model=ApiResponse)
+def entities_catalog(_: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data=entity_catalog())
+
+
+@app.get("/api/v1/sources/catalog", response_model=ApiResponse)
+def sources_catalog(_: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data={"items": source_catalog(), "matrix": source_capability_matrix()})
+
 
 
 @app.get("/api/v1/transforms/registry/diagnostics", response_model=ApiResponse)

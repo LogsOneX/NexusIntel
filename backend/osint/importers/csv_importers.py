@@ -46,6 +46,17 @@ def preview_json(content: str, limit: int = 25) -> dict[str, Any]:
     return {"headers": headers, "rows": clean_rows, "row_count_previewed": len(clean_rows)}
 
 
+def preview_text_lines(content: str, limit: int = 25) -> dict[str, Any]:
+    rows = []
+    for index, line in enumerate(content.splitlines()):
+        if index >= limit:
+            break
+        clean = line.strip()
+        if clean:
+            rows.append({"line": clean})
+    return {"headers": ["line"], "rows": rows, "row_count_previewed": len(rows)}
+
+
 def generic_ioc_mapping(headers: list[str]) -> dict[str, str]:
     lowered = {header.lower(): header for header in headers}
     return {
@@ -60,6 +71,9 @@ def preview_import_content(format: str, content: str, limit: int = 25) -> dict[s
     if format.endswith("json"):
         preview = preview_json(content, limit)
         return {"preview": preview, "mapping": generic_ioc_mapping(preview["headers"]), "parser": "json"}
+    if format.endswith("xml") or format.endswith("html") or format in {"amass_output", "subfinder_output", "screenshot_manifest"}:
+        preview = preview_text_lines(content, limit)
+        return {"preview": preview, "mapping": {"value": "line", "source": format, "type": format}, "parser": "text"}
     preview = preview_csv(content, limit)
     mapping = spiderfoot_mapping(preview["headers"]) if format == "spiderfoot_csv" else generic_ioc_mapping(preview["headers"])
     if format == "maltego_csv":

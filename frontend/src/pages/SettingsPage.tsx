@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BrainCircuit, ExternalLink, KeyRound, PlugZap, Save, TestTube2 } from "lucide-react";
-import type { ConnectorDefinition, PageProps } from "../lib/types";
+import type { ConnectorDefinition, PageProps, SourceCapabilityMatrix } from "../lib/types";
 import { apiJson } from "../lib/api";
 import StatusChip from "../components/common/StatusChip";
 
@@ -32,11 +32,13 @@ export default function SettingsPage({ token }: PageProps) {
   const [marketplace, setMarketplace] = useState<ConnectorDefinition[]>([]);
   const [testingConnector, setTestingConnector] = useState<string | null>(null);
   const [connectorError, setConnectorError] = useState<string | null>(null);
+  const [sourceMatrix, setSourceMatrix] = useState<SourceCapabilityMatrix | null>(null);
 
   useEffect(() => {
     apiJson<any>("/api/v1/settings", undefined, token).then((payload) => setSettings({ ...DEFAULT_SETTINGS, ...(payload.data.settings || {}) })).catch(() => undefined);
     apiJson<any>("/api/v1/investigator/model-status", undefined, token).then((payload) => setModelStatus(payload.data.status || null)).catch(() => undefined);
     apiJson<any>("/api/v1/connectors", undefined, token).then((payload) => setMarketplace(payload.data.items || [])).catch((err) => setConnectorError(err instanceof Error ? err.message : "Connector endpoint unavailable"));
+    apiJson<any>("/api/v1/sources/catalog", undefined, token).then((payload) => setSourceMatrix(payload.data.matrix || null)).catch(() => undefined);
   }, [token]);
 
   const update = (path: string[], value: string | boolean | number) => setSettings((current) => {
@@ -122,6 +124,12 @@ export default function SettingsPage({ token }: PageProps) {
               return <article className="connector-card" key={connector.id}><header><strong>{connector.name}</strong><div><StatusChip label={connector.test_status || (enabled ? "available" : "disabled")} tone={enabled ? "ok" : configured ? "warning" : "key"} /><StatusChip label={configured ? "configured" : "requires key"} tone={configured ? "ok" : "key"} /></div></header><p>{connector.legal_note}</p>{connector.disabled_reason && <small className="connector-warning">{connector.disabled_reason}</small>}<div className="connector-fields"><label><span>Enabled</span><input aria-label={`${connector.name} enabled`} type="checkbox" checked={settings.connectors?.[connector.id] !== false} onChange={(event) => update(["connectors", connector.id], event.target.checked)} /></label>{requiresKey && <label><span>API Key</span><input type="password" value={settings.api_keys?.[connector.id] || ""} onChange={(event) => update(["api_keys", connector.id], event.target.value)} placeholder="stored by backend" /></label>}<button type="button" onClick={() => void testConnector(connector.id)} disabled={testingConnector === connector.id}><TestTube2 size={13} />{testingConnector === connector.id ? "Testing" : "Test"}</button>{connector.documentation_url && <a href={connector.documentation_url} target="_blank" rel="noreferrer"><ExternalLink size={13} />Docs</a>}</div><small>{connector.category} / {connector.source_reliability || connector.reliability} / {connector.quota || connector.quota_placeholder || "quota not tracked"}</small>{!!unlocked.length && <div className="connector-unlocks">{unlocked.slice(0, 4).map((item: any) => <code key={String(item.id)}>{String(item.label || item.id)}</code>)}</div>}</article>;
             })}
           </div>
+        </section>
+
+        <section className="command-card premium-card source-capability-center">
+          <header><PlugZap size={16} /><strong>Local-Free Source Capability Matrix</strong><StatusChip label="API keys optional" tone="ok" /></header>
+          {!sourceMatrix ? <p className="muted-copy">Source catalog endpoint unavailable. Core transforms still rely on local/imported evidence where possible.</p> : <div className="source-matrix-wrap"><table className="source-matrix"><thead><tr><th>Capability</th>{sourceMatrix.columns.map((column) => <th key={column}>{column.replaceAll("_", " ")}</th>)}</tr></thead><tbody>{sourceMatrix.rows.map((row) => <tr key={row}><th>{row}</th>{sourceMatrix.columns.map((column) => { const items = sourceMatrix.matrix[row]?.[column] || []; return <td key={column}>{items.length ? items.slice(0, 2).map((item) => <span className={item.enabled ? "source-pill" : "source-pill disabled"} key={item.id} title={item.legal_note}>{item.name}<small>{item.cost_profile}</small></span>) : <span className="source-empty">-</span>}</td>; })}</tr>)}</tbody></table></div>}
+          <p className="muted-copy">Local Native, Public Passive, Browser Assisted, and Imported Evidence capabilities work without paid APIs. Optional BYOK connectors accelerate coverage but never replace evidence-first reasoning.</p>
         </section>
       </div>
       {saved && <div className="save-toast">Settings saved.</div>}
