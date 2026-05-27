@@ -106,6 +106,8 @@ class AdvancedCorrelationEngine:
                     "supporting_evidence": supporting[:12],
                     "contradicting_evidence": [reason for reason in reasons if "contradiction" in reason.lower()],
                     "requires_analyst_confirmation": True,
+                    "recommended_next_tests": ["Collect direct evidence for both nodes", "Validate shared artifact uniqueness", "Review contradictions before confirming edge"],
+                    "score_breakdown": {"base_score": score, "clamped_confidence": confidence, "shared_features": shared},
                     "legal_basis": "Derived from public-source evidence metadata and local deterministic correlation; not an attribution claim.",
                 })
         return sorted(correlations, key=lambda item: item["score"], reverse=True)

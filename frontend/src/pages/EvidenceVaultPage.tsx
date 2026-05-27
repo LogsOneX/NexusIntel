@@ -13,11 +13,25 @@ export default function EvidenceVaultPage({ token }: PageProps) {
   const [query, setQuery] = useState("");
   const [grade, setGrade] = useState("all");
   const [error, setError] = useState<string | null>(null);
+  const [qualitySummary, setQualitySummary] = useState<Record<string, any> | null>(null);
+  const [qualityById, setQualityById] = useState<Record<string, any>>({});
 
   useEffect(() => {
     apiJson<any>("/api/v1/evidence", undefined, token)
       .then((payload) => setItems(payload.data.items || []))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Evidence endpoint unavailable"));
+    apiJson<any>("/api/v1/cases", undefined, token)
+      .then((payload) => {
+        const first = payload.data.items?.[0]?.id;
+        if (!first) return null;
+        return apiJson<any>(`/api/v1/investigations/${first}/evidence-quality`, undefined, token);
+      })
+      .then((payload) => {
+        if (!payload) return;
+        setQualitySummary(payload.data.summary || null);
+        setQualityById(Object.fromEntries((payload.data.items || []).map((item: any) => [String(item.evidence_id), item])));
+      })
+      .catch(() => undefined);
   }, [token]);
 
   const rows = useMemo(() => {
@@ -38,7 +52,7 @@ export default function EvidenceVaultPage({ token }: PageProps) {
           <h1>Evidence Vault</h1>
           <p className="muted-copy">Browse public-source proof objects, hashes, source URLs, timestamps, and legal notes before trusting a graph relationship.</p>
         </div>
-        <StatusChip label={`${items.length} evidence objects`} tone="info" />
+        <div className="page-actions"><StatusChip label={`${items.length} evidence objects`} tone="info" />{qualitySummary && <StatusChip label={`${qualitySummary.average_quality || 0}% avg quality`} tone={(qualitySummary.average_quality || 0) >= 65 ? "ok" : "warning"} />}</div>
       </header>
       {error && <div className="nx-alert"><span>{error}</span></div>}
       <section className="vault-toolbar premium-card">
@@ -54,12 +68,12 @@ export default function EvidenceVaultPage({ token }: PageProps) {
       </section>
       {!rows.length ? <EmptyState title="No evidence available" message="Evidence appears after transforms store raw public-source proof. No fake evidence is displayed." icon={Database} /> : (
         <div className="vault-grid">
-          {rows.map((item) => <EvidenceCard evidence={item} key={item.id} onOpenRaw={() => setSelected(item)} />)}
+          {rows.map((item) => <div key={item.id} className="evidence-card-wrap"><EvidenceCard evidence={item} onOpenRaw={() => setSelected(item)} />{qualityById[item.id] && <div className="evidence-quality-strip"><StatusChip label={`${qualityById[item.id].quality_score}% quality`} tone={qualityById[item.id].report_safe ? "ok" : "warning"} /><button type="button" onClick={() => navigator.clipboard?.writeText(`evidence:${item.id}:${item.sha256}`)}>Copy citation</button></div>}</div>)}
         </div>
       )}
       <section className="command-card premium-card vault-note">
         <header><ShieldCheck size={15} /><strong>Evidence-first rule</strong></header>
-        <p>Nodes without source URL, fetched timestamp, confidence reason, or raw hash should be treated as weak leads until corroborated.</p>
+        <p>Nodes without source URL, fetched timestamp, confidence reason, or raw hash should be treated as weak leads until corroborated. Report-safe status is calculated from source, freshness, directness, and hash verification.</p>
       </section>
       <EvidenceDrawer open={Boolean(selected)} evidence={selected} onClose={() => setSelected(null)} />
     </section>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BrainCircuit, KeyRound, PlugZap, Save } from "lucide-react";
+import { BrainCircuit, ExternalLink, KeyRound, PlugZap, Save, TestTube2 } from "lucide-react";
 import type { ConnectorDefinition, PageProps } from "../lib/types";
 import { apiJson } from "../lib/api";
 import StatusChip from "../components/common/StatusChip";
@@ -29,10 +29,14 @@ export default function SettingsPage({ token }: PageProps) {
   const [saved, setSaved] = useState(false);
   const [filter, setFilter] = useState("all");
   const [modelStatus, setModelStatus] = useState<Record<string, any> | null>(null);
+  const [marketplace, setMarketplace] = useState<ConnectorDefinition[]>([]);
+  const [testingConnector, setTestingConnector] = useState<string | null>(null);
+  const [connectorError, setConnectorError] = useState<string | null>(null);
 
   useEffect(() => {
     apiJson<any>("/api/v1/settings", undefined, token).then((payload) => setSettings({ ...DEFAULT_SETTINGS, ...(payload.data.settings || {}) })).catch(() => undefined);
     apiJson<any>("/api/v1/investigator/model-status", undefined, token).then((payload) => setModelStatus(payload.data.status || null)).catch(() => undefined);
+    apiJson<any>("/api/v1/connectors", undefined, token).then((payload) => setMarketplace(payload.data.items || [])).catch((err) => setConnectorError(err instanceof Error ? err.message : "Connector endpoint unavailable"));
   }, [token]);
 
   const update = (path: string[], value: string | boolean | number) => setSettings((current) => {
@@ -47,12 +51,27 @@ export default function SettingsPage({ token }: PageProps) {
     await apiJson("/api/v1/settings", { method: "PUT", body: JSON.stringify({ settings }) }, token);
     const status = await apiJson<any>("/api/v1/investigator/model-status", undefined, token).catch(() => null);
     if (status?.data?.status) setModelStatus(status.data.status);
+    await apiJson<any>("/api/v1/connectors", undefined, token).then((payload) => setMarketplace(payload.data.items || [])).catch(() => undefined);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 1800);
   };
 
-  const rows = useMemo(() => CONNECTORS.filter((item) => filter === "all" || item.category === filter), [filter]);
-  const categories = ["all", ...Array.from(new Set(CONNECTORS.map((item) => item.category)))];
+  const connectorRows = marketplace.length ? marketplace : CONNECTORS;
+  const rows = useMemo(() => connectorRows.filter((item) => filter === "all" || item.category === filter), [connectorRows, filter]);
+  const categories = ["all", ...Array.from(new Set(connectorRows.map((item) => item.category)))];
+
+  const testConnector = async (id: string) => {
+    setTestingConnector(id);
+    setConnectorError(null);
+    try {
+      const payload = await apiJson<any>("/api/v1/connectors/" + encodeURIComponent(id) + "/test", { method: "POST" }, token);
+      setMarketplace(payload.data.items || marketplace);
+    } catch (err) {
+      setConnectorError(err instanceof Error ? err.message : "Connector test failed");
+    } finally {
+      setTestingConnector(null);
+    }
+  };
 
   return (
     <section className="settings-page premium-page studio-page scroll-page">
@@ -60,6 +79,7 @@ export default function SettingsPage({ token }: PageProps) {
         <div><span className="micro-label">Connector Center</span><h1>BYOK, Local AI, and Rate Limits</h1></div>
         <button className="nx-primary" type="button" onClick={save}><Save size={15} />Save Settings</button>
       </header>
+      {connectorError && <div className="nx-alert"><span>{connectorError}</span></div>}
 
       <div className="settings-grid premium-settings">
         <section className="command-card premium-card ai-settings-card">
@@ -95,9 +115,11 @@ export default function SettingsPage({ token }: PageProps) {
           <header><PlugZap size={16} /><strong>OSINT Connectors</strong><select value={filter} onChange={(event) => setFilter(event.target.value)}>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></header>
           <div className="connector-list">
             {rows.map((connector) => {
-              const configured = Boolean(settings.api_keys?.[connector.id]) || !connector.requires_key;
-              const enabled = settings.connectors?.[connector.id] !== false;
-              return <article className="connector-card" key={connector.id}><header><strong>{connector.name}</strong><div><StatusChip label={enabled ? "enabled" : "disabled"} tone={enabled ? "ok" : "muted"} /><StatusChip label={configured ? "configured" : "requires key"} tone={configured ? "ok" : "key"} /></div></header><p>{connector.legal_note}</p><div className="connector-fields"><label><span>Enabled</span><input aria-label={`${connector.name} enabled`} type="checkbox" checked={enabled} onChange={(event) => update(["connectors", connector.id], event.target.checked)} /></label>{connector.requires_key && <label><span>API Key</span><input type="password" value={settings.api_keys?.[connector.id] || ""} onChange={(event) => update(["api_keys", connector.id], event.target.value)} placeholder="stored by backend" /></label>}<button type="button" onClick={() => update(["connectors", `${connector.id}_last_tested`], new Date().toISOString())}>Test</button></div><small>{connector.category} / {connector.reliability}</small></article>;
+              const requiresKey = Boolean(connector.requires_api_key ?? connector.requires_key);
+              const configured = Boolean(connector.configured ?? settings.api_keys?.[connector.id]) || !requiresKey;
+              const enabled = connector.enabled ?? settings.connectors?.[connector.id] !== false;
+              const unlocked = connector.unlocked_transforms || [];
+              return <article className="connector-card" key={connector.id}><header><strong>{connector.name}</strong><div><StatusChip label={connector.test_status || (enabled ? "available" : "disabled")} tone={enabled ? "ok" : configured ? "warning" : "key"} /><StatusChip label={configured ? "configured" : "requires key"} tone={configured ? "ok" : "key"} /></div></header><p>{connector.legal_note}</p>{connector.disabled_reason && <small className="connector-warning">{connector.disabled_reason}</small>}<div className="connector-fields"><label><span>Enabled</span><input aria-label={`${connector.name} enabled`} type="checkbox" checked={settings.connectors?.[connector.id] !== false} onChange={(event) => update(["connectors", connector.id], event.target.checked)} /></label>{requiresKey && <label><span>API Key</span><input type="password" value={settings.api_keys?.[connector.id] || ""} onChange={(event) => update(["api_keys", connector.id], event.target.value)} placeholder="stored by backend" /></label>}<button type="button" onClick={() => void testConnector(connector.id)} disabled={testingConnector === connector.id}><TestTube2 size={13} />{testingConnector === connector.id ? "Testing" : "Test"}</button>{connector.documentation_url && <a href={connector.documentation_url} target="_blank" rel="noreferrer"><ExternalLink size={13} />Docs</a>}</div><small>{connector.category} / {connector.source_reliability || connector.reliability} / {connector.quota || connector.quota_placeholder || "quota not tracked"}</small>{!!unlocked.length && <div className="connector-unlocks">{unlocked.slice(0, 4).map((item: any) => <code key={String(item.id)}>{String(item.label || item.id)}</code>)}</div>}</article>;
             })}
           </div>
         </section>

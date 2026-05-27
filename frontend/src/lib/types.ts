@@ -69,7 +69,14 @@ export type TransformDefinition = {
   legal_note?: string;
   passive?: boolean;
   confidence_profile?: string;
+  cost_profile?: string;
+  runtime_profile?: string;
   estimated_runtime?: string;
+  noise_risk?: string;
+  evidence_behavior?: string;
+  output_artifact_class?: string;
+  recommended_next_transforms?: string[];
+  playbook_id?: string | null;
 };
 
 export type EvidenceRecord = {
@@ -188,8 +195,23 @@ export type ConnectorDefinition = {
   id: string;
   name: string;
   category: string;
-  reliability: string;
+  reliability?: string;
+  source_reliability?: string;
   legal_note: string;
-  requires_key: boolean;
+  requires_key?: boolean;
+  requires_api_key?: boolean;
+  configured?: boolean;
+  enabled?: boolean;
+  key_present?: boolean;
+  testable?: boolean;
+  implemented?: boolean;
+  test_status?: string;
+  last_tested?: string | null;
+  last_error?: string | null;
+  unlocked_transforms?: TransformDefinition[];
+  quota?: string;
+  quota_placeholder?: string;
+  documentation_url?: string | null;
+  disabled_reason?: string | null;
 };
 

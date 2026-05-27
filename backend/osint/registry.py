@@ -163,7 +163,43 @@ class AdapterRegistry:
                 "status": "enabled" if enabled else "disabled",
                 "reasons": reasons,
             })
-        return {"errors": errors, "warnings": warnings, "transforms": transform_diagnostics, "adapters": adapter_diagnostics}
+        disabled = [item for item in transform_diagnostics if item["status"] != "enabled"]
+        missing_adapters = [item for item in transform_diagnostics if not item["implemented"]]
+        missing_api_keys = sorted({key for item in transform_diagnostics for key in item.get("missing_keys", [])})
+        count_by_entity_type: dict[str, int] = {}
+        count_by_connector: dict[str, int] = {}
+        source_reliability_by_transform: dict[str, str] = {}
+        for transform in self.transforms.values():
+            for entity_type in transform.input_types:
+                count_by_entity_type[entity_type] = count_by_entity_type.get(entity_type, 0) + 1
+            connector = transform.adapter_id.split(".", 1)[0]
+            count_by_connector[connector] = count_by_connector.get(connector, 0) + 1
+            if transform.requires_api_key:
+                source_reliability_by_transform[transform.id] = "official_api_byok"
+            elif transform.adapter_id.startswith(("domain.", "ip.", "email.domain_workspace")):
+                source_reliability_by_transform[transform.id] = "primary_public_source"
+            elif "import" in transform.adapter_id:
+                source_reliability_by_transform[transform.id] = "analyst_provided"
+            else:
+                source_reliability_by_transform[transform.id] = "public_web_or_derived"
+        recommended_connector_setup = []
+        for key in missing_api_keys:
+            unlocked = [item["transform_id"] for item in transform_diagnostics if key in item.get("missing_keys", [])]
+            recommended_connector_setup.append({"key": key, "unlocks": unlocked, "reason": "Optional BYOK connector is unavailable until configured."})
+        return {
+            "errors": errors,
+            "critical_errors": errors,
+            "warnings": warnings,
+            "disabled_transforms": disabled,
+            "missing_adapters": missing_adapters,
+            "missing_api_keys": missing_api_keys,
+            "transform_count_by_entity_type": count_by_entity_type,
+            "transform_count_by_connector": count_by_connector,
+            "source_reliability_by_transform": source_reliability_by_transform,
+            "recommended_connector_setup": recommended_connector_setup,
+            "transforms": transform_diagnostics,
+            "adapters": adapter_diagnostics,
+        }
 
 
 registry = AdapterRegistry()

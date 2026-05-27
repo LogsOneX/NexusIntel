@@ -10177,3 +10177,18 @@ body,
   margin: 0;
   padding-left: 14px;
 }
+
+/* Enterprise workbench additions */
+.connector-warning { color: var(--amber, #F59E0B); display: block; margin: 6px 0; }
+.connector-unlocks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.connector-unlocks code { border: 1px solid var(--border, #2D2D30); background: var(--nested, #0F0F11); color: var(--text-muted, #8B8B91); padding: 3px 6px; border-radius: 4px; font-size: 10px; }
+.evidence-card-wrap { display: grid; gap: 6px; }
+.evidence-quality-strip { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border, #2D2D30); background: var(--nested, #0F0F11); padding: 6px 8px; border-radius: 6px; }
+.evidence-quality-strip button { border: 1px solid var(--border, #2D2D30); background: var(--button, #232326); color: var(--text, #E0E0E3); border-radius: 4px; padding: 4px 7px; font-size: 11px; }
+.graph-enterprise-tools { position: absolute; left: 14px; bottom: 14px; z-index: 22; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: min(760px, calc(100% - 180px)); border: 1px solid rgba(45,45,48,.88); background: rgba(20,20,22,.92); backdrop-filter: blur(12px); padding: 7px; border-radius: 8px; }
+.graph-enterprise-tools button, .graph-enterprise-tools label { border: 1px solid var(--border, #2D2D30); background: var(--button, #232326); color: var(--text, #E0E0E3); border-radius: 5px; padding: 5px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
+.graph-enterprise-tools input[type="range"] { width: 82px; }
+.graph-minimap { position: absolute; right: 14px; bottom: 76px; width: 152px; height: 96px; z-index: 21; border: 1px solid rgba(45,45,48,.9); background: rgba(10,10,11,.88); border-radius: 8px; box-shadow: 0 16px 42px rgba(0,0,0,.36); overflow: hidden; }
+.graph-minimap::before { content: "MINIMAP"; position: absolute; left: 8px; top: 6px; font: 600 9px/1 JetBrains Mono, monospace; color: var(--text-muted, #8B8B91); }
+.graph-minimap i { position: absolute; width: 5px; height: 5px; border-radius: 999px; background: #3B82F6; box-shadow: 0 0 8px rgba(59,130,246,.45); }
+.graph-minimap i.active { background: #F59E0B; width: 7px; height: 7px; }
