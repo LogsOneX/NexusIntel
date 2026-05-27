@@ -119,6 +119,19 @@ export default function InvestigatorPanel({ token }: { token: string }) {
     }
   };
 
+  const runPlaybook = async (confirmed: boolean) => {
+    if (!caseId || !playbookId) return;
+    setLoading(true);
+    try {
+      const payload = await apiJson<any>(`/api/v1/investigations/${caseId}/playbooks/${playbookId}/run`, { method: "POST", body: JSON.stringify({ confirmed }) }, token);
+      setPlaybookPlan(payload.data || null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Playbook run failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!cases.length) {
     return <section className="investigator-panel"><div className="investigator-empty"><BrainCircuit size={28} /><h2>No case available</h2><p>Create or open an investigation first. The brain will not fabricate intelligence without case evidence.</p></div></section>;
   }
@@ -134,7 +147,7 @@ export default function InvestigatorPanel({ token }: { token: string }) {
         <aside className="investigator-left">
           <ModelStatusCard status={modelStatus} />
           <ReportReadinessCard readiness={answer?.report_readiness as any} />
-          <PlaybookRunner playbooks={playbooks as any} activePlaybook={playbookId} plan={playbookPlan as any} onSelect={setPlaybookId} onPlan={planPlaybook} />
+          <PlaybookRunner playbooks={playbooks as any} activePlaybook={playbookId} plan={playbookPlan as any} onSelect={setPlaybookId} onPlan={planPlaybook} onRun={(confirmed) => void runPlaybook(confirmed)} />
           <article className="investigator-card">
             <header><BrainCircuit size={15} /><strong>Quick Prompts</strong><span>{activeCase?.target_type || "case"}</span></header>
             <div className="investigator-prompts">{QUICK_PROMPTS.map((item) => <button key={item} type="button" onClick={() => { setPrompt(item); void ask(item); }} disabled={loading}>{item}</button>)}</div>

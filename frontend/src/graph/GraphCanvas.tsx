@@ -259,8 +259,26 @@ export default function GraphCanvas({
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [actionMenu, setActionMenu] = useState<{ nodeId: string; mode: "compact" | "full" } | null>(null);
   const [confirmNoiseNodeId, setConfirmNoiseNodeId] = useState<string | null>(null);
+  const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(() => new Set());
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(() => new Set());
+  const [showCandidates, setShowCandidates] = useState(false);
+  const [showSignals, setShowSignals] = useState(true);
+  const [minConfidence, setMinConfidence] = useState(0);
 
-  const visibleNodes = useMemo(() => nodes.filter(isGraphVisible), [nodes]);
+  const visibleNodes = useMemo(() => nodes.filter((node) => {
+    if (hiddenNodeIds.has(node.id)) return false;
+    const data = node.data || {};
+    const visibility = String(data.graph_visibility || "").toLowerCase();
+    const artifactClass = String(data.artifact_class || data.classification || "").toLowerCase();
+    const type = String(node.type || "").toLowerCase();
+    const isCandidate = CANDIDATE_NODE_TYPES.has(type) || CANDIDATE_NODE_TYPES.has(artifactClass) || visibility === "candidate_bin";
+    const isSignal = visibility === "signal_badge" || artifactClass === "signal";
+    if (isCandidate && !showCandidates) return false;
+    if (isSignal && !showSignals) return false;
+    if (!isCandidate && !isGraphVisible(node)) return false;
+    if (getStudioNodeConfidence(node) < minConfidence) return false;
+    return true;
+  }), [hiddenNodeIds, minConfidence, nodes, showCandidates, showSignals]);
   const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes]);
   const visibleEdges = useMemo(() => edges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)), [edges, visibleNodeIds]);
   const studioNodes = useMemo(() => visibleNodes.map((node, index) => ({ api: node, ui: mapApiNodeToStudioNode(node, index) })), [visibleNodes]);
@@ -606,7 +624,7 @@ export default function GraphCanvas({
           {studioNodes.map(({ api, ui }) => {
             const position = positions[api.id] || { x: 0, y: 0 };
             const visual = getStudioNodeVisual(api.type);
-            const selected = selectedId === api.id;
+            const selected = selectedId === api.id || multiSelectedIds.has(api.id);
             const hovered = hoveredNodeId === api.id;
             const confidence = getStudioNodeConfidence(api);
             const source = nodeSource(api);
@@ -627,6 +645,13 @@ export default function GraphCanvas({
                     suppressClickNodeRef.current = null;
                     event.preventDefault();
                     return;
+                  }
+                  if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                    setMultiSelectedIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(api.id)) next.delete(api.id); else next.add(api.id);
+                      return next;
+                    });
                   }
                   onSelectNode(api);
                   setDataPanelOpen?.(true);
@@ -692,7 +717,31 @@ export default function GraphCanvas({
           <small>{nodeById.get(hoveredNodeId)?.ui.source}</small>
         </div>
       )}
-      <div className="graph-mini-stats"><span>E <strong>{visibleNodes.length}</strong></span><span>R <strong>{visibleEdges.length}</strong></span><span>{layoutMode}</span></div>
+      <div className="graph-mini-stats"><span>E <strong>{visibleNodes.length}</strong></span><span>R <strong>{visibleEdges.length}</strong></span><span>{layoutMode}</span><span>Sel <strong>{Math.max(multiSelectedIds.size, selectedId ? 1 : 0)}</strong></span></div>
+      <div className="graph-enterprise-tools">
+        <button type="button" onClick={() => {
+          if (!selectedId) return;
+          const neighbors = new Set<string>([selectedId]);
+          visibleEdges.forEach((edge) => { if (edge.source === selectedId) neighbors.add(edge.target); if (edge.target === selectedId) neighbors.add(edge.source); });
+          setMultiSelectedIds(neighbors);
+          onSystemLog?.(`Selected ${neighbors.size} neighbor node(s).`);
+        }}>Select Neighbors</button>
+        <button type="button" onClick={() => {
+          const ids = new Set(multiSelectedIds.size ? multiSelectedIds : selectedId ? [selectedId] : []);
+          setHiddenNodeIds((current) => new Set([...current, ...ids]));
+          setActionMenu(null);
+        }}>Hide Selected</button>
+        <button type="button" onClick={() => { setHiddenNodeIds(new Set()); setMultiSelectedIds(new Set()); }}>Show All</button>
+        <label><input type="checkbox" checked={showCandidates} onChange={(event) => setShowCandidates(event.target.checked)} />Candidates</label>
+        <label><input type="checkbox" checked={showSignals} onChange={(event) => setShowSignals(event.target.checked)} />Signals</label>
+        <label>Confidence<input type="range" min="0" max="90" step="10" value={minConfidence} onChange={(event) => setMinConfidence(Number(event.target.value))} /></label>
+      </div>
+      <div className="graph-minimap" aria-label="Graph minimap">
+        {visibleNodes.slice(0, 160).map((node, index) => {
+          const pos = positions[node.id] || positionFor(index, visibleNodes.length, 1240, 760, layoutMode);
+          return <i key={node.id} className={selectedId === node.id || multiSelectedIds.has(node.id) ? "active" : ""} style={{ left: `${clamp((pos.x / Math.max(1, worldBounds.width)) * 100, 1, 96)}%`, top: `${clamp((pos.y / Math.max(1, worldBounds.height)) * 100, 1, 92)}%` }} />;
+        })}
+      </div>
       <div className="graph-floating-controls">
         <button type="button" onClick={() => zoomAtCenter(1.12)} title="Zoom in"><ZoomIn size={15} /></button>
         <button type="button" onClick={() => zoomAtCenter(0.88)} title="Zoom out"><ZoomOut size={15} /></button>

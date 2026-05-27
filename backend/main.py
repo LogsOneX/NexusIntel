@@ -28,10 +28,12 @@ from backend.modules.graph_intel import build_graph_intelligence
 from backend.modules.collaboration_bus import CollaborationBus
 from backend.modules.provenance_store import ProvenanceStore
 from backend.modules.proxy_rotator import ProxyRotator
-from backend.osint.importers.csv_importers import preview_csv, spiderfoot_mapping
+from backend.osint.importers.csv_importers import preview_import_content
 from backend.osint.registry import registry
+from backend.entities.registry import entity_catalog
+from backend.osint.sources import source_catalog, source_capability_matrix
 from backend.osint.types import EntityInput, RawEvidenceObject, RunContext
-from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, designed_pdf_packet, html_packet, ioc_csv, json_packet
+from backend.osint.services.analyst_pipeline import build_analyst_pipeline, build_correlations, ioc_csv, json_packet
 from backend.artifact_classifier import append_artifact_to_meta, artifact_record, classify_artifact, dedupe_records, route_artifact
 from backend.investigator.brain import InvestigatorBrain
 from backend.investigator.hypothesis import HypothesisEngine
@@ -44,9 +46,11 @@ from backend.investigator.report import ReportReadinessEngine
 from backend.investigator.types import InvestigatorQuestion
 from backend.investigator.validator import Validator
 from backend.investigator.correlation import AdvancedCorrelationEngine
-from backend.investigator.connectors import connector_status
-from backend.investigator.evidence_os import build_evidence_map, diff_evidence, evidence_excerpt, verify_evidence
+from backend.osint.connectors import connector_status, test_connector
+from backend.investigator.evidence_os import build_evidence_map, diff_evidence, evidence_excerpt, evidence_quality_report, redact_preview, verify_evidence
 from backend.playbooks import PlaybookEngine
+from backend.reporting.html_report import html_packet
+from backend.reporting.pdf_report import designed_pdf_packet
 
 
 DATABASE_URL = os.getenv(
@@ -214,8 +218,16 @@ class TransformRunRequest(BaseModel):
 
 
 class ImportPreviewRequest(BaseModel):
-    format: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv"] = "spiderfoot_csv"
+    format: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv", "urlscan_json", "shodan_json", "censys_json", "virustotal_json", "ghunt_json", "holehe_json", "maigret_json", "sherlock_json", "exiftool_json", "nmap_xml", "amass_output", "subfinder_output", "etherscan_csv", "blockchain_csv", "browser_bookmarks_html", "saved_web_page_html", "screenshot_manifest"] = "spiderfoot_csv"
     content: str = Field(..., min_length=1, max_length=5_000_000)
+
+
+class ImportSubmitRequest(BaseModel):
+    type: Literal["spiderfoot_csv", "maltego_csv", "generic_ioc_csv", "urlscan_json", "shodan_json", "censys_json", "virustotal_json", "ghunt_json", "holehe_json", "maigret_json", "sherlock_json", "exiftool_json", "nmap_xml", "amass_output", "subfinder_output", "etherscan_csv", "blockchain_csv", "browser_bookmarks_html", "saved_web_page_html", "screenshot_manifest"] = "generic_ioc_csv"
+    investigation_id: str | None = None
+    preview_only: bool = True
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    mapping: dict[str, Any] = Field(default_factory=dict)
 
 
 class ManualEntityRequest(BaseModel):
@@ -273,6 +285,10 @@ class HypothesisDecisionRequest(BaseModel):
 class EvidenceDiffRequest(BaseModel):
     left_evidence_id: str
     right_evidence_id: str
+
+
+class EvidenceRedactPreviewRequest(BaseModel):
+    terms: list[str] = Field(default_factory=list, max_length=32)
 
 
 class PlaybookRunRequest(BaseModel):
@@ -772,6 +788,9 @@ API_KEY_ALIASES = {
     "VIRUSTOTAL_API_KEY": ("virustotal", "vt"),
     "TWILIO_LOOKUP_API_KEY": ("twilio",),
     "NUMVERIFY_API_KEY": ("numverify",),
+    "SECURITYTRAILS_API_KEY": ("securitytrails", "securitytrails_api_key"),
+    "INTELX_API_KEY": ("intelx", "intelx_api_key"),
+    "OPENCORPORATES_API_KEY": ("opencorporates",),
 }
 
 
@@ -1412,7 +1431,27 @@ def write_settings(payload: SettingsUpdate, db: Session = Depends(get_db), _: st
 
 @app.get("/api/v1/connectors", response_model=ApiResponse)
 def connector_marketplace(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
-    return ApiResponse(ok=True, data={"items": connector_status(get_settings(db))})
+    configured = configured_osint_key_names(db)
+    transforms = registry.list_transforms(configured)
+    return ApiResponse(ok=True, data={"items": connector_status(get_settings(db), configured, transforms)})
+
+
+@app.post("/api/v1/connectors/{connector_id}/test", response_model=ApiResponse)
+def test_connector_endpoint(connector_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    configured = configured_osint_key_names(db)
+    transforms = registry.list_transforms(configured)
+    result = test_connector(connector_id, get_settings(db), configured, transforms)
+    record = db.get(SettingRecord, "runtime")
+    settings = get_settings(db)
+    connectors = dict(settings.get("connectors") or {})
+    connectors[f"{connector_id}_last_tested"] = result.get("tested_at")
+    connectors[f"{connector_id}_last_error"] = None if result.get("ok") else result.get("message")
+    settings["connectors"] = connectors
+    if record:
+        record.value = settings
+        record.updated_at = datetime.utcnow()
+        db.commit()
+    return ApiResponse(ok=True, data={"result": result, "items": connector_status(settings, configured, transforms)})
 
 
 @app.post("/api/v1/oracle/chat", response_model=ApiResponse)
@@ -1930,6 +1969,16 @@ def transform_registry(db: Session = Depends(get_db), _: str = Depends(current_o
     configured = configured_osint_key_names(db)
     return ApiResponse(ok=True, data={"adapters": registry.list_adapters(), "transforms": registry.list_transforms(configured)})
 
+@app.get("/api/v1/entities/catalog", response_model=ApiResponse)
+def entities_catalog(_: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data=entity_catalog())
+
+
+@app.get("/api/v1/sources/catalog", response_model=ApiResponse)
+def sources_catalog(_: str = Depends(current_operator)) -> ApiResponse:
+    return ApiResponse(ok=True, data={"items": source_catalog(), "matrix": source_capability_matrix()})
+
+
 
 @app.get("/api/v1/transforms/registry/diagnostics", response_model=ApiResponse)
 def transform_registry_diagnostics(db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
@@ -2047,6 +2096,15 @@ def evidence_map(investigation_id: str, db: Session = Depends(get_db), _: str = 
     return ApiResponse(ok=True, data=build_evidence_map(graph, evidence))
 
 
+@app.get("/api/v1/investigations/{investigation_id}/evidence-quality", response_model=ApiResponse)
+def evidence_quality(investigation_id: str, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if not db.get(Investigation, investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    graph = graph_payload(db, investigation_id)
+    evidence = investigation_evidence(db, investigation_id)
+    return ApiResponse(ok=True, data=evidence_quality_report(graph, evidence))
+
+
 @app.get("/api/v1/evidence/{evidence_id}/excerpt", response_model=ApiResponse)
 def read_evidence_excerpt(evidence_id: str, limit: int = 2000, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
     record = db.get(DataProvenance, evidence_id)
@@ -2070,6 +2128,14 @@ def diff_evidence_endpoint(payload: EvidenceDiffRequest, db: Session = Depends(g
     if not left or not right:
         raise HTTPException(status_code=404, detail="Evidence record not found")
     return ApiResponse(ok=True, data={"diff": diff_evidence(left, right)})
+
+
+@app.post("/api/v1/evidence/{evidence_id}/redact-preview", response_model=ApiResponse)
+def redact_evidence_preview_endpoint(evidence_id: str, payload: EvidenceRedactPreviewRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    record = db.get(DataProvenance, evidence_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Evidence record not found")
+    return ApiResponse(ok=True, data={"preview": redact_preview(record, payload.terms)})
 
 
 @app.get("/api/v1/investigations/{investigation_id}/analyst-pipeline", response_model=ApiResponse)
@@ -2144,9 +2210,29 @@ def export_analyst_packet(investigation_id: str, format: Literal["html", "pdf", 
 
 @app.post("/api/v1/importers/preview", response_model=ApiResponse)
 def preview_import(payload: ImportPreviewRequest, _: str = Depends(current_operator)) -> ApiResponse:
-    preview = preview_csv(payload.content)
-    mapping = spiderfoot_mapping(preview["headers"]) if payload.format == "spiderfoot_csv" else {"columns": preview["headers"], "mapping": {}, "confidence": "analyst_review_required"}
-    return ApiResponse(ok=True, data={"preview": preview, "mapping": mapping, "legal_basis": "Analyst-provided import preview; no graph write until operator confirms import."})
+    parsed = preview_import_content(payload.format, payload.content)
+    return ApiResponse(ok=True, data={**parsed, "format": payload.format, "legal_basis": "Analyst-provided import preview; no graph write until operator confirms import."})
+
+
+@app.post("/api/v1/imports", response_model=ApiResponse)
+def submit_import(payload: ImportSubmitRequest, db: Session = Depends(get_db), _: str = Depends(current_operator)) -> ApiResponse:
+    if payload.preview_only:
+        return ApiResponse(ok=True, data={"status": "preview_only", "rows": payload.rows[:50], "inserted": 0})
+    if not payload.investigation_id or not db.get(Investigation, payload.investigation_id):
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    stored = ProvenanceStore().put(investigation_id=payload.investigation_id, source=f"import:{payload.type}", content={"rows": payload.rows, "mapping": payload.mapping, "format": payload.type})
+    record = DataProvenance(id=str(uuid.uuid4()), investigation_id=payload.investigation_id, entity_id=None, source=f"import:{payload.type}", uri=stored["uri"], sha256=stored["sha256"], content_type=stored["content_type"], size_bytes=str(stored["size"]), meta={"storage": stored["storage"], "source_url": f"import:{payload.type}", "legal_basis": "Analyst-provided import; previewed before graph insertion.", "report_safe": False})
+    db.add(record)
+    investigation = db.get(Investigation, payload.investigation_id)
+    if investigation:
+        meta = dict(investigation.meta or {})
+        imports = list(meta.get("imports") or [])
+        imports.append({"type": payload.type, "rows": len(payload.rows), "evidence_id": record.id, "created_at": now_iso()})
+        meta["imports"] = imports[-100:]
+        investigation.meta = meta
+        investigation.updated_at = datetime.utcnow()
+    db.commit()
+    return ApiResponse(ok=True, data={"status": "stored_as_evidence", "evidence_id": record.id, "inserted": 0, "rows_received": len(payload.rows), "note": "Import stored as analyst-provided evidence. No graph nodes were created automatically."})
 
 
 @app.post("/api/v1/provenance", response_model=ApiResponse)

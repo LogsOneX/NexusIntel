@@ -26,6 +26,9 @@ export default function ReportsPage({ token }: PageProps) {
   const [title, setTitle] = useState("NexusIntel Intelligence Dossier");
   const [analyst, setAnalyst] = useState("Operator");
   const [sections, setSections] = useState(() => new Set(REPORT_SECTIONS));
+  const [includeCandidates, setIncludeCandidates] = useState(false);
+  const [includeNoise, setIncludeNoise] = useState(true);
+  const [includeGraphSnapshot, setIncludeGraphSnapshot] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -52,7 +55,7 @@ export default function ReportsPage({ token }: PageProps) {
     });
   };
 
-  const exportReport = async (format: "pdf" | "html" | "json") => {
+  const exportReport = async (format: "pdf" | "html" | "json" | "csv" | "graph_json") => {
     if (!selectedCase) return;
     setExporting(true);
     setError(null);
@@ -82,11 +85,11 @@ export default function ReportsPage({ token }: PageProps) {
           <label>Investigation<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{cases.map((item) => <option value={item.id} key={item.id}>{caseTitle(item)}</option>)}</select></label>
           <label>Document Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>Lead Analyst<input value={analyst} onChange={(event) => setAnalyst(event.target.value)} /></label>
-          <div className="studio-section-list"><strong>Section Bundle</strong>{REPORT_SECTIONS.map((section) => <label key={section} className="studio-check-row"><input type="checkbox" checked={sections.has(section)} onChange={() => toggleSection(section)} /><span>{section}</span></label>)}</div>
+          <div className="studio-section-list"><strong>Section Bundle</strong>{REPORT_SECTIONS.map((section) => <label key={section} className="studio-check-row"><input type="checkbox" checked={sections.has(section)} onChange={() => toggleSection(section)} /><span>{section}</span></label>)}<label className="studio-check-row"><input type="checkbox" checked={includeCandidates} onChange={(event) => setIncludeCandidates(event.target.checked)} /><span>Include candidate leads appendix</span></label><label className="studio-check-row"><input type="checkbox" checked={includeNoise} onChange={(event) => setIncludeNoise(event.target.checked)} /><span>Include noise appendix</span></label><label className="studio-check-row"><input type="checkbox" checked={includeGraphSnapshot} onChange={(event) => setIncludeGraphSnapshot(event.target.checked)} /><span>Include graph snapshot metadata</span></label></div>
           <div className="studio-report-actions">
             <button className="nx-primary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("pdf")}><Download size={15} />{exporting ? "Compiling Dossier" : "Compile & Export PDF Dossier"}</button>
             <button className="nx-secondary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("html")}>Export HTML</button>
-            <button className="nx-secondary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("json")}>JSON Bundle</button>
+            <button className="nx-secondary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("json")}>JSON Bundle</button><button className="nx-secondary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("csv")}>CSV IOC</button><button className="nx-secondary" type="button" disabled={!selectedCase || exporting} onClick={() => void exportReport("graph_json")}>Graph JSON</button>
           </div>
         </aside>
         <section className="studio-report-preview">
@@ -101,7 +104,7 @@ export default function ReportsPage({ token }: PageProps) {
               <div><dt>Updated</dt><dd>{formatDate(selectedCase.updated_at)}</dd></div>
               <div><dt>Analyst</dt><dd>{analyst || "Operator"}</dd></div>
             </dl>
-            <div className="report-sheet-sections"><ShieldCheck size={15} /><span>{sections.size} report sections selected. Export uses backend evidence citations and confidence explanations.</span></div>
+            <div className="report-sheet-sections"><ShieldCheck size={15} /><span>{sections.size} report sections selected. Candidates: {includeCandidates ? "included" : "excluded"}. Noise appendix: {includeNoise ? "included" : "excluded"}. Graph snapshot: {includeGraphSnapshot ? "included" : "excluded"}. Export uses backend evidence citations and confidence explanations.</span></div>
           </>}
         </section>
       </div>

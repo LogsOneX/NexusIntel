@@ -144,6 +144,15 @@ class TransformDefinition:
     legal_note: str = "Passive public-source or official API/BYOK collection only."
     enabled: bool = True
     disabled_reason: str | None = None
+    source_category: str = "public_source"
+    confidence_profile: str = "evidence_scored"
+    cost_profile: str = "free_or_local"
+    runtime_profile: str = "interactive"
+    noise_risk: str = "medium"
+    evidence_behavior: str = "captures_raw_evidence_when_available"
+    output_artifact_class: str = "entity_or_signal"
+    recommended_next_transforms: list[str] = field(default_factory=list)
+    playbook_id: str | None = None
 
     def to_dict(self, configured_keys: set[str] | None = None) -> dict[str, Any]:
         configured = configured_keys or set()

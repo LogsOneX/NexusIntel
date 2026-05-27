@@ -52,8 +52,11 @@ export default function TransformLibraryPage({ token }: PageProps) {
           <StatusChip label={`${diagnostics.errors?.length || 0} errors`} tone={diagnostics.errors?.length ? "danger" : "ok"} />
           <StatusChip label={`${diagnostics.warnings?.length || 0} warnings`} tone={diagnostics.warnings?.length ? "warning" : "ok"} />
           <StatusChip label={`${diagnostics.transforms?.filter((item: any) => item.enabled).length || 0} enabled`} tone="info" />
-          <StatusChip label={`${diagnostics.transforms?.filter((item: any) => !item.enabled).length || 0} disabled`} tone="muted" />
+          <StatusChip label={`${diagnostics.disabled_transforms?.length || diagnostics.transforms?.filter((item: any) => !item.enabled).length || 0} disabled`} tone="muted" />
+          <StatusChip label={`${Object.keys(diagnostics.transform_count_by_entity_type || {}).length} entity types`} tone="info" />
+          <StatusChip label={`${diagnostics.recommended_connector_setup?.length || 0} connector gaps`} tone={diagnostics.recommended_connector_setup?.length ? "warning" : "ok"} />
         </div>}
+        {diagnostics?.recommended_connector_setup?.length ? <pre className="brief-box">{JSON.stringify(diagnostics.recommended_connector_setup.slice(0, 8), null, 2)}</pre> : null}
         {diagnostics?.errors?.length ? <pre className="brief-box">{JSON.stringify(diagnostics.errors.slice(0, 8), null, 2)}</pre> : null}
       </section>
       <section className="transform-category-bar premium-card">

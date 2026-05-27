@@ -134,3 +134,83 @@ def build_evidence_map(graph: dict[str, Any], evidence: list[dict[str, Any]]) ->
         "evidence_count": len(evidence),
         "coverage": {"supported_nodes": len(node_map), "supported_edges": len(edge_map), "unsupported": len(unsupported)},
     }
+
+
+def _score_freshness(fetched_at: Any) -> tuple[int, str]:
+    raw = str(fetched_at or "")
+    if not raw or raw == "not_available":
+        return 20, "missing timestamp"
+    return 85, "timestamp present"
+
+
+def _score_reliability(source: Any, source_url: Any) -> tuple[int, str]:
+    text = f"{source} {source_url}".lower()
+    if any(marker in text for marker in ("github", "hibp", "rdap", "dns:", "crt.sh", "google", "urlscan")):
+        return 85, "public or official source family"
+    if source_url:
+        return 70, "source URL present"
+    return 35, "source URL missing"
+
+
+def _score_directness(record: dict[str, Any]) -> tuple[int, str]:
+    meta = record.get("meta") if isinstance(record.get("meta"), dict) else {}
+    if meta.get("source_url") or str(record.get("uri") or "").startswith(("http", "dns:")):
+        return 80, "direct source reference available"
+    if record.get("entity_id"):
+        return 55, "linked to entity but source reference is weak"
+    return 30, "not directly linked to a finding"
+
+
+def evidence_quality_report(graph: dict[str, Any], evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    evidence_map = build_evidence_map(graph, evidence)
+    rows = []
+    report_safe = 0
+    for record in evidence:
+        meta = record.get("meta") if isinstance(record.get("meta"), dict) else {}
+        source_url = meta.get("source_url") or record.get("uri")
+        freshness, freshness_reason = _score_freshness(meta.get("fetched_at") or record.get("created_at"))
+        reliability, reliability_reason = _score_reliability(record.get("source"), source_url)
+        directness, directness_reason = _score_directness(record)
+        verification = bool(record.get("sha256"))
+        quality = int((freshness * 0.2) + (reliability * 0.35) + (directness * 0.3) + ((90 if verification else 20) * 0.15))
+        safe = quality >= 65 and bool(record.get("sha256")) and bool(source_url)
+        if safe:
+            report_safe += 1
+        rows.append({
+            "evidence_id": record.get("id"),
+            "quality_score": quality,
+            "freshness_score": freshness,
+            "source_reliability_score": reliability,
+            "directness_score": directness,
+            "report_safe": safe,
+            "contradiction_flags": meta.get("contradiction_flags") or [],
+            "reasons": [freshness_reason, reliability_reason, directness_reason],
+            "source_url": source_url,
+            "sha256": record.get("sha256"),
+        })
+    return {
+        "items": rows,
+        "summary": {
+            "evidence_count": len(evidence),
+            "report_safe_count": report_safe,
+            "unsupported_findings": len(evidence_map.get("unsupported_findings") or []),
+            "average_quality": int(sum(item["quality_score"] for item in rows) / len(rows)) if rows else 0,
+        },
+        "evidence_map": evidence_map,
+    }
+
+
+def redact_preview(record: Any, terms: list[str] | None = None, limit: int = 5000) -> dict[str, Any]:
+    text, truncated = _read_text(str(record.uri), limit)
+    redactions = terms or []
+    redacted = text
+    for term in redactions:
+        if term:
+            redacted = redacted.replace(term, "[REDACTED]")
+    return {
+        "evidence_id": record.id,
+        "redacted_excerpt": redacted,
+        "redaction_terms": redactions,
+        "truncated": truncated,
+        "note": "Preview only; original evidence hash and payload are unchanged.",
+    }

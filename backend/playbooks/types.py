@@ -29,6 +29,9 @@ class PlaybookDefinition:
     stop_conditions: list[str]
     noise_rules: list[str]
     output_report_sections: list[str]
+    api_key_requirements: list[str] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
+    risk_noise_notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
